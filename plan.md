@@ -79,12 +79,14 @@
 
 ## 4. Phase 3 — UI v0
 
-- [ ] **设计守则先行**：[docs/ui-design.md](./docs/ui-design.md)（token 单一真相 / 层级 / 200ms 动效律 / 状态完备性 / Definition of Polish 验收清单进 PR 检查）；动手前截 3 个对标对象提炼可迁移模式
-- [ ] 实例列表 + 版本选择器（远古优先的信息架构：年代分层而非字母序）
-- [ ] 启动按钮 + 控制台面板（滚动 stdout、崩溃摘要）
-- [ ] 设置页：Java 路径、内存、端点、主题（深/浅/系统）
-- [ ] i18n 骨架（en/zh 起步；沿用 MCANextGen 的 locale 合并策略与 zh-CN 基准）
-- [ ] 保守 CSS 基线文档化（风险 #4）：只用近两代 WebKitGTK 全绿的特性
+- [x] **设计守则先行**：[docs/ui-design.md](./docs/ui-design.md)（token 单一真相 / 层级 / 200ms 动效律 / 状态完备性 / Definition of Polish 验收清单进 PR 检查）；对标范式已沉淀进守则 §3/§9（Prism/HMCL/Raycast 双栏 + 左导航骨架）
+- [x] 实例列表 + 版本选择器（远古优先的信息架构：年代分层而非字母序，组内按编译/发布日期升序，era 色码 chip，搜索 + 已安装标记）
+- [x] 启动按钮 + 控制台面板（每屏唯一 accent 实心 Play；stdout/stderr 环形缓冲滚动 + 崩溃摘要卡 + 下载进度 MB/s）
+- [x] 设置页：Java 路径（含探测全候选面板，风险 #7）、内存、端点（下次启动生效）、主题（深/浅/系统，即时应用）
+- [x] i18n 骨架（en 为 base/fallback、zh-CN 默认基准，手写深合并 + 点路径 t()，locale 持久化 localStorage）
+- [x] 保守 CSS 基线落地（风险 #4）：[styles/base.css](./packages/ui/src/styles/base.css) + [tokens.css](./packages/ui/src/styles/tokens.css)，规避 color-mix/无降级 backdrop-filter，五态 focus ring + 自定义滚动条 + prefers-reduced-motion
+
+> v0 决策：零新依赖——不引入 Tailwind/shadcn/vue-router/路由库/i18n 库；纯 CSS token + 响应式 view 切视图 + 手写 i18n；缺桥降级（`window.attic` 不存在时 useBridge 返回 mock，UI 走空状态不崩）。闸门 `pnpm -r typecheck/build/test` 三绿；浏览器验证缺桥降级三视图 + 主题切换通过、控制台无报错。
 
 ## 5. Phase 4 — Tauri 壳（Rust core 第二实现）
 

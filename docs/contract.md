@@ -61,6 +61,14 @@
 
 `CrashCategory`（v0 分类器枚举）：`none/java-missing/out-of-memory/gl-init/lwjgl-native/unsatisfied-link/unknown`。
 
+### 2.7 AppSettings / InstanceView（[settings.ts](../packages/core-spec/src/settings.ts)，Phase 3）
+
+渲染侧只通过契约读写设置/实例，绝不直接碰 `launcher.settings` / `instances/*.txt`（戒律 #1：设置是数据）。
+
+- `AppSettings`：`javaPath?`、`maxMemoryMb?`、`username?`、`theme?`（`dark|light|system`）、`endpoints?`。落盘键：`javaPath`/`maxMemoryMb`/`username`/`theme` + `endpoint.*`；`setSettings` 合并写回、未知键保留（v1 遗留键不丢）。
+- `EndpointOverrides`：全为可序列化的纯字符串（`versionList`/`filesBase`/`legacyfixRelease`/`zuluMetadata`/`mojangManifest`）。函数形态的 `versionJson(id)`/`assetIndex(id)` 由 `filesBase` 在 runtime 侧派生（`endpointsFromOverrides`），契约层不携带可调用形状。端点属构造级配置——改动在下次启动应用后生效。
+- `InstanceView`：薄档案 `{ name, version, javaPath? }`。`gameDir` 由宿主按 v1 惯例派生（`root/<version>`，与 `buildContext` 一致），不进契约；内存取全局设置。
+
 ## 3. IPC 通道与事件
 
 ### 请求通道（渲染 → 宿主，invoke/handle 或 command）
@@ -76,6 +84,10 @@
 | `attic:status` | — | `IpcResult<GameStatus>` |
 | `attic:java:detect` | — | `IpcResult<JavaDetectionReport>` |
 | `attic:accounts:list` | — | `IpcResult<AccountView[]>` |
+| `attic:settings:get` | — | `IpcResult<AppSettings>` |
+| `attic:settings:set` | `AppSettings` | `IpcResult<AppSettings>`（保存后的视图） |
+| `attic:instances:list` | — | `IpcResult<InstanceView[]>` |
+| `attic:instances:save` | `InstanceView` | `IpcResult<InstanceView>` |
 
 统一 `IpcResult<T>` 封装：错误以 `{ ok:false, error }` 返回，不跨进程抛异常。未实现通道返回 `error: 'not-implemented'`（Phase 1 桥面占位即此值）。
 

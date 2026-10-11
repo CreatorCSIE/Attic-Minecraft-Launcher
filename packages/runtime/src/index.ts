@@ -4,8 +4,13 @@
  * 契约类型一律来自 @attic/core-spec（戒律 #2）。
  */
 
-export { DEFAULT_ENDPOINTS, resolveEndpoints, type Endpoints } from './endpoints';
+export { DEFAULT_ENDPOINTS, resolveEndpoints, endpointsFromOverrides, type Endpoints } from './endpoints';
 export { parseProperties, serializeProperties } from './properties';
+export {
+  settingsFromProps,
+  applySettingsToProps,
+  instanceViewFromConfig,
+} from './appSettings';
 export {
   resolveDataRoot,
   ensureLayout,

@@ -3,6 +3,8 @@
  * 默认值为 Betacraft v1 实测的 files.betacraft.uk 路径（取证 ReleaseJson.java L39）。
  */
 
+import type { EndpointOverrides } from '@attic/core-spec';
+
 export interface Endpoints {
   /** 版本清单（反引号分隔文本行）。 */
   versionList: string;
@@ -32,4 +34,21 @@ export const DEFAULT_ENDPOINTS: Endpoints = {
 /** 部分覆盖：只替换给出的字段，其余保持默认。 */
 export function resolveEndpoints(overrides: Partial<Endpoints> = {}): Endpoints {
   return { ...DEFAULT_ENDPOINTS, ...overrides };
+}
+
+/**
+ * 由可序列化的端点覆盖（launcher.settings 的 `endpoint.*` 渲染侧视图）派生完整端点。
+ * `filesBase` 一旦给出，versionJson/assetIndex 从其派生；缺省值与 DEFAULT_ENDPOINTS 一致。
+ * 空覆盖 = 与 DEFAULT_ENDPOINTS 等价（runtime 测试无 settings 时走此路径）。
+ */
+export function endpointsFromOverrides(overrides: EndpointOverrides = {}): Endpoints {
+  const base = overrides.filesBase ?? FILES_BASE;
+  return {
+    versionList: overrides.versionList ?? `${base}/version_list.txt`,
+    versionJson: (id: string) => `${base}/jsons/${encodeURIComponent(id)}.info`,
+    assetIndex: (id: string) => `${base}/indexes/${encodeURIComponent(id)}.json`,
+    legacyfixRelease: overrides.legacyfixRelease ?? DEFAULT_ENDPOINTS.legacyfixRelease,
+    zuluMetadata: overrides.zuluMetadata ?? DEFAULT_ENDPOINTS.zuluMetadata,
+    mojangManifest: overrides.mojangManifest ?? DEFAULT_ENDPOINTS.mojangManifest,
+  };
 }

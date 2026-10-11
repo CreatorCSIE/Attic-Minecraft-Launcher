@@ -47,3 +47,9 @@ export type {
   GameStatus,
   LaunchConfig,
 } from './launch';
+export type {
+  AppSettings,
+  EndpointOverrides,
+  InstanceView,
+  ThemeMode,
+} from './settings';

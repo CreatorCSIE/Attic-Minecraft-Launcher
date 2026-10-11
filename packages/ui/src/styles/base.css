@@ -1,0 +1,122 @@
+/**
+ * 基础层 —— 保守 CSS 基线（ui-design.md §8，挂风险 #4）。
+ * 只用近两大版本 WebKitGTK 全绿的特性；backdrop-filter 一律带降级；自定义深色滚动条；五态 focus ring。
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: var(--fs-md);
+  line-height: var(--lh-body);
+  color: var(--text-primary);
+  background: var(--surface);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  margin: 0;
+  line-height: var(--lh-heading);
+  font-weight: 600;
+}
+
+p {
+  margin: 0;
+}
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+  color: inherit;
+}
+
+input,
+select,
+textarea {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+/* —— 五态 focus-visible：2px accent ring —— */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* —— 数字一律等宽对齐（§2 信息密度） —— */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* —— 路径/ID/日志等宽 —— */
+.mono {
+  font-family: var(--font-mono);
+}
+
+/* —— 大写小标签 —— */
+.label {
+  font-size: var(--fs-xs);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* —— 自定义深色滚动条 —— */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scroll-thumb) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scroll-thumb);
+  border-radius: var(--radius-lg);
+  border: 2px solid var(--surface);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scroll-thumb-hover);
+}
+
+/* —— 动效尊重系统偏好 —— */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

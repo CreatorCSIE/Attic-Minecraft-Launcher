@@ -11,11 +11,13 @@ import {
   IPC_EVENTS,
   type Account,
   type AccountView,
+  type AppSettings,
   type AtticEventPayloads,
   type DownloadProgressEvent,
   type GameExit,
   type GameSession,
   type GameStatus,
+  type InstanceView,
   type JavaDetectionReport,
   type LaunchConfig,
   type LaunchRequest,
@@ -24,8 +26,9 @@ import {
   type VersionRef,
 } from '@attic/core-spec';
 
+import { applySettingsToProps, instanceViewFromConfig, settingsFromProps } from './appSettings';
 import { BetacraftClient, type FetchImpl } from './betacraft';
-import { resolveEndpoints, type Endpoints } from './endpoints';
+import { endpointsFromOverrides, resolveEndpoints, type Endpoints } from './endpoints';
 import { infoToVersionJson } from './info';
 import { detectJavaRuntime } from './java/detect';
 import { assembleLaunchConfig, type LaunchContext } from './launch';
@@ -37,11 +40,15 @@ import {
   defaultOfflineAccount,
   ensureLayout,
   infoFile,
+  listInstances,
   loadAccounts,
+  loadInstance,
   loadSettings,
   launcherDir,
   nativesDir,
   resolveDataRoot,
+  saveInstance,
+  saveSettings,
   scanBinPool,
   scanInstalledVersions,
   versionListCacheFile,
@@ -109,7 +116,10 @@ export class AtticRuntime {
     });
     ensureLayout(this.root);
     this.platform = options.platform ?? process.platform;
-    this.endpoints = resolveEndpoints(options.endpoints);
+    // 端点优先级：构造参数（测试/程序化）> launcher.settings 的 endpoint.* 覆盖 > 默认。
+    this.endpoints = options.endpoints
+      ? resolveEndpoints(options.endpoints)
+      : endpointsFromOverrides(settingsFromProps(loadSettings(this.root)).endpoints);
     this.fetchImpl = options.fetchImpl ?? ((url, init) => fetch(url, init));
     this.client = new BetacraftClient({
       endpoints: this.endpoints,
@@ -260,6 +270,36 @@ export class AtticRuntime {
 
   async listAccounts(): Promise<AccountView[]> {
     return this.currentAccounts().map(toAccountView);
+  }
+
+  getSettings(): AppSettings {
+    return settingsFromProps(loadSettings(this.root));
+  }
+
+  /** 合并落盘（未知键保留），返回保存后的视图。端点改动下次启动应用生效。 */
+  setSettings(settings: AppSettings): AppSettings {
+    saveSettings(this.root, applySettingsToProps(loadSettings(this.root), settings));
+    return this.getSettings();
+  }
+
+  listInstances(): InstanceView[] {
+    const out: InstanceView[] = [];
+    for (const name of listInstances(this.root)) {
+      const config = loadInstance(this.root, name);
+      if (config) out.push(instanceViewFromConfig(config));
+    }
+    return out;
+  }
+
+  /** gameDir 按 v1 惯例派生（root/<version>），与 launch 的 buildContext 一致。 */
+  saveInstance(view: InstanceView): InstanceView {
+    saveInstance(this.root, {
+      name: view.name,
+      version: view.version,
+      gameDir: path.join(this.root, view.version),
+      javaPath: view.javaPath,
+    });
+    return view;
   }
 
   // ---------- 内部编排 ----------

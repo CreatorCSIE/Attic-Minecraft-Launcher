@@ -22,6 +22,10 @@ const bridge: RendererBridge = {
   status: () => invoke(IPC_CHANNELS.STATUS),
   detectJava: () => invoke(IPC_CHANNELS.JAVA_DETECT),
   listAccounts: () => invoke(IPC_CHANNELS.ACCOUNTS_LIST),
+  getSettings: () => invoke(IPC_CHANNELS.SETTINGS_GET),
+  setSettings: (settings) => invoke(IPC_CHANNELS.SETTINGS_SET, settings),
+  listInstances: () => invoke(IPC_CHANNELS.INSTANCES_LIST),
+  saveInstance: (instance) => invoke(IPC_CHANNELS.INSTANCES_SAVE, instance),
   on: <E extends keyof AtticEventPayloads>(event: E, cb: (payload: AtticEventPayloads[E]) => void) => {
     const handler = (_: unknown, payload: AtticEventPayloads[E]): void => cb(payload);
     ipcRenderer.on(event, handler);

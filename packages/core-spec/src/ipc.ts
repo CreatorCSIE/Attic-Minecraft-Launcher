@@ -6,6 +6,7 @@
 import type { AccountView } from './account';
 import type { GameExit, GameSession, GameStatus, LaunchConfig } from './launch';
 import type { JavaDetectionReport } from './java';
+import type { AppSettings, InstanceView } from './settings';
 import type { VersionJson, VersionRef } from './version';
 
 /** 统一的 invoke 结果封装：错误不跨进程抛异常，以数据返回。 */
@@ -31,6 +32,14 @@ export const IPC_CHANNELS = {
   JAVA_DETECT: 'attic:java:detect',
   /** 账户列表（脱敏视图）。 */
   ACCOUNTS_LIST: 'attic:accounts:list',
+  /** 读取全局设置（launcher.settings 的渲染侧视图）。 */
+  SETTINGS_GET: 'attic:settings:get',
+  /** 写入全局设置（合并落盘，返回保存后的视图）。 */
+  SETTINGS_SET: 'attic:settings:set',
+  /** 实例列表（薄档案）。 */
+  INSTANCES_LIST: 'attic:instances:list',
+  /** 保存实例（新建/覆盖，返回保存后的视图）。 */
+  INSTANCES_SAVE: 'attic:instances:save',
 } as const;
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];
@@ -118,6 +127,10 @@ export interface RendererBridge {
   status(): Promise<IpcResult<GameStatus>>;
   detectJava(): Promise<IpcResult<JavaDetectionReport>>;
   listAccounts(): Promise<IpcResult<AccountView[]>>;
+  getSettings(): Promise<IpcResult<AppSettings>>;
+  setSettings(settings: AppSettings): Promise<IpcResult<AppSettings>>;
+  listInstances(): Promise<IpcResult<InstanceView[]>>;
+  saveInstance(instance: InstanceView): Promise<IpcResult<InstanceView>>;
   /** 订阅事件，返回退订函数。 */
   on<E extends keyof AtticEventPayloads>(event: E, cb: (payload: AtticEventPayloads[E]) => void): () => void;
 }

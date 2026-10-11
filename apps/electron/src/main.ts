@@ -3,7 +3,9 @@ import { app, BrowserWindow, ipcMain } from 'electron';
 import {
   IPC_CHANNELS,
   IPC_EVENTS,
+  type AppSettings,
   type AtticEventPayloads,
+  type InstanceView,
   type IpcResult,
   type LaunchRequest,
 } from '@attic/core-spec';
@@ -77,6 +79,10 @@ app.whenReady().then(() => {
   handle(IPC_CHANNELS.STATUS, () => runtime.status());
   handle(IPC_CHANNELS.JAVA_DETECT, () => runtime.detectJava());
   handle(IPC_CHANNELS.ACCOUNTS_LIST, () => runtime.listAccounts());
+  handle(IPC_CHANNELS.SETTINGS_GET, () => runtime.getSettings());
+  handle(IPC_CHANNELS.SETTINGS_SET, (settings: AppSettings) => runtime.setSettings(settings));
+  handle(IPC_CHANNELS.INSTANCES_LIST, () => runtime.listInstances());
+  handle(IPC_CHANNELS.INSTANCES_SAVE, (instance: InstanceView) => runtime.saveInstance(instance));
 
   wireEvents();
   createWindow();

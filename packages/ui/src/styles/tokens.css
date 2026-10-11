@@ -1,0 +1,150 @@
+/**
+ * Design Token —— 视觉数值唯一真相源（ui-design.md §1）。
+ * 组件禁止写死 hex 与刻度外数值；深浅主题 = 换本文件 token 值，组件零改动。
+ * 深色为默认（§5），浅色经 [data-theme="light"] 覆盖。
+ */
+
+:root {
+  /* —— 间距：4px 基准刻度，禁止刻度外数值 —— */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+
+  /* —— 字号：5 档封顶 —— */
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-md: 15px;
+  --fs-lg: 18px;
+  --fs-xl: 24px;
+
+  /* —— 行高 —— */
+  --lh-body: 1.5;
+  --lh-heading: 1.2;
+
+  /* —— 圆角：3 档，按层级用，不混用 —— */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+
+  /* —— 字体族（零新依赖：本地字体栈，无 webfont） —— */
+  --font-sans: "Inter", "Geist", "MiSans", "HarmonyOS Sans SC", "Source Han Sans SC", "Noto Sans SC", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "Cascadia Code", "Consolas", ui-monospace, monospace;
+
+  /* —— 动效：200ms 律 —— */
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
+
+  /* —— 微文案标签字距 —— */
+  --tracking-label: 0.06em;
+
+  /* —— 层级高度（阴影 3 档，仅表达高度） —— */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-2: 0 2px 8px rgba(0, 0, 0, 0.35);
+  --shadow-3: 0 8px 24px rgba(0, 0, 0, 0.4);
+
+  /* —— 卡片顶部 1px 内高光（"贵气"板斧之一） —— */
+  --card-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+
+  /* —— 语义色（深色默认：暖木炭底 + 羊皮纸文字 + 火把琥珀 accent） —— */
+  --surface: #14120f;
+  --raised: #1e1b16;
+  --overlay: #28241e;
+  --border: #353027;
+  --border-strong: #4a4438;
+
+  --text-primary: #e8e4dc;
+  --text-secondary: #a8a296;
+  --text-muted: #6e6a60;
+
+  --accent: #e8a33d;
+  --accent-hover: #f0b455;
+  --accent-press: #d18f2e;
+  --accent-ink: #1a1408; /* accent 实心按钮上的文字 */
+  --accent-soft: rgba(232, 163, 61, 0.14);
+
+  --ok: #6e9463;
+  --warn: #b08d57;
+  --danger: #b85c4a;
+
+  --ok-soft: rgba(110, 148, 99, 0.16);
+  --warn-soft: rgba(176, 141, 87, 0.16);
+  --danger-soft: rgba(184, 92, 74, 0.16);
+
+  --scroll-thumb: #3a352c;
+  --scroll-thumb-hover: #4a4438;
+
+  /* —— 年代色码 chip（内容区装饰，自绘；soft 供低饱和底色，规避 color-mix 基线风险 #4） —— */
+  --era-pre-classic: #8a8272;
+  --era-classic: #6e9463;
+  --era-indev: #5b8a9a;
+  --era-infdev: #7b6fa0;
+  --era-alpha: #b07a4a;
+  --era-beta: #c2a14d;
+  --era-release: #b85c4a;
+
+  --era-pre-classic-soft: rgba(138, 130, 114, 0.16);
+  --era-classic-soft: rgba(110, 148, 99, 0.16);
+  --era-indev-soft: rgba(91, 138, 154, 0.16);
+  --era-infdev-soft: rgba(123, 111, 160, 0.16);
+  --era-alpha-soft: rgba(176, 122, 74, 0.16);
+  --era-beta-soft: rgba(194, 161, 77, 0.16);
+  --era-release-soft: rgba(184, 92, 74, 0.16);
+}
+
+/* —— 浅色主题：羊皮纸底 + 深墨文字，accent 降饱和过 AA —— */
+[data-theme="light"] {
+  --surface: #f2ede3;
+  --raised: #e9e2d4;
+  --overlay: #ddd4c2;
+  --border: #d2c8b4;
+  --border-strong: #b8ac94;
+
+  --text-primary: #2a251d;
+  --text-secondary: #5c554a;
+  --text-muted: #8a8272;
+
+  --accent: #a86a18;
+  --accent-hover: #b87a22;
+  --accent-press: #8f5a12;
+  --accent-ink: #fdf9f0;
+  --accent-soft: rgba(168, 106, 24, 0.12);
+
+  --ok: #4f7245;
+  --warn: #8a6a2e;
+  --danger: #9a4436;
+
+  --ok-soft: rgba(79, 114, 69, 0.14);
+  --warn-soft: rgba(138, 106, 46, 0.14);
+  --danger-soft: rgba(154, 68, 54, 0.14);
+
+  --scroll-thumb: #c4b89f;
+  --scroll-thumb-hover: #b0a287;
+
+  --shadow-1: 0 1px 2px rgba(60, 48, 30, 0.12);
+  --shadow-2: 0 2px 8px rgba(60, 48, 30, 0.14);
+  --shadow-3: 0 8px 24px rgba(60, 48, 30, 0.18);
+
+  --card-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+
+  --era-pre-classic: #6e6858;
+  --era-classic: #4f7245;
+  --era-indev: #3f6c7c;
+  --era-infdev: #5d5188;
+  --era-alpha: #8a5a2e;
+  --era-beta: #94782e;
+  --era-release: #8a3f2e;
+
+  --era-pre-classic-soft: rgba(110, 104, 88, 0.14);
+  --era-classic-soft: rgba(79, 114, 69, 0.14);
+  --era-indev-soft: rgba(63, 108, 124, 0.14);
+  --era-infdev-soft: rgba(93, 81, 136, 0.14);
+  --era-alpha-soft: rgba(138, 90, 46, 0.14);
+  --era-beta-soft: rgba(148, 120, 46, 0.14);
+  --era-release-soft: rgba(138, 63, 46, 0.14);
+}
