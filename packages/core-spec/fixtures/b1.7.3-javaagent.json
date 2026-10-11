@@ -1,0 +1,87 @@
+{
+  "name": "b1.7.3-javaagent",
+  "description": "Beta 1.7.3：LaunchWrapper 主类，minecraftArguments 占位符展开，legacyfix 全量 javaagent 挂载。",
+  "context": {
+    "javaPath": "/opt/java/zulu8/bin/java",
+    "gameDir": "/game/b1.7.3",
+    "assetsDir": "/game/assets",
+    "dataDir": "/data",
+    "username": "steve",
+    "uuid": "069a79f4-44e9-4726-a5be-fca90e38aaf5",
+    "accessToken": "token:069a79f4-44e9-4726-a5be-fca90e38aaf5:0",
+    "maxMemoryMb": 1024
+  },
+  "versionJson": {
+    "id": "b1.7.3",
+    "type": "old_beta",
+    "releaseTime": "2011-07-08T00:00:00+00:00",
+    "mainClass": "net.minecraft.launchwrapper.Launch",
+    "minecraftArguments": "${auth_player_name} ${auth_session} --gameDir ${game_directory} --assetsDir ${assets_root} --version ${version_name} --assetIndex ${assets_index_name}",
+    "assets": "beta",
+    "assetIndex": {
+      "id": "beta",
+      "url": "http://files.betacraft.uk/launcher/assets/indexes/beta.json",
+      "sha1": "4f9ba2d0dfd02f1b5e4e5f19b4c1e9d0c0e1a2c4"
+    },
+    "jar": {
+      "url": "http://files.betacraft.uk/launcher/data/versions/b1.7.3.jar",
+      "sha1": "7f8ba2d0dfd02f1b5e4e5f19b4c1e9d0c0e1a2b4"
+    },
+    "libraries": [
+      { "name": "net.minecraft:launchwrapper:1.12", "url": "http://files.betacraft.uk/launcher/libraries/launchwrapper-1.12.jar" },
+      { "name": "org.lwjgl.lwjgl:lwjgl:2.9.4-nightly-20150209", "url": "http://files.betacraft.uk/launcher/libraries/lwjgl-2.9.4.jar" }
+    ],
+    "betacraft": {
+      "proxyArgs": ["-Dhttp.proxyHost=betacraft.uk"],
+      "launchMethod": "launchwrapper",
+      "protocolVersion": "25",
+      "agentMount": [
+        {
+          "form": "javaagent",
+          "path": "legacyfix/legacyfix-3.6.0.jar",
+          "appliesFrom": "c0.0.13a",
+          "appliesTo": "1.8.9",
+          "quirk": "legacyfix"
+        }
+      ]
+    }
+  },
+  "expected": {
+    "javaPath": "/opt/java/zulu8/bin/java",
+    "gameDir": "/game/b1.7.3",
+    "assetsDir": "/game/assets",
+    "mainClass": "net.minecraft.launchwrapper.Launch",
+    "classpath": [
+      "/game/versions/b1.7.3/b1.7.3.jar",
+      "/data/libraries/net/minecraft/launchwrapper/1.12/launchwrapper-1.12.jar",
+      "/data/libraries/org/lwjgl/lwjgl/lwjgl/2.9.4-nightly-20150209/lwjgl-2.9.4-nightly-20150209.jar"
+    ],
+    "jvmArgs": [
+      "-Xmx1024m",
+      "-Dhttp.proxyHost=betacraft.uk",
+      "-javaagent:/data/legacyfix/legacyfix-3.6.0.jar=/game/b1.7.3"
+    ],
+    "gameArgs": [
+      "steve",
+      "token:069a79f4-44e9-4726-a5be-fca90e38aaf5:0",
+      "--gameDir",
+      "/game/b1.7.3",
+      "--assetsDir",
+      "/game/assets",
+      "--version",
+      "b1.7.3",
+      "--assetIndex",
+      "beta"
+    ],
+    "agentMount": [
+      {
+        "form": "javaagent",
+        "path": "legacyfix/legacyfix-3.6.0.jar",
+        "appliesFrom": "c0.0.13a",
+        "appliesTo": "1.8.9",
+        "quirk": "legacyfix"
+      }
+    ],
+    "maxMemoryMb": 1024
+  }
+}

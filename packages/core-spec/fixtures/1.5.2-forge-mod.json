@@ -1,0 +1,81 @@
+{
+  "name": "1.5.2-forge-mod",
+  "description": "Forge 1.5.2：legacyfix 以 mod 形态挂载（mods/ 落位），intel quirk 适用区间覆盖此版本。",
+  "context": {
+    "javaPath": "/opt/java/zulu8/bin/java",
+    "gameDir": "/game/1.5.2-forge",
+    "assetsDir": "/game/assets",
+    "dataDir": "/data",
+    "username": "steve",
+    "uuid": "069a79f4-44e9-4726-a5be-fca90e38aaf5",
+    "accessToken": "token:069a79f4-44e9-4726-a5be-fca90e38aaf5:0",
+    "maxMemoryMb": 2048
+  },
+  "versionJson": {
+    "id": "1.5.2-Forge-7.8.0.0",
+    "type": "modded",
+    "releaseTime": "2013-05-16T00:00:00+00:00",
+    "mainClass": "net.minecraft.launchwrapper.Launch",
+    "minecraftArguments": "${auth_player_name} ${auth_session} --gameDir ${game_directory} --assetsDir ${assets_root} --version ${version_name}",
+    "assets": "pre-1.6",
+    "inheritsFrom": "1.5.2",
+    "jar": {
+      "url": "http://files.betacraft.uk/launcher/data/versions/1.5.2.jar",
+      "sha1": "af8ba2d0dfd02f1b5e4e5f19b4c1e9d0c0e1a2b6"
+    },
+    "libraries": [
+      { "name": "net.minecraft:launchwrapper:1.12", "url": "http://files.betacraft.uk/launcher/libraries/launchwrapper-1.12.jar" },
+      { "name": "org.ow2.asm:asm-all:5.0.3", "url": "http://files.betacraft.uk/launcher/libraries/asm-all-5.0.3.jar" }
+    ],
+    "betacraft": {
+      "proxyArgs": ["-Dhttp.proxyHost=betacraft.uk"],
+      "launchMethod": "launchwrapper",
+      "baseVersion": "1.5.2",
+      "custom": true,
+      "agentMount": [
+        {
+          "form": "mod",
+          "path": "legacyfix/legacyfix-3.6.0.jar",
+          "appliesFrom": "1.5",
+          "appliesTo": "1.7.10",
+          "quirk": "intel"
+        }
+      ]
+    }
+  },
+  "expected": {
+    "javaPath": "/opt/java/zulu8/bin/java",
+    "gameDir": "/game/1.5.2-forge",
+    "assetsDir": "/game/assets",
+    "mainClass": "net.minecraft.launchwrapper.Launch",
+    "classpath": [
+      "/game/versions/1.5.2-Forge-7.8.0.0/1.5.2-Forge-7.8.0.0.jar",
+      "/data/libraries/net/minecraft/launchwrapper/1.12/launchwrapper-1.12.jar",
+      "/data/libraries/org/ow2/asm/asm-all/5.0.3/asm-all-5.0.3.jar"
+    ],
+    "jvmArgs": [
+      "-Xmx2048m",
+      "-Dhttp.proxyHost=betacraft.uk"
+    ],
+    "gameArgs": [
+      "steve",
+      "token:069a79f4-44e9-4726-a5be-fca90e38aaf5:0",
+      "--gameDir",
+      "/game/1.5.2-forge",
+      "--assetsDir",
+      "/game/assets",
+      "--version",
+      "1.5.2-Forge-7.8.0.0"
+    ],
+    "agentMount": [
+      {
+        "form": "mod",
+        "path": "legacyfix/legacyfix-3.6.0.jar",
+        "appliesFrom": "1.5",
+        "appliesTo": "1.7.10",
+        "quirk": "intel"
+      }
+    ],
+    "maxMemoryMb": 2048
+  }
+}

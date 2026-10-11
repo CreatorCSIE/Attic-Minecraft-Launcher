@@ -31,11 +31,11 @@
 
 ## 2. Phase 1 — core-spec（契约先行）
 
-- [ ] 领域类型：`Account`（MS/离线）、`VersionRef`、`VersionJson`（兼容 Mojang 格式 + Betacraft 扩展字段）、`JavaInstall`、`LaunchConfig`（mainClass/classpath/jvmArgs/gameArgs/**agentMount**）
-- [ ] `agentMount` 数据模型：`{ form: javaagent|coremod|mod, path, appliesFrom }` —— legacyfix 挂载决策表进版本数据，不进代码
-- [ ] IPC 通道与事件：launch/kill、stdout/stderr 流、下载进度、Java 探测结果
-- [ ] 契约测试夹具：同一组 fixture（版本 JSON → 期望 LaunchConfig）由 TS 与 Rust 各自消费断言
-- [ ] 文档：`docs/contract.md`
+- [x] 领域类型：`Account`（MS/离线）、`VersionRef`、`VersionJson`（兼容 Mojang 格式 + Betacraft 扩展字段）、`JavaInstall`、`LaunchConfig`（mainClass/classpath/jvmArgs/gameArgs/**agentMount**）
+- [x] `agentMount` 数据模型：`{ form: javaagent|coremod|mod, path, appliesFrom }` —— legacyfix 挂载决策表进版本数据，不进代码
+- [x] IPC 通道与事件：launch/kill、stdout/stderr 流、下载进度、Java 探测结果
+- [~] 契约测试夹具：同一组 fixture（版本 JSON → 期望 LaunchConfig）由 TS 与 Rust 各自消费断言 —— TS 侧已绿（4 夹具 × 6 不变量，`node --test`），Rust 侧 Phase 4 接入同一 `fixtures/` 目录
+- [x] 文档：`docs/contract.md`
 
 ## 3. Phase 2 — TS 运行时（Electron 后端）
 

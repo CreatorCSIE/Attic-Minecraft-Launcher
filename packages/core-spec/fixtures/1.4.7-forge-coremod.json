@@ -1,0 +1,81 @@
+{
+  "name": "1.4.7-forge-coremod",
+  "description": "Forge 1.4.7：legacyfix 以 coremod 形态挂载（jvmArgs 不含 -javaagent；落位 coremods/ 目录由运行时在 spawn 前完成）。",
+  "context": {
+    "javaPath": "/opt/java/zulu8/bin/java",
+    "gameDir": "/game/1.4.7-forge",
+    "assetsDir": "/game/assets",
+    "dataDir": "/data",
+    "username": "steve",
+    "uuid": "069a79f4-44e9-4726-a5be-fca90e38aaf5",
+    "accessToken": "token:069a79f4-44e9-4726-a5be-fca90e38aaf5:0",
+    "maxMemoryMb": 2048
+  },
+  "versionJson": {
+    "id": "1.4.7-Forge-6.6.2.534",
+    "type": "modded",
+    "releaseTime": "2012-12-28T00:00:00+00:00",
+    "mainClass": "net.minecraft.launchwrapper.Launch",
+    "minecraftArguments": "${auth_player_name} ${auth_session} --gameDir ${game_directory} --assetsDir ${assets_root} --version ${version_name}",
+    "assets": "new",
+    "inheritsFrom": "1.4.7",
+    "jar": {
+      "url": "http://files.betacraft.uk/launcher/data/versions/1.4.7.jar",
+      "sha1": "9f8ba2d0dfd02f1b5e4e5f19b4c1e9d0c0e1a2b5"
+    },
+    "libraries": [
+      { "name": "net.minecraft:launchwrapper:1.12", "url": "http://files.betacraft.uk/launcher/libraries/launchwrapper-1.12.jar" },
+      { "name": "cpw:modpacker:2.0", "url": "http://files.betacraft.uk/launcher/libraries/modpacker-2.0.jar" }
+    ],
+    "betacraft": {
+      "proxyArgs": ["-Dhttp.proxyHost=betacraft.uk"],
+      "launchMethod": "launchwrapper",
+      "baseVersion": "1.4.7",
+      "custom": true,
+      "agentMount": [
+        {
+          "form": "coremod",
+          "path": "legacyfix/legacyfix-3.6.0.jar",
+          "appliesFrom": "1.4.2",
+          "appliesTo": "1.4.7",
+          "quirk": "legacyfix"
+        }
+      ]
+    }
+  },
+  "expected": {
+    "javaPath": "/opt/java/zulu8/bin/java",
+    "gameDir": "/game/1.4.7-forge",
+    "assetsDir": "/game/assets",
+    "mainClass": "net.minecraft.launchwrapper.Launch",
+    "classpath": [
+      "/game/versions/1.4.7-Forge-6.6.2.534/1.4.7-Forge-6.6.2.534.jar",
+      "/data/libraries/net/minecraft/launchwrapper/1.12/launchwrapper-1.12.jar",
+      "/data/libraries/cpw/modpacker/2.0/modpacker-2.0.jar"
+    ],
+    "jvmArgs": [
+      "-Xmx2048m",
+      "-Dhttp.proxyHost=betacraft.uk"
+    ],
+    "gameArgs": [
+      "steve",
+      "token:069a79f4-44e9-4726-a5be-fca90e38aaf5:0",
+      "--gameDir",
+      "/game/1.4.7-forge",
+      "--assetsDir",
+      "/game/assets",
+      "--version",
+      "1.4.7-Forge-6.6.2.534"
+    ],
+    "agentMount": [
+      {
+        "form": "coremod",
+        "path": "legacyfix/legacyfix-3.6.0.jar",
+        "appliesFrom": "1.4.2",
+        "appliesTo": "1.4.7",
+        "quirk": "legacyfix"
+      }
+    ],
+    "maxMemoryMb": 2048
+  }
+}
