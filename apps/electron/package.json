@@ -11,7 +11,8 @@
     "dev": "electron . --dev-url=http://localhost:5173"
   },
   "dependencies": {
-    "@attic/core-spec": "workspace:*"
+    "@attic/core-spec": "workspace:*",
+    "@attic/runtime": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

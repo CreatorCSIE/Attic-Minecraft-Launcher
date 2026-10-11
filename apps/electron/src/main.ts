@@ -1,6 +1,41 @@
 import path from 'node:path';
 import { app, BrowserWindow, ipcMain } from 'electron';
-import { IPC_CHANNELS, type IpcResult } from '@attic/core-spec';
+import {
+  IPC_CHANNELS,
+  IPC_EVENTS,
+  type AtticEventPayloads,
+  type IpcResult,
+  type LaunchRequest,
+} from '@attic/core-spec';
+import { AtticRuntime } from '@attic/runtime';
+
+/** TS 启动器核心门面（Phase 2）：主进程唯一实例。 */
+const runtime = new AtticRuntime();
+
+/**
+ * 通道注册器：IpcResult 封装归壳层（runtime 以异常抛出）。
+ * 参数透传：渲染侧 invoke(channel, ...args) → handle 回调 (event, ...args)。
+ */
+function handle<I extends unknown[], T>(channel: string, fn: (...args: I) => T | Promise<T>): void {
+  ipcMain.handle(channel, async (_event, ...args: unknown[]): Promise<IpcResult<T>> => {
+    try {
+      return { ok: true, value: await fn(...(args as I)) };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+}
+
+/** 事件广播：runtime 事件面 → 全部窗口的 webContents（preload 的 on() 订阅侧）。 */
+function wireEvents(): void {
+  for (const event of [IPC_EVENTS.GAME_OUTPUT, IPC_EVENTS.GAME_EXIT, IPC_EVENTS.DOWNLOAD_PROGRESS] as const) {
+    runtime.on(event, (payload: AtticEventPayloads[typeof event]) => {
+      for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send(event, payload);
+      }
+    });
+  }
+}
 
 /** 无边距主窗：拖拽区由 UI 的 .titlebar（-webkit-app-region: drag）承担。 */
 function createWindow(): void {
@@ -32,13 +67,27 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
-  // IPC 骨架：ping → pong（Phase 2 起被 launch/kill、stdout 流、下载进度等真实通道扩充）。
-  ipcMain.handle(IPC_CHANNELS.PING, (): IpcResult<string> => ({ ok: true, value: 'pong' }));
+  // 九请求通道（ipc.ts 契约一一对应）。
+  handle(IPC_CHANNELS.PING, () => runtime.ping());
+  handle(IPC_CHANNELS.VERSIONS_LIST, () => runtime.listVersions());
+  handle(IPC_CHANNELS.VERSIONS_JSON, (versionId: string) => runtime.getVersionJson(versionId));
+  handle(IPC_CHANNELS.LAUNCH_DRY_RUN, (request: LaunchRequest) => runtime.dryRunLaunch(request));
+  handle(IPC_CHANNELS.LAUNCH, (request: LaunchRequest) => runtime.launch(request));
+  handle(IPC_CHANNELS.KILL, () => runtime.kill());
+  handle(IPC_CHANNELS.STATUS, () => runtime.status());
+  handle(IPC_CHANNELS.JAVA_DETECT, () => runtime.detectJava());
+  handle(IPC_CHANNELS.ACCOUNTS_LIST, () => runtime.listAccounts());
 
+  wireEvents();
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
+});
+
+// 退出清理：游戏进程在跑则先 kill（进程生命周期归 runtime，壳只触发）。
+app.on('before-quit', () => {
+  if (runtime.status().running) void runtime.kill().catch(() => undefined);
 });
 
 app.on('window-all-closed', () => {

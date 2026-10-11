@@ -1,27 +1,27 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import {
   IPC_CHANNELS,
-  NOT_IMPLEMENTED,
   type AtticEventPayloads,
   type IpcResult,
+  type LaunchRequest,
   type RendererBridge,
 } from '@attic/core-spec';
 
-/** Phase 2 前的诚实占位：返回错误而非挂起，桥面形状即契约形状。 */
-function notImpl<T>(): Promise<IpcResult<T>> {
-  return Promise.resolve({ ok: false, error: NOT_IMPLEMENTED });
+/** 请求通道统一走 IpcResult 封装（错误不跨进程抛异常）。 */
+function invoke<T>(channel: string, ...args: unknown[]): Promise<IpcResult<T>> {
+  return ipcRenderer.invoke(channel, ...args) as Promise<IpcResult<T>>;
 }
 
 const bridge: RendererBridge = {
-  ping: async () => (await ipcRenderer.invoke(IPC_CHANNELS.PING)) as IpcResult<string>,
-  listVersions: () => notImpl(),
-  getVersionJson: () => notImpl(),
-  dryRunLaunch: () => notImpl(),
-  launch: () => notImpl(),
-  kill: () => notImpl(),
-  status: () => notImpl(),
-  detectJava: () => notImpl(),
-  listAccounts: () => notImpl(),
+  ping: () => invoke(IPC_CHANNELS.PING),
+  listVersions: () => invoke(IPC_CHANNELS.VERSIONS_LIST),
+  getVersionJson: (versionId) => invoke(IPC_CHANNELS.VERSIONS_JSON, versionId),
+  dryRunLaunch: (request: LaunchRequest) => invoke(IPC_CHANNELS.LAUNCH_DRY_RUN, request),
+  launch: (request: LaunchRequest) => invoke(IPC_CHANNELS.LAUNCH, request),
+  kill: () => invoke(IPC_CHANNELS.KILL),
+  status: () => invoke(IPC_CHANNELS.STATUS),
+  detectJava: () => invoke(IPC_CHANNELS.JAVA_DETECT),
+  listAccounts: () => invoke(IPC_CHANNELS.ACCOUNTS_LIST),
   on: <E extends keyof AtticEventPayloads>(event: E, cb: (payload: AtticEventPayloads[E]) => void) => {
     const handler = (_: unknown, payload: AtticEventPayloads[E]): void => cb(payload);
     ipcRenderer.on(event, handler);

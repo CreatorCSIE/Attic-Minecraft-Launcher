@@ -53,9 +53,11 @@
 1. `agentMount` 中 `javaagent` 条数 == `jvmArgs` 中 `-javaagent:` 条数，且逐条展开为 `-javaagent:<dataDir>/<path>=<gameDir>`；
 2. `coremod`/`mod` 形态不产生任何 `-javaagent:` 参数（文件落位在 spawn 前由运行时完成）；
 3. `jvmArgs` 含 `-Xmx<maxMemoryMb>m`；
-4. `classpath[0]` 是版本 jar（`versions/<id>/<id>.jar`）；
+4. `classpath[0]` 是版本 jar（`<dataDir>/versions/<id>.jar`，v1 平铺布局）；其余条目为 `bin/` 库池（整目录上 classpath，v1 `Wrapper.loadJars` 语义，清单由运行时注入）；
 5. `gameArgs[0]` 是用户名；
 6. `betacraft.proxyArgs` 全量进 `jvmArgs`。
+
+`jvmArgs` 固定组（顺序即拼装顺序）：`-Xmx`（+可选 `-Xms`）→ `-Djava.util.Arrays.useLegacyMergeSort=true` → `-Dhttp.nonProxyHosts=api.betacraft.uk|files.betacraft.uk|checkip.amazonaws.com` → LWJGL2 natives 两参（`org.lwjgl.librarypath`/`net.java.games.input.librarypath` = `<dataDir>/bin/natives`）→ `proxyArgs` → `javaagent` 展开 → 请求侧 `extraJvmArgs`。
 
 `CrashCategory`（v0 分类器枚举）：`none/java-missing/out-of-memory/gl-init/lwjgl-native/unsatisfied-link/unknown`。
 
@@ -91,7 +93,8 @@
 
 ```jsonc
 { "name", "description",
-  "context":     { "javaPath","gameDir","assetsDir","dataDir","username","uuid","accessToken","maxMemoryMb" },
+  "context":     { "javaPath","gameDir","assetsDir","dataDir","username","uuid","accessToken","maxMemoryMb",
+                    "binPool" /* 注入的 bin/ 库池绝对路径清单 */, "versionOrder" /* 年代序（编译日期升序）的版本 id 数组，agentMount 区间判定用；上游清单本身乱序，不可直接用其行序 */ },
   "versionJson": { /* VersionJson 输入 */ },
   "expected":    { /* LaunchConfig 期望输出 */ } }
 ```

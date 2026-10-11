@@ -1,6 +1,6 @@
 {
   "name": "c2.0-javaagent",
-  "description": "Classic c2.0：legacyfix 以 javaagent 挂载（classic-resize quirk），代理 JVM 参数进 jvmArgs，游戏参数为位置参。",
+  "description": "Classic c2.0：legacyfix 以 javaagent 挂载（classic-resize quirk），代理 JVM 参数进 jvmArgs，游戏参数为位置参；classpath = 版本 jar + bin/ 库池。",
   "context": {
     "javaPath": "/opt/java/zulu8/bin/java",
     "gameDir": "/game/c2.0",
@@ -9,7 +9,12 @@
     "username": "steve",
     "uuid": "069a79f4-44e9-4726-a5be-fca90e38aaf5",
     "accessToken": "0",
-    "maxMemoryMb": 1024
+    "maxMemoryMb": 1024,
+    "binPool": ["/data/bin/lwjgl-1.4.jar"],
+    "versionOrder": [
+      "c0.0.13a", "c2.0", "in-20100223", "inf-1127-2", "a1.0.16_02",
+      "b1.0", "b1.7.3", "1.0", "1.3.2", "1.4.2", "1.4.7", "1.5", "1.5.2", "1.7.10", "1.8.9"
+    ]
   },
   "versionJson": {
     "id": "c2.0",
@@ -41,9 +46,13 @@
     "gameDir": "/game/c2.0",
     "assetsDir": "/game/assets",
     "mainClass": "net.minecraft.client.Minecraft",
-    "classpath": ["/game/versions/c2.0/c2.0.jar"],
+    "classpath": ["/data/versions/c2.0.jar", "/data/bin/lwjgl-1.4.jar"],
     "jvmArgs": [
       "-Xmx1024m",
+      "-Djava.util.Arrays.useLegacyMergeSort=true",
+      "-Dhttp.nonProxyHosts=api.betacraft.uk|files.betacraft.uk|checkip.amazonaws.com",
+      "-Dorg.lwjgl.librarypath=/data/bin/natives",
+      "-Dnet.java.games.input.librarypath=/data/bin/natives",
       "-Dhttp.proxyHost=betacraft.uk",
       "-javaagent:/data/legacyfix/legacyfix-3.6.0.jar=/game/c2.0"
     ],

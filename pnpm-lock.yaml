@@ -13,6 +13,9 @@ importers:
       '@attic/core-spec':
         specifier: workspace:*
         version: link:../../packages/core-spec
+      '@attic/runtime':
+        specifier: workspace:*
+        version: link:../../packages/runtime
     devDependencies:
       '@types/node':
         specifier: ^22.10.0

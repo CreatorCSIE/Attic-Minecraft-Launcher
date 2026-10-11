@@ -4,10 +4,11 @@
   "private": true,
   "description": "TS 侧启动器核心，供 Electron 壳（Phase 2 实现：Betacraft 客户端 / Java 探测 / 参数拼装 / 进程生命周期）",
   "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "types": "./src/index.ts",
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "build": "tsc -p tsconfig.json"
+    "build": "tsc -p tsconfig.json",
+    "test": "node --test"
   },
   "dependencies": {
     "@attic/core-spec": "workspace:*"

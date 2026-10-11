@@ -71,11 +71,14 @@ for (const { file, fixture } of fixtures) {
     // 不变量 4：内存上限参数与 maxMemoryMb 一致
     assert.ok(expected.jvmArgs.includes(`-Xmx${expected.maxMemoryMb}m`), 'jvmArgs 必须含 -Xmx<maxMemoryMb>m');
 
-    // 不变量 5：classpath 首位是版本 jar（versions/<id>/<id>.jar）
+    // 不变量 5：classpath 首位是版本 jar（<dataDir>/versions/<id>.jar，v1 平铺布局），其后为 bin/ 库池条目
     assert.ok(
-      expected.classpath[0].includes(`versions/${versionJson.id}/${versionJson.id}.jar`),
+      expected.classpath[0].endsWith(`/versions/${versionJson.id}.jar`),
       `classpath[0] 必须是版本 jar，实得 ${expected.classpath[0]}`,
     );
+    for (const entry of expected.classpath.slice(1)) {
+      assert.ok(entry.includes('/bin/'), `库池条目必须来自 bin/ 目录，实得 ${entry}`);
+    }
 
     // 不变量 6：游戏参数首位是用户名
     assert.equal(expected.gameArgs[0], context.username);
