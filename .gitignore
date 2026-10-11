@@ -1,0 +1,29 @@
+# --- upstream reference clones (never distribute someone else's history) ---
+reference/
+
+# --- node / pnpm ---
+node_modules/
+.pnpm-store/
+*.tsbuildinfo
+
+# --- build outputs ---
+dist/
+build/
+out/
+target/
+
+# --- editor / OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- logs & temp ---
+*.log
+tmp/
+temp/
+
+# --- local secrets / overrides ---
+.env
+.env.local

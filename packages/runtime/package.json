@@ -1,0 +1,19 @@
+{
+  "name": "@attic/runtime",
+  "version": "0.0.0",
+  "private": true,
+  "description": "TS 侧启动器核心，供 Electron 壳（Phase 2 实现：Betacraft 客户端 / Java 探测 / 参数拼装 / 进程生命周期）",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@attic/core-spec": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.6.3"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "name": "@attic/ui",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "共享 Vue 3 前端（双壳透明加载）",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "@attic/core-spec": "workspace:*",
+    "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.1",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11",
+    "vue-tsc": "^2.2.0"
+  }
+}
