@@ -32,15 +32,20 @@ function expandHome(p: string): string {
 }
 
 export function resolveDataRoot(options: ResolveDataRootOptions = {}): string {
-  if (options.rootDirOverride) return path.resolve(expandHome(options.rootDirOverride));
   const platform = options.platform ?? process.platform;
+  if (options.rootDirOverride) return path.resolve(expandHome(options.rootDirOverride));
   const env = options.env ?? process.env;
   const execPath = options.execPath ?? process.execPath;
-  if (options.portable) return path.join(path.dirname(execPath), '.attic');
+  // win32 路径语义固定走 path.win32：宿主为 Windows 时与 path 等价（零回归），
+  // 在 POSIX 宿主上注入 win32 也能产出正确的反斜杠路径（跨平台可测，不随宿主分隔符漂移）。
+  if (options.portable) {
+    const p = platform === 'win32' ? path.win32 : path.posix;
+    return p.join(p.dirname(execPath), '.attic');
+  }
   const home = env['HOME'] ?? env['USERPROFILE'] ?? os.homedir();
   if (platform === 'win32') {
-    const appData = env['APPDATA'] ?? path.join(home, 'AppData', 'Roaming');
-    return path.join(appData, '.attic');
+    const appData = env['APPDATA'] ?? path.win32.join(home, 'AppData', 'Roaming');
+    return path.win32.join(appData, '.attic');
   }
   // POSIX 分支用 '/' 拼接：目标平台路径语义，不随宿主分隔符漂移。
   if (platform === 'darwin') return `${home}/Library/Application Support/attic`;

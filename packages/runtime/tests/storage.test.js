@@ -30,7 +30,7 @@ function tempRoot(t) {
 
 test('resolveDataRoot：三平台 + portable + override 优先级', () => {
   const win = resolveDataRoot({ platform: 'win32', env: { APPDATA: 'C:\\Users\\s\\AppData\\Roaming' } });
-  assert.equal(win, path.join('C:\\Users\\s\\AppData\\Roaming', '.attic'));
+  assert.equal(win, path.win32.join('C:\\Users\\s\\AppData\\Roaming', '.attic'));
 
   const linux = resolveDataRoot({ platform: 'linux', env: { HOME: '/home/steve' } });
   assert.equal(linux, '/home/steve/.attic');
@@ -44,7 +44,7 @@ test('resolveDataRoot：三平台 + portable + override 优先级', () => {
     execPath: 'D:\\Attic\\attic.exe',
     portable: true,
   });
-  assert.equal(portable, path.join('D:\\Attic', '.attic'));
+  assert.equal(portable, path.win32.join('D:\\Attic', '.attic'));
 
   const override = resolveDataRoot({ platform: 'win32', env: {}, rootDirOverride: 'E:\\.betacraft' });
   assert.equal(override, path.resolve('E:\\.betacraft'));
