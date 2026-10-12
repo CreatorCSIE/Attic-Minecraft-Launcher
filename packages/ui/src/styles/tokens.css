@@ -30,6 +30,14 @@
   --radius-md: 10px;
   --radius-lg: 16px;
 
+  /* —— 布局（§3 栏宽公式 / 左侧窄导航范式） —— */
+  --rail-width: 60px;
+  --rail-item-size: 40px;
+  --rail-icon-size: 20px;
+  --rail-bar-width: 3px;
+  --rail-bar-height: 24px;
+  --content-max: 1280px;
+
   /* —— 字体族（零新依赖：本地字体栈，无 webfont） —— */
   --font-sans: "Inter", "Geist", "MiSans", "HarmonyOS Sans SC", "Source Han Sans SC", "Noto Sans SC", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", "Cascadia Code", "Consolas", ui-monospace, monospace;

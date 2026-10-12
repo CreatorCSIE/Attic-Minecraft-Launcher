@@ -7,6 +7,7 @@ export const en = {
     tagline: 'Dusty, but still alive.',
   },
   nav: {
+    menu: 'Navigation',
     launch: 'Launch',
     instances: 'Instances',
     settings: 'Settings',

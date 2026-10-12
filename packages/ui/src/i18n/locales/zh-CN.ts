@@ -7,6 +7,7 @@ export const zhCN: Record<string, unknown> = {
     tagline: '落灰，但都还活着。',
   },
   nav: {
+    menu: '导航',
     launch: '启动',
     instances: '实例',
     settings: '设置',

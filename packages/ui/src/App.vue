@@ -1,7 +1,8 @@
 <script setup lang="ts">
 /**
- * 应用壳 —— 顶栏 + 顶部导航（view 切换，零 vue-router）+ 主体 + 缺桥横幅。
- * 启动视图双栏（版本列表 | 启动/控制台），实例/设置各占主区。
+ * 应用壳 —— 顶栏 + 缺桥横幅 + 左侧窄导航 rail + 主体（ui-design.md §3 布局范式）。
+ * 启动视图三栏（rail | 版本列表 | 启动/控制台堆叠），实例/设置为 rail + 居中内容区。
+ * view 切换仍是 ref 状态，零 vue-router；图标为内联 lucide 路径（MIT），零新依赖。
  */
 import { ref } from 'vue';
 import { useI18n } from './i18n';
@@ -17,43 +18,114 @@ type View = 'launch' | 'instances' | 'settings';
 const view = ref<View>('launch');
 const { t } = useI18n();
 const { hasBridge } = useBridge();
-
-const tabs: { id: View; key: string }[] = [
-  { id: 'launch', key: 'nav.launch' },
-  { id: 'instances', key: 'nav.instances' },
-  { id: 'settings', key: 'nav.settings' },
-];
 </script>
 
 <template>
   <div class="app">
     <TitleBar />
 
-    <nav class="nav">
-      <button
-        v-for="tab in tabs"
-        :key="tab.id"
-        class="tab"
-        :class="{ 'tab--active': view === tab.id }"
-        @click="view = tab.id"
-      >
-        {{ t(tab.key) }}
-      </button>
-    </nav>
-
     <div v-if="!hasBridge" class="banner">{{ t('bridge.missing') }}</div>
 
-    <main class="body">
-      <div v-if="view === 'launch'" class="launch-grid">
-        <aside class="left"><VersionSelector /></aside>
-        <div class="right">
-          <LaunchPanel />
-          <div class="console-wrap"><ConsolePanel /></div>
+    <div class="shell">
+      <nav class="rail" :aria-label="t('nav.menu')">
+        <button
+          class="rail-item"
+          :class="{ 'rail-item--active': view === 'launch' }"
+          :aria-current="view === 'launch' ? 'page' : undefined"
+          :title="t('nav.launch')"
+          :aria-label="t('nav.launch')"
+          @click="view = 'launch'"
+        >
+          <!-- lucide: rocket -->
+          <svg
+            class="rail-icon"
+            viewBox="0 0 24 24"
+            width="24"
+            height="24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z" />
+            <path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z" />
+            <path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0" />
+            <path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5" />
+          </svg>
+        </button>
+
+        <button
+          class="rail-item"
+          :class="{ 'rail-item--active': view === 'instances' }"
+          :aria-current="view === 'instances' ? 'page' : undefined"
+          :title="t('nav.instances')"
+          :aria-label="t('nav.instances')"
+          @click="view = 'instances'"
+        >
+          <!-- lucide: archive -->
+          <svg
+            class="rail-icon"
+            viewBox="0 0 24 24"
+            width="24"
+            height="24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <rect width="20" height="5" x="2" y="3" rx="2" />
+            <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" />
+            <path d="M10 12h4" />
+          </svg>
+        </button>
+
+        <button
+          class="rail-item"
+          :class="{ 'rail-item--active': view === 'settings' }"
+          :aria-current="view === 'settings' ? 'page' : undefined"
+          :title="t('nav.settings')"
+          :aria-label="t('nav.settings')"
+          @click="view = 'settings'"
+        >
+          <!-- lucide: settings -->
+          <svg
+            class="rail-icon"
+            viewBox="0 0 24 24"
+            width="24"
+            height="24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path
+              d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"
+            />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
+        </button>
+      </nav>
+
+      <main class="body">
+        <div v-if="view === 'launch'" class="launch-grid">
+          <aside class="left"><VersionSelector /></aside>
+          <div class="right">
+            <LaunchPanel />
+            <div class="console-wrap"><ConsolePanel /></div>
+          </div>
         </div>
-      </div>
-      <InstanceList v-else-if="view === 'instances'" />
-      <SettingsPanel v-else />
-    </main>
+        <div v-else class="content">
+          <InstanceList v-if="view === 'instances'" />
+          <SettingsPanel v-else />
+        </div>
+      </main>
+    </div>
   </div>
 </template>
 
@@ -65,30 +137,6 @@ const tabs: { id: View; key: string }[] = [
   background: var(--surface);
   color: var(--text-primary);
 }
-.nav {
-  display: flex;
-  gap: var(--space-1);
-  padding: var(--space-2) var(--space-4);
-  background: var(--raised);
-  border-bottom: 1px solid var(--border);
-  -webkit-app-region: no-drag;
-}
-.tab {
-  padding: var(--space-2) var(--space-4);
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-sm);
-  color: var(--text-secondary);
-  font-size: var(--fs-sm);
-  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
-}
-.tab:hover {
-  background: var(--overlay);
-}
-.tab--active {
-  background: var(--overlay);
-  color: var(--text-primary);
-}
 .banner {
   padding: var(--space-2) var(--space-4);
   background: var(--warn-soft);
@@ -96,9 +144,84 @@ const tabs: { id: View; key: string }[] = [
   font-size: var(--fs-sm);
   border-bottom: 1px solid var(--border);
 }
-.body {
+.shell {
+  display: flex;
   flex: 1;
   min-height: 0;
+}
+/* —— 左侧窄导航（§3 范式；激活态 = 3px accent 竖条 + overlay 底，非 accent 实心，§2） —— */
+.rail {
+  flex: 0 0 var(--rail-width);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) 0;
+  background: var(--raised);
+  border-right: 1px solid var(--border);
+  -webkit-app-region: no-drag;
+}
+.rail-item {
+  position: relative;
+  width: var(--rail-item-size);
+  height: var(--rail-item-size);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.rail-item::before {
+  content: '';
+  position: absolute;
+  left: calc((var(--rail-item-size) - var(--rail-width)) / 2);
+  top: 50%;
+  width: var(--rail-bar-width);
+  height: var(--rail-bar-height);
+  border-radius: var(--rail-bar-width);
+  background: var(--accent);
+  opacity: 0;
+  transform: translateY(-50%);
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+.rail-item:hover:not(:disabled) {
+  background-color: var(--overlay);
+}
+.rail-item--active {
+  background-color: var(--overlay);
+  color: var(--text-primary);
+}
+.rail-item--active::before {
+  opacity: 1;
+}
+.rail-item:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.rail-icon {
+  width: var(--rail-icon-size);
+  height: var(--rail-icon-size);
+}
+.body {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+/* —— 实例/设置内容区：max-width 居中（§3 栏宽公式） —— */
+.content {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  max-width: var(--content-max);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
 }
 .launch-grid {
   display: grid;
