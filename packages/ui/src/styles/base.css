@@ -3,6 +3,12 @@
  * 只用近两大版本 WebKitGTK 全绿的特性；backdrop-filter 一律带降级；自定义深色滚动条；五态 focus ring。
  */
 
+/* Tailwind 试验性接入：preflight 已在 tailwind.config.ts 关闭，
+   base 层仅注入空壳/少量无关内容，实测与本文件 reset 不冲突。 */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 *,
 *::before,
 *::after {
@@ -99,10 +105,11 @@ a {
   background: transparent;
 }
 
+/* thumb=第4级 surface，留白缝走页面底(第1级)，四级分层下仍可读 */
 ::-webkit-scrollbar-thumb {
   background: var(--scroll-thumb);
-  border-radius: var(--radius-lg);
-  border: 2px solid var(--surface);
+  border-radius: var(--radius-pill);
+  border: 2px solid var(--surface-1);
 }
 
 ::-webkit-scrollbar-thumb:hover {

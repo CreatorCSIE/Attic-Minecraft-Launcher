@@ -25,17 +25,16 @@
   --lh-body: 1.5;
   --lh-heading: 1.2;
 
-  /* —— 圆角：3 档，按层级用，不混用 —— */
-  --radius-sm: 6px;
-  --radius-md: 10px;
+  /* —— 圆角：Modrinth 大圆角刻度（sm=chip/微件、md=输入框/行/次级卡、lg=base-card、pill=主按钮/rail 高亮），按层级用，不混用 —— */
+  --radius-sm: 8px;
+  --radius-md: 12px;
   --radius-lg: 16px;
+  --radius-pill: 999px;
 
   /* —— 布局（§3 栏宽公式 / 左侧窄导航范式） —— */
   --rail-width: 60px;
   --rail-item-size: 40px;
   --rail-icon-size: 20px;
-  --rail-bar-width: 3px;
-  --rail-bar-height: 24px;
   --content-max: 1280px;
 
   /* —— 字体族（零新依赖：本地字体栈，无 webfont） —— */
@@ -59,11 +58,71 @@
   /* —— 卡片顶部 1px 内高光（"贵气"板斧之一） —— */
   --card-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 
-  /* —— 语义色（深色默认：暖木炭底 + 羊皮纸文字 + 火把琥珀 accent） —— */
-  --surface: #14120f;
-  --raised: #1e1b16;
-  --overlay: #28241e;
-  --border: #353027;
+  /* —— 质感配方：像素级借鉴 Modrinth（omorphia variables.scss/classes.scss + @modrinth/ui ButtonFrame.vue）。
+     组件层只引用本组 token，禁止裸色值；浅色主题在文件下方整组等效覆盖。 —— */
+
+  /* omorphia --shadow-inset-sm / -lg：底缘内阴影造"下沉厚度"。深色原式 hsla(221,39%,11%,.25/.1) → 暖木炭等效 */
+  --inset-bottom: inset 0 -1px 1px rgba(0, 0, 0, 0.25);
+  --inset-bottom-lg: inset 0 -2px 2px rgba(0, 0, 0, 0.1);
+
+  /* ButtonFrame .button-frame--colored 配方件：accent tint 1px 描边环（原式 color-mix(accent 30%)，
+     基线风险 #4 规避 color-mix → 预计算 rgba）+ --color-brand-shadow（accent @70%）投影式 focus 环 + 顶部渐变 rim */
+  --accent-ring: rgba(232, 163, 61, 0.3);
+  --accent-ring-strong: rgba(232, 163, 61, 0.45);
+  --accent-glow: rgba(232, 163, 61, 0.7);
+  --btn-rim-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.3);
+
+  /* 主按钮五层叠影：tint 环 + 4 层递进扩散投影 + 顶部内高光。
+     原式投影 alpha 0.03–0.04 为浅色 UI 校准，深色底等效提浓至 0.06–0.10 方可感知 */
+  --btn-primary-shadow:
+    var(--accent-ring) 0 0 0 1px,
+    0 2px 4px rgba(0, 0, 0, 0.1),
+    0 5px 8px rgba(0, 0, 0, 0.08),
+    0 10px 18px rgba(0, 0, 0, 0.07),
+    0 24px 48px rgba(0, 0, 0, 0.06),
+    var(--btn-rim-highlight);
+  --btn-primary-hover-shadow:
+    var(--accent-ring-strong) 0 0 0 1px,
+    0 4px 8px rgba(0, 0, 0, 0.12),
+    0 8px 16px rgba(0, 0, 0, 0.1),
+    0 16px 28px rgba(0, 0, 0, 0.08),
+    0 32px 60px rgba(0, 0, 0, 0.07),
+    var(--btn-rim-highlight);
+  --btn-primary-active-shadow:
+    var(--accent-ring) 0 0 0 1px,
+    0 1px 2px rgba(0, 0, 0, 0.12),
+    inset 0 2px 4px rgba(0, 0, 0, 0.22);
+  /* focus-visible：原式 ring-4 ring-brand-shadow（outline-none + 投影环） */
+  --btn-primary-focus-shadow: var(--btn-primary-shadow), 0 0 0 4px var(--accent-glow);
+
+  /* .base-card 组合：顶内高光 + 底内阴影 + 双层外投影（配合同层阶 1px 描边与 radius-lg） */
+  --shadow-card:
+    var(--card-highlight),
+    var(--inset-bottom),
+    0 2px 4px rgba(0, 0, 0, 0.25),
+    0 12px 28px -10px rgba(0, 0, 0, 0.45);
+
+  /* —— 四级 surface（Modrinth 分层：1 页面底 → 2 次级面/rail → 3 卡片与控件底 → 4 控件 hover 与卡片描边）。
+     深色暖木炭自 #14120f 起步，级差拉到肉眼可数。 —— */
+  --surface-1: #14120f;
+  --surface-2: #1d1a15;
+  --surface-3: #28241e;
+  --surface-4: #353027;
+
+  /* base-card 配方语义：背景=第 3 级、描边=第 4 级 surface 色（不是灰线）；var 引用随主题自动重解析 */
+  --card-bg: var(--surface-3);
+  --card-border: var(--surface-4);
+
+  /* 输入框 inset 质感：第 3 级底 + 底缘内阴影 + 无边框；focus 时 accent 投影环 */
+  --input-inset: inset 0 -1px 2px rgba(0, 0, 0, 0.2);
+  --input-focus-shadow: var(--input-inset), 0 0 0 3px var(--accent-ring);
+
+  /* —— 语义色（深色默认：暖木炭底 + 羊皮纸文字 + 火把琥珀 accent）。
+     surface/raised/overlay 为四级 surface 的向后兼容别名 —— */
+  --surface: var(--surface-1);
+  --raised: var(--surface-2);
+  --overlay: var(--surface-3);
+  --border: var(--surface-4);
   --border-strong: #4a4438;
 
   --text-primary: #e8e4dc;
@@ -84,7 +143,7 @@
   --warn-soft: rgba(176, 141, 87, 0.16);
   --danger-soft: rgba(184, 92, 74, 0.16);
 
-  --scroll-thumb: #3a352c;
+  --scroll-thumb: var(--surface-4);
   --scroll-thumb-hover: #4a4438;
 
   /* —— 年代色码 chip（内容区装饰，自绘；soft 供低饱和底色，规避 color-mix 基线风险 #4） —— */
@@ -107,9 +166,17 @@
 
 /* —— 浅色主题：羊皮纸底 + 深墨文字，accent 降饱和过 AA —— */
 [data-theme="light"] {
-  --surface: #f2ede3;
-  --raised: #e9e2d4;
-  --overlay: #ddd4c2;
+  /* 四级 surface 反向着色：1 页面底最染色，逐级提亮，4 顶格 #ffffff（Modrinth light 逻辑）。
+     卡片/控件底(3)比页面底(1)更亮，描边(4)=白，hover 顶格白——层级关系与深色同构。 */
+  --surface-1: #f2ede3;
+  --surface-2: #e9e2d4;
+  --surface-3: #faf7f0;
+  --surface-4: #ffffff;
+
+  /* 浅色底缘内阴影转为轻微压暗（白输入框上提亮不可见） */
+  --input-inset: inset 0 -1px 2px rgba(60, 48, 30, 0.1);
+
+  /* 结构描边（banner/rail 分界线）保持染色，不随 surface-4 顶白 */
   --border: #d2c8b4;
   --border-strong: #b8ac94;
 
@@ -139,6 +206,40 @@
   --shadow-3: 0 8px 24px rgba(60, 48, 30, 0.18);
 
   --card-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+
+  /* —— 质感配方 · 浅色等效：omorphia 浅色公式底缘内阴影为"提亮"而非压暗（hsla(221,39%,91%,.15) → 暖羊皮纸等效）；
+     外投影沿用原式低 alpha（0.03–0.04 即为其浅色校准值），色温转暖墨 rgba(60,48,30) 与本主题 shadow-1..3 一致 —— */
+  --inset-bottom: inset 0 -1px 2px rgba(255, 250, 240, 0.55);
+  --inset-bottom-lg: inset 0 -2px 2px rgba(255, 250, 240, 0.35);
+
+  --accent-ring: rgba(168, 106, 24, 0.3);
+  --accent-ring-strong: rgba(168, 106, 24, 0.45);
+  --accent-glow: rgba(168, 106, 24, 0.7);
+
+  --btn-primary-shadow:
+    var(--accent-ring) 0 0 0 1px,
+    0 2px 4px rgba(60, 48, 30, 0.04),
+    0 5px 8px rgba(60, 48, 30, 0.04),
+    0 10px 18px rgba(60, 48, 30, 0.03),
+    0 24px 48px rgba(60, 48, 30, 0.03),
+    var(--btn-rim-highlight);
+  --btn-primary-hover-shadow:
+    var(--accent-ring-strong) 0 0 0 1px,
+    0 4px 8px rgba(60, 48, 30, 0.06),
+    0 8px 16px rgba(60, 48, 30, 0.05),
+    0 16px 28px rgba(60, 48, 30, 0.04),
+    0 32px 60px rgba(60, 48, 30, 0.04),
+    var(--btn-rim-highlight);
+  --btn-primary-active-shadow:
+    var(--accent-ring) 0 0 0 1px,
+    0 1px 2px rgba(60, 48, 30, 0.08),
+    inset 0 2px 4px rgba(60, 48, 30, 0.25);
+
+  --shadow-card:
+    var(--card-highlight),
+    var(--inset-bottom),
+    0 2px 4px rgba(60, 48, 30, 0.08),
+    0 12px 28px -10px rgba(60, 48, 30, 0.12);
 
   --era-pre-classic: #6e6858;
   --era-classic: #4f7245;

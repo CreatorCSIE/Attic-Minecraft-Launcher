@@ -100,12 +100,19 @@ async function onCreate(): Promise<void> {
   height: 100%;
   min-height: 0;
   overflow-y: auto;
-  padding: var(--space-4);
+  padding: var(--space-5);
 }
 .head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
+}
+.head .label {
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: 0;
+  text-transform: none;
 }
 .count {
   font-size: var(--fs-xs);
@@ -115,12 +122,12 @@ async function onCreate(): Promise<void> {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
-  gap: var(--space-3);
-  padding: var(--space-4);
-  background: var(--raised);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--card-highlight);
+  gap: var(--space-4);
+  padding: var(--space-5);
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
 }
 .field {
   display: flex;
@@ -128,16 +135,22 @@ async function onCreate(): Promise<void> {
   gap: var(--space-1);
   min-width: 180px;
 }
+/* 输入控件 inset 质感：第3级底 + 底缘内阴影 + 无边框，focus accent 投影环 */
 .input {
-  padding: var(--space-2) var(--space-3);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-3);
+  border: none;
+  border-radius: var(--radius-md);
   color: var(--text-primary);
-  transition: border-color var(--dur-fast) var(--ease-out);
+  box-shadow: var(--input-inset);
+  transition: background-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
 }
 .input:hover {
-  border-color: var(--border-strong);
+  background: var(--surface-4);
+}
+.input:focus-visible {
+  outline: none;
+  box-shadow: var(--input-focus-shadow);
 }
 select.input {
   cursor: pointer;
@@ -178,10 +191,11 @@ select.input {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-3) var(--space-4);
-  background: var(--raised);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  padding: var(--space-4) var(--space-5);
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
 }
 .card-name {
   color: var(--text-primary);
@@ -191,9 +205,13 @@ select.input {
   color: var(--text-secondary);
 }
 .state {
-  padding: var(--space-6);
+  padding: var(--space-6) var(--space-5);
   text-align: center;
   color: var(--text-secondary);
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
 }
 .state--err {
   color: var(--danger);

@@ -24,7 +24,8 @@ const { hasBridge } = useBridge();
   <div class="app">
     <TitleBar />
 
-    <div v-if="!hasBridge" class="banner">{{ t('bridge.missing') }}</div>
+    <!-- Tailwind 试点：py-2/px-4/text-sm 经 tailwind.config.ts 映射到 var(--space-2)/var(--space-4)/var(--fs-sm) -->
+    <div v-if="!hasBridge" class="banner py-2 px-4 text-sm">{{ t('bridge.missing') }}</div>
 
     <div class="shell">
       <nav class="rail" :aria-label="t('nav.menu')">
@@ -110,6 +111,11 @@ const { hasBridge } = useBridge();
             <circle cx="12" cy="12" r="3" />
           </svg>
         </button>
+
+        <!-- rail 底部账户/状态占位区（空态装饰，桥面接入前不臆造交互） -->
+        <div class="rail-foot" aria-hidden="true">
+          <span class="rail-avatar"></span>
+        </div>
       </nav>
 
       <main class="body">
@@ -134,14 +140,14 @@ const { hasBridge } = useBridge();
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background: var(--surface);
+  background: var(--surface-1);
   color: var(--text-primary);
 }
+/* Tailwind 试点：原 padding: var(--space-2) var(--space-4) 与 font-size: var(--fs-sm)
+   已替换为模板上的等效工具类 py-2 px-4 text-sm（映射同一组 token）。 */
 .banner {
-  padding: var(--space-2) var(--space-4);
   background: var(--warn-soft);
   color: var(--warn);
-  font-size: var(--fs-sm);
   border-bottom: 1px solid var(--border);
 }
 .shell {
@@ -149,20 +155,19 @@ const { hasBridge } = useBridge();
   flex: 1;
   min-height: 0;
 }
-/* —— 左侧窄导航（§3 范式；激活态 = 3px accent 竖条 + overlay 底，非 accent 实心，§2） —— */
+/* —— 左侧窄导航（§3 范式；Modrinth 式质感：rail 底=第2级，激活态=overlay 底圆角药丸高亮块包住图标，无竖条，§2） —— */
 .rail {
   flex: 0 0 var(--rail-width);
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-3) 0;
-  background: var(--raised);
+  padding: var(--space-4) 0;
+  background: var(--surface-2);
   border-right: 1px solid var(--border);
   -webkit-app-region: no-drag;
 }
 .rail-item {
-  position: relative;
   width: var(--rail-item-size);
   height: var(--rail-item-size);
   display: inline-flex;
@@ -171,32 +176,20 @@ const { hasBridge } = useBridge();
   padding: 0;
   background: transparent;
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill);
   color: var(--text-secondary);
-  transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
-}
-.rail-item::before {
-  content: '';
-  position: absolute;
-  left: calc((var(--rail-item-size) - var(--rail-width)) / 2);
-  top: 50%;
-  width: var(--rail-bar-width);
-  height: var(--rail-bar-height);
-  border-radius: var(--rail-bar-width);
-  background: var(--accent);
-  opacity: 0;
-  transform: translateY(-50%);
-  transition: opacity var(--dur-fast) var(--ease-out);
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
 }
 .rail-item:hover:not(:disabled) {
-  background-color: var(--overlay);
+  background-color: var(--surface-3);
 }
 .rail-item--active {
-  background-color: var(--overlay);
+  background-color: var(--surface-3);
+  box-shadow: inset 0 0 0 1px var(--surface-4);
   color: var(--text-primary);
-}
-.rail-item--active::before {
-  opacity: 1;
 }
 .rail-item:disabled {
   opacity: 0.4;
@@ -205,6 +198,19 @@ const { hasBridge } = useBridge();
 .rail-icon {
   width: var(--rail-icon-size);
   height: var(--rail-icon-size);
+}
+.rail-foot {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.rail-avatar {
+  width: var(--rail-item-size);
+  height: var(--rail-item-size);
+  border-radius: var(--radius-pill);
+  background: var(--surface-3);
+  border: 1px solid var(--surface-4);
 }
 .body {
   flex: 1;
@@ -223,12 +229,13 @@ const { hasBridge } = useBridge();
   display: flex;
   flex-direction: column;
 }
+/* —— 间距节奏升档（Modrinth 留白范式）：页面外边距 --space-5，卡片间 gap --space-4 —— */
 .launch-grid {
   display: grid;
   grid-template-columns: minmax(280px, 360px) 1fr;
   gap: var(--space-4);
   height: 100%;
-  padding: var(--space-4);
+  padding: var(--space-5);
 }
 .left {
   min-height: 0;

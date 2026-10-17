@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import {
   IPC_CHANNELS,
+  IPC_EVENTS,
   type AtticEventPayloads,
   type IpcResult,
   type LaunchRequest,
@@ -27,10 +28,15 @@ const bridge: RendererBridge = {
   listInstances: () => invoke(IPC_CHANNELS.INSTANCES_LIST),
   saveInstance: (instance) => invoke(IPC_CHANNELS.INSTANCES_SAVE, instance),
   on: <E extends keyof AtticEventPayloads>(event: E, cb: (payload: AtticEventPayloads[E]) => void) => {
-    const handler = (_: unknown, payload: AtticEventPayloads[E]): void => cb(payload);
+    const handler = (_: unknown, payload: AtticEventPayloads[E]): void => {
+      if (event === IPC_EVENTS.GAME_EXIT) console.log(`[attic-preload] recv ${event}`);
+      cb(payload);
+    };
     ipcRenderer.on(event, handler);
     return () => ipcRenderer.removeListener(event, handler);
   },
 };
 
 contextBridge.exposeInMainWorld('attic', bridge);
+// 诊断：确认 preload 执行且桥已注入（经 main 的 console-message 透传可见）。
+console.log('[attic-preload] contextBridge.attic exposed');

@@ -72,7 +72,7 @@ test('minMemoryMb 下发 -Xms 且进 LaunchConfig', () => {
   assert.equal(config.minMemoryMb, 256);
 });
 
-test('Applet 容器主类：javaagent jar 同时进 classpath', () => {
+test('Applet 容器主类：javaagent jar 同时进 classpath；剔 launchwrapper；deawt 保持开启', () => {
   const versionJson = {
     id: 'c0.0.15a',
     mainClass: 'uk.betacraft.legacyfix.applet.AppletLauncher',
@@ -81,9 +81,24 @@ test('Applet 容器主类：javaagent jar 同时进 classpath', () => {
       agentMount: [{ form: 'javaagent', path: 'legacyfix/lf.jar', appliesFrom: 'c0.0.13a' }],
     },
   };
-  const context = baseContext();
+  const context = {
+    ...baseContext(),
+    binPool: ['/data/bin/lwjgl-2.9.0.jar', '/data/bin/launchwrapper-1.5.jar'],
+  };
   const config = assembleLaunchConfig(versionJson, context);
   assert.ok(config.classpath.includes('/data/legacyfix/lf.jar'));
+  // legacyfix agent 见 classpath 上有 LaunchWrapper 即提前 return 跳过全部补丁（c0.0.12a 窗口事故）。
+  assert.ok(!config.classpath.some((jar) => jar.includes('launchwrapper')));
+  // deawt 保持开启（实测窗口正常）：关窗后 MainWindowHandle 归零，壳侧看门狗据此终止空转进程。
+  assert.ok(!config.jvmArgs.some((a) => a.includes('deawt')));
+});
+
+test('非 Applet 容器：保留 launchwrapper、不加 deawt 开关', () => {
+  const versionJson = { id: 'b1.7.3', mainClass: 'net.minecraft.launchwrapper.Launch' };
+  const context = { ...baseContext(), binPool: ['/data/bin/launchwrapper-1.5.jar'] };
+  const config = assembleLaunchConfig(versionJson, context);
+  assert.ok(config.classpath.includes('/data/bin/launchwrapper-1.5.jar'));
+  assert.ok(!config.jvmArgs.some((a) => a.includes('deawt')));
 });
 
 test('主类缺失（launch-method 不在表）→ 显式报错不静默兜底', () => {

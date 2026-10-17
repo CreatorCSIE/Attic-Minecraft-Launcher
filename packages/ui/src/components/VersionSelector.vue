@@ -85,7 +85,7 @@ function eraKey(era: VersionEra | 'unknown'): string {
 .selector {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-4);
   min-height: 0;
   height: 100%;
 }
@@ -94,20 +94,34 @@ function eraKey(era: VersionEra | 'unknown'): string {
   align-items: baseline;
   justify-content: space-between;
 }
+/* 分区标题：fs-lg 加粗（微标签形态保留给组内小标签） */
+.head .label {
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: 0;
+  text-transform: none;
+}
 .count {
   font-size: var(--fs-xs);
   color: var(--text-muted);
 }
+/* 搜索框：inset 质感（第3级底 + 底缘内阴影 + 无边框），focus accent 投影环 */
 .search {
-  padding: var(--space-2) var(--space-3);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-3);
+  border: none;
+  border-radius: var(--radius-md);
   color: var(--text-primary);
-  transition: border-color var(--dur-fast) var(--ease-out);
+  box-shadow: var(--input-inset);
+  transition: background-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
 }
 .search:hover {
-  border-color: var(--border-strong);
+  background: var(--surface-4);
+}
+.search:focus-visible {
+  outline: none;
+  box-shadow: var(--input-focus-shadow);
 }
 .list {
   flex: 1;
@@ -118,10 +132,16 @@ function eraKey(era: VersionEra | 'unknown'): string {
   gap: var(--space-4);
   padding-right: var(--space-1);
 }
+/* 版本分组 = base-card 统一配方：第3级底 + 第4级 surface 描边 + 大圆角 + 单层弱投影 */
 .group {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
+  padding: var(--space-4);
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
 }
 .group-head {
   display: flex;
@@ -135,7 +155,7 @@ function eraKey(era: VersionEra | 'unknown'): string {
 }
 .chip {
   --chip: var(--text-muted);
-  --chip-soft: var(--raised);
+  --chip-soft: var(--surface-1);
   font-size: var(--fs-xs);
   letter-spacing: var(--tracking-label);
   text-transform: uppercase;
@@ -158,12 +178,12 @@ function eraKey(era: VersionEra | 'unknown'): string {
   padding: var(--space-2) var(--space-3);
   background: transparent;
   border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   text-align: left;
   transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
 }
 .row:hover {
-  background: var(--raised);
+  background: var(--surface-4);
 }
 .row--active {
   background: var(--accent-soft);
@@ -194,14 +214,19 @@ function eraKey(era: VersionEra | 'unknown'): string {
   font-size: var(--fs-xs);
   color: var(--text-muted);
 }
+/* 空态/错误态：同套 base-card 配方 */
 .state {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
-  padding: var(--space-6) var(--space-4);
+  padding: var(--space-6) var(--space-5);
   text-align: center;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
 }
 .state-msg {
   color: var(--text-secondary);
@@ -217,12 +242,13 @@ function eraKey(era: VersionEra | 'unknown'): string {
   padding: var(--space-2) var(--space-4);
   background: transparent;
   border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   color: var(--text-primary);
+  box-shadow: var(--inset-bottom);
   transition: background var(--dur-fast) var(--ease-out);
 }
 .ghost:hover {
-  background: var(--raised);
+  background: var(--surface-4);
 }
 .skeleton {
   display: flex;
@@ -231,8 +257,8 @@ function eraKey(era: VersionEra | 'unknown'): string {
 }
 .sk-row {
   height: 32px;
-  border-radius: var(--radius-sm);
-  background: var(--raised);
+  border-radius: var(--radius-md);
+  background: var(--surface-3);
   animation: shimmer 1.2s var(--ease-in) infinite;
 }
 @keyframes shimmer {

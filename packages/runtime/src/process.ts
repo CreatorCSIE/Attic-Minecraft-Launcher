@@ -3,9 +3,11 @@
  * 戒律：游戏开独立顶层窗口，永不嵌入宿主（MCANextGen 风险登记 #3/#6 的全部教训）。
  */
 
-import { spawn, type ChildProcessByStdio } from 'node:child_process';
+import { spawn, type ChildProcess, type ChildProcessByStdio } from 'node:child_process';
 import path from 'node:path';
 import type { Readable } from 'node:stream';
+
+import { APPLET_LAUNCHER_CLASS } from './launch.js';
 
 import type {
   CrashCategory,
@@ -50,8 +52,28 @@ export interface GameProcessEvents {
   onExit: (event: GameExitEvent) => void;
 }
 
+/**
+ * 窗口看门狗（仅 Applet 容器 + Windows）：classic/pre-classic 的游戏循环不检查
+ * isCloseRequested（v1 靠 JVM wrapper 的 windowClosing→exit 兜底，legacyfix AppletFrame 无此监听），
+ * 关窗后进程空转不退。deawt 模式下窗口属 LWJGL，关闭后进程 MainWindowHandle 归零——
+ * 轮询到归零即 SIGTERM，让"关窗=退出"与常规版本行为一致。
+ */
+function windowWatchdogScript(pid: number): string {
+  return [
+    `$seen=$false`,
+    `for(;;) {`,
+    `  $p=Get-Process -Id ${pid} -ErrorAction SilentlyContinue`,
+    `  if(-not $p){ 'EXITED'; break }`,
+    `  if(-not $seen -and $p.MainWindowHandle -ne 0){ $seen=$true }`,
+    `  if($seen -and $p.MainWindowHandle -eq 0){ 'CLOSED'; break }`,
+    `  Start-Sleep -Milliseconds 1000`,
+    `}`,
+  ].join('; ');
+}
+
 export class GameProcessManager {
   private child: ChildProcessByStdio<null, Readable, Readable> | null = null;
+  private watchdog: ChildProcess | null = null;
   private session: GameSession | null = null;
   private lastExit: GameExit | null = null;
   private lastError: string | null = null;
@@ -101,6 +123,9 @@ export class GameProcessManager {
     });
 
     child.on('close', (code, signal) => {
+      console.log(`[attic-runtime] game close pid=${pid} code=${code} signal=${signal}`);
+      this.watchdog?.kill();
+      this.watchdog = null;
       const crash = classifyCrash(this.outputTail, code);
       const exit: GameExit = { code, signal, crash };
       this.lastExit = exit;
@@ -113,7 +138,30 @@ export class GameProcessManager {
     });
 
     this.child = child;
+
+    if (process.platform === 'win32' && config.mainClass === APPLET_LAUNCHER_CLASS) {
+      this.startWindowWatchdog(child, pid);
+    }
     return this.session;
+  }
+
+  /** 看门狗进程输出 CLOSED（用户关窗且进程未自退）→ SIGTERM 游戏，走常规退出事件链。 */
+  private startWindowWatchdog(child: ChildProcessByStdio<null, Readable, Readable>, pid: number): void {
+    const ps = spawn('powershell', ['-NoProfile', '-Command', windowWatchdogScript(pid)], {
+      stdio: ['ignore', 'pipe', 'ignore'],
+      windowsHide: true,
+    });
+    this.watchdog = ps;
+    ps.stdout.setEncoding('utf8');
+    ps.stdout.on('data', (data: string) => {
+      if (!data.includes('CLOSED') || this.child !== child) return;
+      this.appendOutput('[attic-runtime] 游戏窗口已关闭，终止进程\n');
+      this.events.onOutput({ stream: 'stdout', chunk: '[attic-runtime] 游戏窗口已关闭，终止进程\n', pid });
+      child.kill('SIGTERM');
+    });
+    ps.on('close', () => {
+      if (this.watchdog === ps) this.watchdog = null;
+    });
   }
 
   /** SIGTERM 终止并等待退出；无进程时返回上次退出（或空退出）。 */

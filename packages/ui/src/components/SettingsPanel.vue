@@ -195,10 +195,26 @@ const themes: ThemeMode[] = ['dark', 'light', 'system'];
   display: flex;
   align-items: baseline;
 }
+/* 分区标题：fs-lg 加粗（java-report 内的微标签保留 uppercase tracking 形态） */
+.head .label,
+.block > .label,
+.block-head > .label {
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: 0;
+  text-transform: none;
+}
+/* Settings 分区 = base-card 统一配方 */
 .block {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--space-3);
+  padding: var(--space-5);
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
 }
 .block-head {
   display: flex;
@@ -212,28 +228,35 @@ const themes: ThemeMode[] = ['dark', 'light', 'system'];
 .grid--2 {
   grid-template-columns: 1fr 1fr;
 }
+/* 输入控件 inset 质感：第3级底 + 底缘内阴影 + 无边框，focus accent 投影环 */
 .input {
-  padding: var(--space-2) var(--space-3);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-3);
+  border: none;
+  border-radius: var(--radius-md);
   color: var(--text-primary);
-  transition: border-color var(--dur-fast) var(--ease-out);
+  box-shadow: var(--input-inset);
+  transition: background-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
 }
 .input:hover {
-  border-color: var(--border-strong);
+  background: var(--surface-4);
+}
+.input:focus-visible {
+  outline: none;
+  box-shadow: var(--input-focus-shadow);
 }
 .mini {
   padding: var(--space-1) var(--space-3);
   background: transparent;
   border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   font-size: var(--fs-sm);
   color: var(--text-primary);
+  box-shadow: var(--inset-bottom);
   transition: background var(--dur-fast) var(--ease-out);
 }
 .mini:hover:not(:disabled) {
-  background: var(--raised);
+  background: var(--surface-4);
 }
 .mini:disabled {
   opacity: 0.5;
@@ -254,14 +277,16 @@ const themes: ThemeMode[] = ['dark', 'light', 'system'];
 .muted {
   color: var(--text-muted);
 }
+/* 探测面板 = 卡片上的下沉井：第1级底 + 底缘内阴影 */
 .java-report {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  padding: var(--space-3);
-  background: var(--raised);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  padding: var(--space-4);
+  background: var(--surface-1);
+  border: none;
+  border-radius: var(--radius-md);
+  box-shadow: var(--input-inset);
 }
 .sub {
   display: flex;
@@ -305,25 +330,30 @@ const themes: ThemeMode[] = ['dark', 'light', 'system'];
 .tag--err {
   color: var(--danger);
 }
+/* 主题分段器：第1级下沉轨道 + 内衬圆角块，激活=第4级高亮 */
 .segmented {
   display: inline-flex;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  overflow: hidden;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  background: var(--surface-1);
+  border: none;
+  border-radius: var(--radius-md);
+  box-shadow: var(--input-inset);
   width: fit-content;
 }
 .seg {
   padding: var(--space-2) var(--space-4);
-  background: var(--surface);
+  background: transparent;
   border: none;
+  border-radius: var(--radius-sm);
   color: var(--text-secondary);
   transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
 }
 .seg:hover {
-  background: var(--raised);
+  background: var(--surface-3);
 }
 .seg--active {
-  background: var(--overlay);
+  background: var(--surface-4);
   color: var(--text-primary);
 }
 .foot {

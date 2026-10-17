@@ -94,6 +94,19 @@ export function assembleLaunchConfig(
   opts: AssembleOptions = {},
 ): LaunchConfig {
   const dataDir = context.dataDir;
+  // 主类缺失 = 数据缺口（launch-method 不在表且无显式 main-class），显式报错不静默兜底。
+  const mainClass = versionJson.mainClass;
+  if (!mainClass) {
+    throw new Error(
+      `无法确定主类：.info 无 main-class，launch-method "${versionJson.betacraft?.launchMethod ?? '(无)'}" 不在数据表中`,
+    );
+  }
+  // Applet 容器（pre-classic/classic）：legacyfix 实测铁律（c0.0.12a 窗口事故）——
+  // classpath 上有 launchwrapper 时 agent 走 LaunchWrapperInjector 提前 return，全部补丁
+  // （含 proxy/game-dir/classic-resize/deawt）被跳过且帧永不显示；容器不用 tweaker，剔除即恢复全量挂载。
+  // deawt 保持开启（实测窗口正常）：游戏走 LWJGL 窗口，关窗后进程 MainWindowHandle 归零，
+  // 壳侧窗口看门狗据此判定"用户关窗"并 kill（classic 循环不检查 isCloseRequested，进程不自退）。
+  const isAppletContainer = mainClass === APPLET_LAUNCHER_CLASS;
   const mounts = filterAgentMounts(
     versionJson.betacraft?.agentMount ?? [],
     versionJson.id,
@@ -117,16 +130,12 @@ export function assembleLaunchConfig(
   if (opts.extraJvmArgs) jvmArgs.push(...opts.extraJvmArgs);
 
   // ---------- classpath：版本 jar（平铺）+ bin 整池 ----------
-  const classpath = [`${dataDir}/versions/${versionJson.id}.jar`, ...context.binPool];
+  const binPool = isAppletContainer
+    ? context.binPool.filter((jar) => !/launchwrapper[^/\\]*\.jar$/i.test(jar))
+    : context.binPool;
+  const classpath = [`${dataDir}/versions/${versionJson.id}.jar`, ...binPool];
   // Applet 容器（<a1.0.6）：legacyfix jar 必须同时在 classpath 上才有 AppletLauncher 类。
-  // 主类缺失 = 数据缺口（launch-method 不在表且无显式 main-class），显式报错不静默兜底。
-  const mainClass = versionJson.mainClass;
-  if (!mainClass) {
-    throw new Error(
-      `无法确定主类：.info 无 main-class，launch-method "${versionJson.betacraft?.launchMethod ?? '(无)'}" 不在数据表中`,
-    );
-  }
-  if (mainClass === APPLET_LAUNCHER_CLASS) {
+  if (isAppletContainer) {
     for (const mount of mounts) {
       if (mount.form === 'javaagent') classpath.push(`${dataDir}/${mount.path}`);
     }

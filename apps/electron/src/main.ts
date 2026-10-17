@@ -32,6 +32,7 @@ function handle<I extends unknown[], T>(channel: string, fn: (...args: I) => T |
 function wireEvents(): void {
   for (const event of [IPC_EVENTS.GAME_OUTPUT, IPC_EVENTS.GAME_EXIT, IPC_EVENTS.DOWNLOAD_PROGRESS] as const) {
     runtime.on(event, (payload: AtticEventPayloads[typeof event]) => {
+      console.log(`[attic-main] broadcast ${event} → ${BrowserWindow.getAllWindows().length} window(s)`);
       for (const win of BrowserWindow.getAllWindows()) {
         win.webContents.send(event, payload);
       }
@@ -52,10 +53,22 @@ function createWindow(): void {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      // preload 需要 require('@attic/core-spec') 取通道常量；Electron 20+ 默认沙箱
+      // 只允许 require 少数内置模块，不禁用沙箱 preload 会静默失败（缺桥横幅的根因）。
+      sandbox: false,
     },
   });
 
-  win.once('ready-to-show', () => win.show());
+  // 诊断期（基建调试）：直接 show，不等 ready-to-show——页面 JS 异常/加载失败时
+  // ready-to-show 可能永不触发，导致"日志正常但窗口不出现"。视觉验收后此段可还原。
+  win.show();
+  win.webContents.on('did-fail-load', (_e, code, desc) => {
+    console.error(`[attic-main] did-fail-load ${code}: ${desc}`);
+  });
+  win.webContents.on('console-message', (_e, _level, msg, _line, src) => {
+    console.log(`[renderer] ${msg} (${src})`);
+  });
+  win.webContents.openDevTools({ mode: 'detach' });
 
   // 开发模式：--dev-url=<vite 地址> 或 ELECTRON_RENDERER_URL 环境变量；否则加载 ui 构建产物。
   const devArg = process.argv.find((a) => a.startsWith('--dev-url='));

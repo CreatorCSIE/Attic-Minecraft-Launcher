@@ -85,15 +85,16 @@ async function onPlay(): Promise<void> {
 </template>
 
 <style scoped>
+/* base-card 新配方：第3级 surface 底 + 第4级 surface 描边 + 大圆角 + 卡片内 padding 升档 */
 .panel {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  padding: var(--space-4);
-  background: var(--raised);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--card-highlight);
+  padding: var(--space-5);
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
 }
 .summary {
   display: flex;
@@ -120,7 +121,7 @@ async function onPlay(): Promise<void> {
 .meta-item {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-1);
   font-size: var(--fs-sm);
 }
 .ver {
@@ -129,7 +130,7 @@ async function onPlay(): Promise<void> {
 }
 .chip {
   --chip: var(--text-muted);
-  --chip-soft: var(--overlay);
+  --chip-soft: var(--surface-1);
   font-size: var(--fs-xs);
   letter-spacing: var(--tracking-label);
   text-transform: uppercase;
@@ -150,6 +151,7 @@ async function onPlay(): Promise<void> {
   align-items: center;
   gap: var(--space-3);
 }
+/* Play —— 质感配方样板：pill 大圆角 + 五层叠影 + 顶部内高光 + hover 抬升 + active 下压 + focus 投影环（token 定义见 tokens.css） */
 .play {
   display: inline-flex;
   align-items: center;
@@ -158,19 +160,34 @@ async function onPlay(): Promise<void> {
   background: var(--accent);
   color: var(--accent-ink);
   border: none;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-pill);
   font-weight: 600;
   font-size: var(--fs-md);
-  transition: transform var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+  box-shadow: var(--btn-primary-shadow);
+  transition:
+    transform var(--dur-fast) var(--ease-out),
+    background var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
 }
 .play:hover:not(:disabled) {
   background: var(--accent-hover);
+  transform: translateY(-1px);
+  box-shadow: var(--btn-primary-hover-shadow);
 }
 .play:active:not(:disabled) {
-  transform: scale(0.97);
+  background: var(--accent-press);
+  transform: translateY(0) scale(0.97);
+  box-shadow: var(--btn-primary-active-shadow);
+}
+/* 投影式 focus 环（替代全局描边式，Modrinth ring-4 手法）；置后保证 hover 下环不被覆盖 */
+.play:focus-visible {
+  outline: none;
+  box-shadow: var(--btn-primary-focus-shadow);
 }
 .play:disabled {
-  opacity: 0.45;
+  opacity: 0.5;
+  filter: grayscale(50%);
+  box-shadow: none;
   cursor: not-allowed;
 }
 .tri {
@@ -180,19 +197,24 @@ async function onPlay(): Promise<void> {
   border-top: 5px solid transparent;
   border-bottom: 5px solid transparent;
 }
+/* Stop —— 保持描边/幽灵样式（每屏唯一 accent 实心 = Play），仅补底缘内阴影厚度与 disabled 去影 */
 .stop {
   padding: var(--space-2) var(--space-4);
   background: transparent;
   border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   color: var(--text-primary);
-  transition: background var(--dur-fast) var(--ease-out);
+  box-shadow: var(--inset-bottom);
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
 }
 .stop:hover:not(:disabled) {
-  background: var(--overlay);
+  background: var(--surface-4);
 }
 .stop:disabled {
   opacity: 0.4;
+  box-shadow: none;
   cursor: not-allowed;
 }
 .status {

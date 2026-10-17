@@ -84,21 +84,30 @@ watch(
 </template>
 
 <style scoped>
+/* base-card 统一配方：第3级底 + 第4级 surface 描边 + radius-lg + 弱投影 + padding 升档 */
 .console {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-4);
   min-height: 0;
   height: 100%;
-  padding: var(--space-3);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  padding: var(--space-5);
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
 }
 .bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+.bar .label {
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: 0;
+  text-transform: none;
 }
 .bar-actions {
   display: flex;
@@ -122,16 +131,16 @@ watch(
   transition: background var(--dur-fast) var(--ease-out);
 }
 .mini:hover {
-  background: var(--raised);
+  background: var(--surface-4);
 }
 .crash {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-3) var(--space-4);
   background: var(--danger-soft);
   border: 1px solid var(--danger);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
 }
 .crash-cat {
   font-size: var(--fs-xs);
@@ -182,7 +191,7 @@ watch(
 }
 .dl-bar {
   height: 4px;
-  background: var(--overlay);
+  background: var(--surface-1);
   border-radius: var(--radius-sm);
   overflow: hidden;
 }
@@ -201,13 +210,15 @@ watch(
   font-size: var(--fs-xs);
   color: var(--danger);
 }
+/* 日志输出区 = 卡片上的下沉井：第1级底 + 底缘内阴影 */
 .out {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: var(--space-2);
-  background: var(--raised);
-  border-radius: var(--radius-sm);
+  padding: var(--space-3);
+  background: var(--surface-1);
+  border-radius: var(--radius-md);
+  box-shadow: var(--input-inset);
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
   line-height: 1.45;

@@ -4,7 +4,7 @@
  */
 
 import { ref } from 'vue';
-import type { GameStatus, LaunchConfig, LaunchRequest } from '@attic/core-spec';
+import { IPC_EVENTS, type GameStatus, type LaunchConfig, type LaunchRequest } from '@attic/core-spec';
 import { useBridge } from './useBridge';
 
 const status = ref<GameStatus>({ running: false, session: null, lastExit: null, lastError: null });
@@ -13,6 +13,17 @@ const lastError = ref<string | null>(null);
 const dryRun = ref<LaunchConfig | null>(null);
 
 const { bridge } = useBridge();
+
+// 游戏自然退出（关窗口）无人通知 → 状态卡 running。订阅 game:exit 刷新（模块级一次，对齐 useConsole）。
+let subscribed = false;
+function subscribeExit(): void {
+  if (subscribed) return;
+  subscribed = true;
+  bridge.on(IPC_EVENTS.GAME_EXIT, () => {
+    console.log('[attic-ui] game-exit received → refresh status');
+    void refresh();
+  });
+}
 
 async function refresh(): Promise<void> {
   const res = await bridge.status();
@@ -47,6 +58,7 @@ async function doDryRun(req: LaunchRequest): Promise<boolean> {
 }
 
 export function useGame() {
+  subscribeExit();
   void refresh();
   return { status, busy, lastError, dryRun, refresh, launch, kill, doDryRun };
 }
