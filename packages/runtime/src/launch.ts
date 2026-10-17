@@ -37,7 +37,12 @@ export interface AssembleOptions {
   onDiagnostic?: (message: string) => void;
 }
 
-const NON_PROXY_HOSTS = 'api.betacraft.uk|files.betacraft.uk|checkip.amazonaws.com';
+/**
+ * 非代理白名单：BC 代理（.info proxy-args 注入 -Dhttp.proxyHost=betacraft.uk:11707）只服务
+ * 老端点（skins.minecraft.net 等），对 textures.minecraft.net 返回 404（实测：直连 200、BC 代理 404）
+ * → 皮肤贴图主机必须直通，否则 MinecraftApi.fetchSkin 抛 FileNotFoundException、皮肤缺失。
+ */
+const NON_PROXY_HOSTS = 'api.betacraft.uk|files.betacraft.uk|checkip.amazonaws.com|textures.minecraft.net';
 
 /** Applet 容器主类（legacyfix）：需要把 javaagent 形态的 jar 本体也送上 classpath。 */
 export const APPLET_LAUNCHER_CLASS = 'uk.betacraft.legacyfix.applet.AppletLauncher';

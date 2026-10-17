@@ -64,7 +64,7 @@
     "jvmArgs": [
       "-Xmx2048m",
       "-Djava.util.Arrays.useLegacyMergeSort=true",
-      "-Dhttp.nonProxyHosts=api.betacraft.uk|files.betacraft.uk|checkip.amazonaws.com",
+      "-Dhttp.nonProxyHosts=api.betacraft.uk|files.betacraft.uk|checkip.amazonaws.com|textures.minecraft.net",
       "-Dorg.lwjgl.librarypath=/data/bin/natives",
       "-Dnet.java.games.input.librarypath=/data/bin/natives",
       "-Dhttp.proxyHost=betacraft.uk",
