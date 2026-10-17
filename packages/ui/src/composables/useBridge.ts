@@ -52,6 +52,7 @@ const mockBridge: RendererBridge = {
   setSettings: async (s) => ok(s),
   listInstances: async () => ok([]),
   saveInstance: async (i) => ok(i),
+  windowControl: async () => ok<void>(undefined), // 浏览器无窗可控：no-op
   on: () => () => {},
 };
 

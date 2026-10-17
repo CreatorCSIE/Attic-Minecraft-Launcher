@@ -3,7 +3,7 @@
  */
 export const zhCN: Record<string, unknown> = {
   app: {
-    title: 'Attic 启动器',
+    title: 'Attic Minecraft Launcher',
     tagline: '落灰，但都还活着。',
   },
   nav: {
@@ -11,6 +11,11 @@ export const zhCN: Record<string, unknown> = {
     launch: '启动',
     instances: '实例',
     settings: '设置',
+  },
+  window: {
+    minimize: '最小化',
+    maximize: '最大化 / 还原',
+    close: '关闭',
   },
   bridge: {
     missing: '未检测到 IPC 桥——当前为浏览器直开模式，数据为模拟值，无法启动游戏。',

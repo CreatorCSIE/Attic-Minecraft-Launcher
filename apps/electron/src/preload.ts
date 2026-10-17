@@ -27,6 +27,7 @@ const bridge: RendererBridge = {
   setSettings: (settings) => invoke(IPC_CHANNELS.SETTINGS_SET, settings),
   listInstances: () => invoke(IPC_CHANNELS.INSTANCES_LIST),
   saveInstance: (instance) => invoke(IPC_CHANNELS.INSTANCES_SAVE, instance),
+  windowControl: (action) => invoke(IPC_CHANNELS.WINDOW_CONTROL, action),
   on: <E extends keyof AtticEventPayloads>(event: E, cb: (payload: AtticEventPayloads[E]) => void) => {
     const handler = (_: unknown, payload: AtticEventPayloads[E]): void => {
       if (event === IPC_EVENTS.GAME_EXIT) console.log(`[attic-preload] recv ${event}`);

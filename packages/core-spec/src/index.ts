@@ -16,6 +16,7 @@ export type {
   IpcResult,
   LaunchRequest,
   RendererBridge,
+  WindowAction,
 } from './ipc';
 export type {
   AgentMount,

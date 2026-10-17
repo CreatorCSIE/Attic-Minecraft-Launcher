@@ -90,6 +90,7 @@ Applet 容器（主类 `AppletLauncher`）的 `gameArgs` 末尾追加 `--width <
 | `attic:settings:set` | `AppSettings` | `IpcResult<AppSettings>`（保存后的视图） |
 | `attic:instances:list` | — | `IpcResult<InstanceView[]>` |
 | `attic:instances:save` | `InstanceView` | `IpcResult<InstanceView>` |
+| `attic:window:control` | `WindowAction`（`minimize` \| `toggle-maximize` \| `close`） | `IpcResult<void>`（无边距窗顶栏三键；`toggle-maximize` 由宿主在最大化/还原间切换） |
 
 统一 `IpcResult<T>` 封装：错误以 `{ ok:false, error }` 返回，不跨进程抛异常。未实现通道返回 `error: 'not-implemented'`（Phase 1 桥面占位即此值）。
 

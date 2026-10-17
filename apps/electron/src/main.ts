@@ -8,11 +8,15 @@ import {
   type InstanceView,
   type IpcResult,
   type LaunchRequest,
+  type WindowAction,
 } from '@attic/core-spec';
 import { AtticRuntime } from '@attic/runtime';
 
 /** TS 启动器核心门面（Phase 2）：主进程唯一实例。 */
 const runtime = new AtticRuntime();
+
+/** 无边距主窗引用（WINDOW_CONTROL 通道操作目标）。 */
+let mainWindow: BrowserWindow | null = null;
 
 /**
  * 通道注册器：IpcResult 封装归壳层（runtime 以异常抛出）。
@@ -58,6 +62,10 @@ function createWindow(): void {
       sandbox: false,
     },
   });
+  mainWindow = win;
+  win.on('closed', () => {
+    mainWindow = null;
+  });
 
   // 诊断期（基建调试）：直接 show，不等 ready-to-show——页面 JS 异常/加载失败时
   // ready-to-show 可能永不触发，导致"日志正常但窗口不出现"。视觉验收后此段可还原。
@@ -96,6 +104,15 @@ app.whenReady().then(() => {
   handle(IPC_CHANNELS.SETTINGS_SET, (settings: AppSettings) => runtime.setSettings(settings));
   handle(IPC_CHANNELS.INSTANCES_LIST, () => runtime.listInstances());
   handle(IPC_CHANNELS.INSTANCES_SAVE, (instance: InstanceView) => runtime.saveInstance(instance));
+  // 窗控制：动作合法性由契约类型保证；toggle-maximize 在最大化/还原间切换。
+  handle<WindowAction[], void>(IPC_CHANNELS.WINDOW_CONTROL, (action) => {
+    const win = mainWindow;
+    if (!win) return;
+    if (action === 'minimize') win.minimize();
+    else if (action === 'close') win.close();
+    else if (win.isMaximized()) win.unmaximize();
+    else win.maximize();
+  });
 
   wireEvents();
   createWindow();

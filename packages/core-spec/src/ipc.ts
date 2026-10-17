@@ -40,7 +40,12 @@ export const IPC_CHANNELS = {
   INSTANCES_LIST: 'attic:instances:list',
   /** 保存实例（新建/覆盖，返回保存后的视图）。 */
   INSTANCES_SAVE: 'attic:instances:save',
+  /** 无边距窗控制（顶栏三键；动作见 WindowAction）。 */
+  WINDOW_CONTROL: 'attic:window:control',
 } as const;
+
+/** 窗口控制动作：toggle-maximize 由宿主在最大化/还原间切换。 */
+export type WindowAction = 'minimize' | 'toggle-maximize' | 'close';
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];
 
@@ -133,6 +138,7 @@ export interface RendererBridge {
   setSettings(settings: AppSettings): Promise<IpcResult<AppSettings>>;
   listInstances(): Promise<IpcResult<InstanceView[]>>;
   saveInstance(instance: InstanceView): Promise<IpcResult<InstanceView>>;
+  windowControl(action: WindowAction): Promise<IpcResult<void>>;
   /** 订阅事件，返回退订函数。 */
   on<E extends keyof AtticEventPayloads>(event: E, cb: (payload: AtticEventPayloads[E]) => void): () => void;
 }

@@ -3,7 +3,7 @@
  */
 export const en = {
   app: {
-    title: 'Attic Launcher',
+    title: 'Attic Minecraft Launcher',
     tagline: 'Dusty, but still alive.',
   },
   nav: {
@@ -11,6 +11,11 @@ export const en = {
     launch: 'Launch',
     instances: 'Instances',
     settings: 'Settings',
+  },
+  window: {
+    minimize: 'Minimize',
+    maximize: 'Maximize / Restore',
+    close: 'Close',
   },
   bridge: {
     missing: 'No IPC bridge — running in a plain browser. Data is mocked; launch is unavailable.',
