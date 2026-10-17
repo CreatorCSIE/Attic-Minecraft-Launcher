@@ -88,6 +88,18 @@
 
 > v0 决策：零新依赖——不引入 Tailwind/shadcn/vue-router/路由库/i18n 库；纯 CSS token + 响应式 view 切视图 + 手写 i18n；缺桥降级（`window.attic` 不存在时 useBridge 返回 mock，UI 走空状态不崩）。闸门 `pnpm -r typecheck/build/test` 三绿；浏览器验证缺桥降级三视图 + 主题切换通过、控制台无报错。
 
+> **UI 迭代候选（BlockHelm 参考，已逐字核对源码，暂缓不落实）**：
+> - **版本列表可伸缩侧栏 + 图钉**：BlockHelm 把游戏列表做成浮于主页的覆盖面板（`HomeLaunchGameListView`，Panel.ZIndex=4），折叠用附加行为 `AnimatedCollapse`（高度+外边距+透明度组合动画，Behaviors/Animation/AnimatedCollapse.cs L120-139）；图钉语义 = `IsLaunchMenuPinned`（ToggleButton+VM 命令，pin 图标 ForceFill 绑状态）——**钉住=常驻展开且主内容让位（FallbackPinnedContentGap=24），未钉=失焦自动收起**。对应到 Attic：LaunchView 版本列表改可折叠侧栏，折叠动画走既有 200ms 动效律（grid-template-rows/max-height + opacity），pin 态持久化进 AppSettings。
+> - **主页简洁化**：hero 背景 + 启动面板 + 浮层游戏列表的三段式（HomePageView.xaml L25-36），可作为 LaunchView 布局演进方向。
+> - **强调色（accent）面板（BlockHelm 主题体系已深挖核对）**：选项全集=主题 Dark/Light+跟随系统开关（Attic 已有三态即时切换）、**8 个强调色** Blue/Cyan/Green/Emerald/Purple/Pink/Orange/Amber（ThemeSettingsViewModel.cs L43-64）、背景效果 None/Acrylic/Image+不透明度+模糊开关（**Acrylic/模糊排除**，违反保守 CSS 基线）。**Image 背景已定案（用户决策：内置默认+保留外置替换）**：内置一张品牌背景（自有资产入 `packages/ui`，随打包分发）；AppSettings 增 `backgroundImage?` 绝对路径——空=内置默认，设置页可浏览选择/清除回落；叠加一档固定暗色遮罩保证可读性（不照抄其 OpacityPercent 全量旋钮）；与主页 hero 三段式候选同题，落实时合并设计。核心可迁配方=**正交分层**：ThemeResourceLayerManager 用"基础主题层 Dark/Light + Accents/{color}.xaml 覆盖层"两独立层解 8×2 组合（非 16 套全组合，ThemeResourceLayerManager.cs L49-81）——对应 CSS 即 `[data-theme]` 与 `[data-accent]` 属性选择器块各管一组变量，accent 层只覆写 `--accent/--accent-hover/--accent-ink` 三变量；持久化对齐其字段名（Theme/AccentColor/ThemeFollowSystem，LauncherSettings.cs L28-40），AppSettings 增 `accentColor` 即契约小改（无新通道）。跟随系统其机理=注册表 `AppsUseLightTheme`+UserPreferenceChanged 事件（ThemeService.cs L191-244），Electron 侧对应 `nativeTheme.on('updated')`（已具备）。
+> - **账号页（BlockHelm 账号界面配方，已核对源码；微软登录与 3D 皮肤预览明确不做）**：骨架=左账户卡片列表 + 右详情区（SecondaryMenuFrame 范式，AccountPageView.xaml L28-53）；列表项=皮肤头像（SkinFrontPreviewControl 正面渲染，离线账户回落默认 Steve）+ 显示名 + 类型徽章（离线）+ 详情/编辑/删除；底部"+ 添加账户"仅弹离线账户对话框（用户名校验照 AccountNameValidator 的 MC 规则 3-16 字符）；删除走确认对话框（DeleteAccountDialog 范式）。**前置是契约扩展而非纯 UI**：现 AppSettings 仅单一离线 username，多账户需新增 AccountView 类型 + accounts 通道（list/add/remove/select）+ 持久化（账号档案 properties/JSON）+ LaunchRequest 携带所选账户——落实时按戒律四处同步（ipc.ts/contract.md/双壳/UI）。
+> - **全局设置升级 + 实例继承开关（BlockHelm Global Settings 参考，设计已定案待落实）**：现有设置页升级为完整全局参数组（内存/GC/并行度/额外 JVM 参数 + 全局默认窗口尺寸 + 全局默认 Java + 多账号默认项）。冲突解法=**组级继承**：实例增 `inheritsGlobal` 布尔（UI 为"实例独立设置"复选框，默认勾选=跟随全局）；未开独立则实例的 launchArgs/width/height/javaPath **整组不生效**（替换现有字段级回落），开则整组生效。注意：v1 实例永远全独立（全局仅作建档默认），此开关是超越 v1 的可用性增强，落实前需用户确认；属契约级改动——buildContext 覆盖序从字段级改组级，contract.md §2.6 组序重写，四处同步 + 测试。
+> - **关于页 + 语言（必落实，BlockHelm/MCDArchive 双源核对）**：
+>   - 关于页结构取 MCDArchive（项目名/版本标识/版权/GPL-3.0/主页/反馈链接，MainWindow.axaml L154-220）+ 环境信息取 MCANextGen 前身模式（构建注入 `__HOST_VERSION__` + `HOST_GET_INFO` 返回 hostVersion/platform/arch/Electron/Node/Chrome）；检查更新按钮取 BlockHelm（InfoSettingsView.xaml L50-68 + `CheckForUpdatesAsync(版本, 更新频道)`，即 Phase 5 既定的 GitHub Releases 轮询，可前置到本页先做"检测+提示"，下载自更新留 Phase 5）。契约需新增 HOST_INFO / CHECK_UPDATE 通道（四处同步）。
+>   - 语言：Attic i18n 骨架已具备（zh-CN/en 深合并 + localStorage + 即时生效），**只差设置页语言下拉**；扩展路线采 MCDArchive 的 `lang/*.json` 外置自动发现（扫目录读 `_LanguageName` 构造选项，缺失回落内置 en）而非 BlockHelm 的编译期 resx+重启生效（MCDArchive 即时切换体验优于重启提示）；社区翻译即"丢一个 JSON 进 lang/"。
+> - **设置页其它候选控件**（BlockHelm 分组 General/Download/Language/LaunchMemory/Java/Theme/Info/Feedback 中筛）：主题页"跟随系统开关+强调色下拉"（ThemeSettingsView.xaml L38-73，与 token 体系契合，并入 accent 色候选）；打开/导出日志、重置窗口大小类小控件（低成本高价值）；快捷键页（全局热键）与下载通道页暂缓——前者非 v1 语义、后者端点设置已有。
+> - **不适用项**（明示排除）：BackdropBlur 刷新协调器违反保守 CSS 基线（风险 #4 规避无降级 backdrop-filter）；SkinCarousel3DControl（3D 皮肤轮播）依赖 WebGL，进 Phase 6 愿望池；游戏分辨率/全屏/缩放（a1.0.4+ 主类自管，Applet 容器无此能力）；模组/存档/服务器管理等页面（非目标清单）。
+
 ## 5. Phase 4 — Tauri 壳（Rust core 第二实现）
 
 - [ ] `src-tauri`：core-spec 的 Rust 类型生成/手写对齐
@@ -126,4 +138,5 @@
 
 - `reference/betacraft-launcher`（v1，Java/Swing；分支 `v2` = C++/Qt 停更重写——其 commit 历史是 API 集成坑的免费地图：token 刷新、version json 重下策略、Linux 声音/工作目录、assets 位置）
 - `reference/legacyfix`（v3，javaagent/coremod/mod 三形态；补丁清单即 quirk 矩阵）
-- 外部：MCANextGen（../MCANextGen，已归档——java-discovery/能力探测/JVM 参数组/嵌入反面教材）；FCL、Quanta-Craft-Launcher（Android JVM 管线参考）
+- `reference/BlockHelm-Launcher`（WPF/.NET，GPL-3.0；UI 参考——可伸缩+图钉版本列表、三段式主页、AnimatedCollapse 折叠配方；候选项见 §4 钉住注记）
+- 外部：MCANextGen（../MCANextGen，已归档——java-discovery/能力探测/JVM 参数组/嵌入反面教材）；MCDArchive（E:\4k\MCDArchive，Avalonia/.NET——lang/*.json 外置语言自动发现+即时切换、关于页结构，见 §4 必落实注记）；FCL、Quanta-Craft-Launcher（Android JVM 管线参考）
