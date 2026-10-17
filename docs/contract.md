@@ -63,6 +63,8 @@ Applet 容器（主类 `AppletLauncher`）的 `gameArgs` 末尾追加 `--width <
 
 `CrashCategory`（v0 分类器枚举）：`none/java-missing/out-of-memory/gl-init/lwjgl-native/unsatisfied-link/unknown`。
 
+`LaunchRequest.testLaunch`（≡ 菜单"测试启动"）：宿主在 `attic:launch` 成功后把启动前后日志逐行落盘 `<root>/launcher/logs/test-launch-<ISO>.log`（启动器侧头行：时间戳/版本/java/gameDir/完整命令行；随后游戏 stdout/stderr 全量；进程退出追加退出行并退订）。日志落盘归 runtime（不触窗）；独立控制台窗由 UI 侧随后调用 `attic:window:console` 唤起。普通启动不写此文件。
+
 ### 2.7 AppSettings / InstanceView（[settings.ts](../packages/core-spec/src/settings.ts)，Phase 3）
 
 渲染侧只通过契约读写设置/实例，绝不直接碰 `launcher.settings` / `instances/*.txt`（戒律 #1：设置是数据）。
@@ -86,11 +88,14 @@ Applet 容器（主类 `AppletLauncher`）的 `gameArgs` 末尾追加 `--width <
 | `attic:status` | — | `IpcResult<GameStatus>` |
 | `attic:java:detect` | — | `IpcResult<JavaDetectionReport>` |
 | `attic:accounts:list` | — | `IpcResult<AccountView[]>` |
+| `attic:accounts:add` | `name: string` | `IpcResult<AccountView>`（离线账户；MC 规则 3-16 位字母/数字/下划线校验，同名幂等返回既有。微软账户无此通道=占位） |
+| `attic:accounts:remove` | `id: string` | `IpcResult<void>`（移除至空时 `listAccounts` 回落默认离线 Player） |
 | `attic:settings:get` | — | `IpcResult<AppSettings>` |
 | `attic:settings:set` | `AppSettings` | `IpcResult<AppSettings>`（保存后的视图） |
 | `attic:instances:list` | — | `IpcResult<InstanceView[]>` |
 | `attic:instances:save` | `InstanceView` | `IpcResult<InstanceView>` |
 | `attic:window:control` | `WindowAction`（`minimize` \| `toggle-maximize` \| `close`） | `IpcResult<void>`（无边距窗顶栏三键；`toggle-maximize` 由宿主在最大化/还原间切换） |
+| `attic:window:console` | — | `IpcResult<void>`（打开/聚焦独立控制台窗口；v1 语义：MC 日志独立窗，与主页解耦。已存在则聚焦复用） |
 
 统一 `IpcResult<T>` 封装：错误以 `{ ok:false, error }` 返回，不跨进程抛异常。未实现通道返回 `error: 'not-implemented'`（Phase 1 桥面占位即此值）。
 

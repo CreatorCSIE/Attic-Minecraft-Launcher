@@ -31,8 +31,9 @@
   --radius-lg: 16px;
   --radius-pill: 999px;
 
-  /* —— 布局（§3 栏宽公式 / 左侧窄导航范式） —— */
+  /* —— 布局（§3 栏宽公式 / 左侧导航范式：图标+文字侧栏，BlockHelm 式） —— */
   --rail-width: 60px;
+  --sidebar-width: 220px;
   --rail-item-size: 40px;
   --rail-icon-size: 20px;
   --content-max: 1280px;
@@ -44,7 +45,10 @@
   /* —— 动效：200ms 律 —— */
   --dur-fast: 120ms;
   --dur-base: 200ms;
+  --dur-slow: 320ms;
+  --dur-grow: 380ms; /* 版本面板生长 = BlockHelm HomeLaunchMenuAnimationDurationMilliseconds（源码实测值） */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-grow: cubic-bezier(0.25, 0.95, 0.4, 1); /* ≈ BlockHelm PowerEase(Power 3.2, EaseOut)：起步快、长减速尾 */
   --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
 
   /* —— 微文案标签字距 —— */
@@ -149,6 +153,7 @@
   /* —— 年代色码 chip（内容区装饰，自绘；soft 供低饱和底色，规避 color-mix 基线风险 #4） —— */
   --era-pre-classic: #8a8272;
   --era-classic: #6e9463;
+  --era-4k: #4a8a7b;
   --era-indev: #5b8a9a;
   --era-infdev: #7b6fa0;
   --era-alpha: #b07a4a;
@@ -157,6 +162,7 @@
 
   --era-pre-classic-soft: rgba(138, 130, 114, 0.16);
   --era-classic-soft: rgba(110, 148, 99, 0.16);
+  --era-4k-soft: rgba(74, 138, 123, 0.16);
   --era-indev-soft: rgba(91, 138, 154, 0.16);
   --era-infdev-soft: rgba(123, 111, 160, 0.16);
   --era-alpha-soft: rgba(176, 122, 74, 0.16);
@@ -243,6 +249,7 @@
 
   --era-pre-classic: #6e6858;
   --era-classic: #4f7245;
+  --era-4k: #3a6e60;
   --era-indev: #3f6c7c;
   --era-infdev: #5d5188;
   --era-alpha: #8a5a2e;
@@ -251,6 +258,7 @@
 
   --era-pre-classic-soft: rgba(110, 104, 88, 0.14);
   --era-classic-soft: rgba(79, 114, 69, 0.14);
+  --era-4k-soft: rgba(58, 110, 96, 0.14);
   --era-indev-soft: rgba(63, 108, 124, 0.14);
   --era-infdev-soft: rgba(93, 81, 136, 0.14);
   --era-alpha-soft: rgba(138, 90, 46, 0.14);

@@ -1,25 +1,52 @@
 <script setup lang="ts">
 /**
- * 应用壳 —— 顶栏 + 缺桥横幅 + 左侧窄导航 rail + 主体（ui-design.md §3 布局范式）。
- * 启动视图三栏（rail | 版本列表 | 启动/控制台堆叠），实例/设置为 rail + 居中内容区。
+ * 应用壳 —— 顶栏 + 缺桥横幅 + 左侧图标+文字侧栏 + 主体（ui-design.md §3 布局范式）。
+ * 侧栏最上端 = BrandWordmark（≡ + 完整名称双行）；底部保留作者头像。
+ * 启动视图：主区左上 = AccountHero（皮肤头+用户名+欢迎语）；版本列表 | 启动面板（Play 右下）。
+ * 控制台解耦（v1 语义）：主页不再内嵌 ConsolePanel；?window=console 的独立窗只渲染顶栏+全屏控制台。
  * view 切换仍是 ref 状态，零 vue-router；图标为内联 lucide 路径（MIT），零新依赖。
  */
 import { onMounted, ref } from 'vue';
 import { useI18n } from './i18n';
 import { useBridge } from './composables/useBridge';
 import TitleBar from './components/TitleBar.vue';
+import BrandWordmark from './components/BrandWordmark.vue';
+import AccountHero from './components/AccountHero.vue';
 import VersionSelector from './components/VersionSelector.vue';
 import LaunchPanel from './components/LaunchPanel.vue';
 import ConsolePanel from './components/ConsolePanel.vue';
 import InstanceList from './components/InstanceList.vue';
+import AccountsPanel from './components/AccountsPanel.vue';
 import SettingsPanel from './components/SettingsPanel.vue';
 
-type View = 'launch' | 'instances' | 'settings';
+/** 独立控制台窗模式：主进程以 ?window=console 加载同一 UI，只渲染控制台。 */
+const isConsoleWindow =
+  typeof window !== 'undefined' &&
+  new URLSearchParams(window.location.search).get('window') === 'console';
+
+type View = 'launch' | 'instances' | 'accounts' | 'settings';
 const view = ref<View>('launch');
 const { t } = useI18n();
 const { hasBridge } = useBridge();
 
-// —— rail 底部作者头像：在线取 GitHub 头像，localStorage 缓存（TTL 7 天），失败回落旧缓存/占位 ——
+// —— 侧栏折叠：≡ 切换 图标+文字 ↔ 窄图标 rail，偏好持久化 ——
+const SIDEBAR_KEY = 'attic:sidebar-collapsed:v1';
+const sidebarCollapsed = ref(false);
+try {
+  sidebarCollapsed.value = localStorage.getItem(SIDEBAR_KEY) === '1';
+} catch {
+  /* 隐私模式：默认展开 */
+}
+function toggleSidebar(): void {
+  sidebarCollapsed.value = !sidebarCollapsed.value;
+  try {
+    localStorage.setItem(SIDEBAR_KEY, sidebarCollapsed.value ? '1' : '0');
+  } catch {
+    /* 隐私模式 */
+  }
+}
+
+// —— 侧栏底部作者头像：在线取 GitHub 头像，localStorage 缓存（TTL 7 天），失败回落旧缓存/占位 ——
 const CREATOR_GITHUB = 'CreatorCSIE';
 const AVATAR_CACHE_KEY = 'attic:creator-avatar:v1';
 const AVATAR_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -66,33 +93,38 @@ async function loadCreatorAvatar(): Promise<void> {
 }
 
 onMounted(() => {
-  void loadCreatorAvatar();
+  if (!isConsoleWindow) void loadCreatorAvatar();
 });
 </script>
 
 <template>
-  <div class="app">
+  <!-- 独立控制台窗：顶栏 + 全屏控制台，与主页完全解耦（v1 语义） -->
+  <div v-if="isConsoleWindow" class="app console-app">
+    <TitleBar />
+    <div class="console-full"><ConsolePanel /></div>
+  </div>
+
+  <div v-else class="app">
     <TitleBar />
 
     <!-- Tailwind 试点：py-2/px-4/text-sm 经 tailwind.config.ts 映射到 var(--space-2)/var(--space-4)/var(--fs-sm) -->
     <div v-if="!hasBridge" class="banner py-2 px-4 text-sm">{{ t('bridge.missing') }}</div>
 
     <div class="shell">
-      <nav class="rail" :aria-label="t('nav.menu')">
+      <nav class="sidebar" :class="{ 'sidebar--collapsed': sidebarCollapsed }" :aria-label="t('nav.menu')">
+        <BrandWordmark :collapsed="sidebarCollapsed" @toggle="toggleSidebar" />
+
         <button
-          class="rail-item"
-          :class="{ 'rail-item--active': view === 'launch' }"
+          class="nav-item"
+          :class="{ 'nav-item--active': view === 'launch' }"
           :aria-current="view === 'launch' ? 'page' : undefined"
           :title="t('nav.launch')"
-          :aria-label="t('nav.launch')"
           @click="view = 'launch'"
         >
           <!-- lucide: rocket -->
           <svg
-            class="rail-icon"
+            class="nav-icon"
             viewBox="0 0 24 24"
-            width="24"
-            height="24"
             fill="none"
             stroke="currentColor"
             stroke-width="2"
@@ -105,22 +137,20 @@ onMounted(() => {
             <path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0" />
             <path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5" />
           </svg>
+          <span class="nav-label">{{ t('nav.launch') }}</span>
         </button>
 
         <button
-          class="rail-item"
-          :class="{ 'rail-item--active': view === 'instances' }"
+          class="nav-item"
+          :class="{ 'nav-item--active': view === 'instances' }"
           :aria-current="view === 'instances' ? 'page' : undefined"
           :title="t('nav.instances')"
-          :aria-label="t('nav.instances')"
           @click="view = 'instances'"
         >
           <!-- lucide: archive -->
           <svg
-            class="rail-icon"
+            class="nav-icon"
             viewBox="0 0 24 24"
-            width="24"
-            height="24"
             fill="none"
             stroke="currentColor"
             stroke-width="2"
@@ -132,22 +162,44 @@ onMounted(() => {
             <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" />
             <path d="M10 12h4" />
           </svg>
+          <span class="nav-label">{{ t('nav.instances') }}</span>
         </button>
 
         <button
-          class="rail-item"
-          :class="{ 'rail-item--active': view === 'settings' }"
+          class="nav-item"
+          :class="{ 'nav-item--active': view === 'accounts' }"
+          :aria-current="view === 'accounts' ? 'page' : undefined"
+          :title="t('nav.accounts')"
+          @click="view = 'accounts'"
+        >
+          <!-- lucide: user -->
+          <svg
+            class="nav-icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+            <circle cx="12" cy="7" r="4" />
+          </svg>
+          <span class="nav-label">{{ t('nav.accounts') }}</span>
+        </button>
+
+        <button
+          class="nav-item"
+          :class="{ 'nav-item--active': view === 'settings' }"
           :aria-current="view === 'settings' ? 'page' : undefined"
           :title="t('nav.settings')"
-          :aria-label="t('nav.settings')"
           @click="view = 'settings'"
         >
           <!-- lucide: settings -->
           <svg
-            class="rail-icon"
+            class="nav-icon"
             viewBox="0 0 24 24"
-            width="24"
-            height="24"
             fill="none"
             stroke="currentColor"
             stroke-width="2"
@@ -160,31 +212,32 @@ onMounted(() => {
             />
             <circle cx="12" cy="12" r="3" />
           </svg>
+          <span class="nav-label">{{ t('nav.settings') }}</span>
         </button>
 
-        <!-- rail 底部作者头像（GitHub 在线获取 + 本地缓存；未就绪时保留圆形占位） -->
-        <div class="rail-foot">
+        <!-- 侧栏底部作者头像（GitHub 在线获取 + 本地缓存；未就绪时保留圆形占位） -->
+        <div class="sidebar-foot">
           <img
             v-if="avatarSrc"
-            class="rail-avatar"
+            class="sidebar-avatar"
             :src="avatarSrc"
             :alt="`GitHub: ${CREATOR_GITHUB}`"
             :title="`GitHub: ${CREATOR_GITHUB}`"
           />
-          <span v-else class="rail-avatar" aria-hidden="true"></span>
+          <span v-else class="sidebar-avatar" aria-hidden="true"></span>
         </div>
       </nav>
 
       <main class="body">
-        <div v-if="view === 'launch'" class="launch-grid">
-          <aside class="left"><VersionSelector /></aside>
-          <div class="right">
-            <LaunchPanel />
-            <div class="console-wrap"><ConsolePanel /></div>
-          </div>
+        <!-- 启动舞台：AccountHero 左上、LaunchPanel 铺满、版本列表面板浮动左下（BlockHelm 式 dock） -->
+        <div v-if="view === 'launch'" class="launch-stage">
+          <AccountHero class="stage-hero" @open-accounts="view = 'accounts'" />
+          <div class="stage-main"><LaunchPanel @open-instances="view = 'instances'" /></div>
+          <div class="stage-dock"><VersionSelector /></div>
         </div>
         <div v-else class="content">
           <InstanceList v-if="view === 'instances'" />
+          <AccountsPanel v-else-if="view === 'accounts'" />
           <SettingsPanel v-else />
         </div>
       </main>
@@ -212,57 +265,80 @@ onMounted(() => {
   flex: 1;
   min-height: 0;
 }
-/* —— 左侧窄导航（§3 范式；Modrinth 式质感：rail 底=第2级，激活态=overlay 底圆角药丸高亮块包住图标，无竖条，§2） —— */
-.rail {
-  flex: 0 0 var(--rail-width);
+/* —— 左侧图标+文字侧栏（BlockHelm 式：字标置顶、导航行全宽、激活态 overlay 底圆角高亮、作者头像沉底） —— */
+.sidebar {
+  flex: 0 0 var(--sidebar-width);
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-4) 0;
+  gap: var(--space-1);
+  padding: var(--space-4) var(--space-3);
   background: var(--surface-2);
   border-right: 1px solid var(--border);
   -webkit-app-region: no-drag;
+  transition:
+    flex-basis var(--dur-base) var(--ease-out),
+    padding var(--dur-base) var(--ease-out);
 }
-.rail-item {
-  width: var(--rail-item-size);
-  height: var(--rail-item-size);
-  display: inline-flex;
-  align-items: center;
+/* 折叠态：收窄为图标 rail（--rail-width），隐藏文字，图标居中 */
+.sidebar--collapsed {
+  flex-basis: var(--rail-width);
+  padding-inline: var(--space-2);
+}
+.sidebar--collapsed .nav-label {
+  display: none;
+}
+.sidebar--collapsed .nav-item {
   justify-content: center;
-  padding: 0;
+  padding-inline: 0;
+}
+.sidebar--collapsed .sidebar-foot {
+  justify-content: center;
+  padding-inline: 0;
+}
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
   background: transparent;
   border: none;
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-md);
   color: var(--text-secondary);
+  font-size: var(--fs-md);
+  text-align: left;
+  cursor: pointer;
   transition:
     background-color var(--dur-fast) var(--ease-out),
     box-shadow var(--dur-fast) var(--ease-out),
     color var(--dur-fast) var(--ease-out);
 }
-.rail-item:hover:not(:disabled) {
+.nav-item:hover:not(:disabled) {
   background-color: var(--surface-3);
 }
-.rail-item--active {
+.nav-item--active {
   background-color: var(--surface-3);
   box-shadow: inset 0 0 0 1px var(--surface-4);
   color: var(--text-primary);
 }
-.rail-item:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-.rail-icon {
+.nav-icon {
+  flex: 0 0 var(--rail-icon-size);
   width: var(--rail-icon-size);
   height: var(--rail-icon-size);
 }
-.rail-foot {
+.nav-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sidebar-foot {
   margin-top: auto;
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
 }
-.rail-avatar {
+.sidebar-avatar {
   width: var(--rail-item-size);
   height: var(--rail-item-size);
   border-radius: var(--radius-pill);
@@ -278,7 +354,7 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
 }
-/* —— 实例/设置内容区：max-width 居中（§3 栏宽公式） —— */
+/* —— 实例/设置/账户内容区：max-width 居中（§3 栏宽公式） —— */
 .content {
   flex: 1;
   min-height: 0;
@@ -288,26 +364,41 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
 }
-/* —— 间距节奏升档（Modrinth 留白范式）：页面外边距 --space-5，卡片间 gap --space-4 —— */
-.launch-grid {
-  display: grid;
-  grid-template-columns: minmax(280px, 360px) 1fr;
-  gap: var(--space-4);
-  height: 100%;
-  padding: var(--space-5);
-}
-.left {
-  min-height: 0;
-  overflow: hidden;
-}
-.right {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  min-height: 0;
-}
-.console-wrap {
+/* —— 启动舞台：hero 左上角标式浮层，启动面板铺满，版本列表面板锚定左下 —— */
+.launch-stage {
+  position: relative;
   flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-5);
+}
+.stage-hero {
+  position: absolute;
+  top: var(--space-5);
+  left: var(--space-5);
+  z-index: 5;
+}
+.stage-main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding-top: 96px; /* 给左上 AccountHero 让位 */
+}
+.stage-dock {
+  position: absolute;
+  left: var(--space-5);
+  bottom: var(--space-5);
+  z-index: 10;
+}
+/* —— 独立控制台窗：全屏控制台 —— */
+.console-app {
+  height: 100vh;
+}
+.console-full {
+  flex: 1;
+  min-height: 0;
+  padding: var(--space-4);
 }
 </style>

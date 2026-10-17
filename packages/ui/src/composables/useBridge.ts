@@ -6,6 +6,7 @@
 
 import { computed, type ComputedRef } from 'vue';
 import type {
+  AccountView,
   AppSettings,
   GameExit,
   GameSession,
@@ -48,11 +49,14 @@ const mockBridge: RendererBridge = {
       finishedAt: 0,
     }),
   listAccounts: async () => ok([]),
+  addAccount: async () => err<AccountView>(NO_BRIDGE),
+  removeAccount: async () => err<void>(NO_BRIDGE),
   getSettings: async () => ok<AppSettings>({}),
   setSettings: async (s) => ok(s),
   listInstances: async () => ok([]),
   saveInstance: async (i) => ok(i),
   windowControl: async () => ok<void>(undefined), // 浏览器无窗可控：no-op
+  openConsoleWindow: async () => err<void>(NO_BRIDGE),
   on: () => () => {},
 };
 

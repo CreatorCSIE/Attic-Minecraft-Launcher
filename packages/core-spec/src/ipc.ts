@@ -32,6 +32,10 @@ export const IPC_CHANNELS = {
   JAVA_DETECT: 'attic:java:detect',
   /** 账户列表（脱敏视图）。 */
   ACCOUNTS_LIST: 'attic:accounts:list',
+  /** 添加离线账户（name 按 MC 规则 3-16 位字母数字下划线校验；同名幂等返回既有）。 */
+  ACCOUNTS_ADD: 'attic:accounts:add',
+  /** 移除账户（按 id；当前无账户时回落默认离线 Player）。 */
+  ACCOUNTS_REMOVE: 'attic:accounts:remove',
   /** 读取全局设置（launcher.settings 的渲染侧视图）。 */
   SETTINGS_GET: 'attic:settings:get',
   /** 写入全局设置（合并落盘，返回保存后的视图）。 */
@@ -42,6 +46,8 @@ export const IPC_CHANNELS = {
   INSTANCES_SAVE: 'attic:instances:save',
   /** 无边距窗控制（顶栏三键；动作见 WindowAction）。 */
   WINDOW_CONTROL: 'attic:window:control',
+  /** 打开/聚焦独立控制台窗口（v1 语义：MC 日志独立窗，与主页解耦）。 */
+  WINDOW_CONSOLE: 'attic:window:console',
 } as const;
 
 /** 窗口控制动作：toggle-maximize 由宿主在最大化/还原间切换。 */
@@ -121,6 +127,11 @@ export interface LaunchRequest {
   extraJvmArgs?: string[];
   /** 游戏参数覆盖（server/port 等，进 gameArgs 拼装）。 */
   gameParams?: Record<string, string>;
+  /**
+   * 测试启动：宿主把启动前后日志（启动器侧时间戳行 + 游戏 stdout/stderr 全量）
+   * 落盘 `<root>/launcher/logs/test-launch-<ISO>.log`，并自动唤起独立控制台窗口。
+   */
+  testLaunch?: boolean;
 }
 
 /** preload/桥面：渲染进程看到的全部能力面。 */
@@ -134,11 +145,14 @@ export interface RendererBridge {
   status(): Promise<IpcResult<GameStatus>>;
   detectJava(): Promise<IpcResult<JavaDetectionReport>>;
   listAccounts(): Promise<IpcResult<AccountView[]>>;
+  addAccount(name: string): Promise<IpcResult<AccountView>>;
+  removeAccount(id: string): Promise<IpcResult<void>>;
   getSettings(): Promise<IpcResult<AppSettings>>;
   setSettings(settings: AppSettings): Promise<IpcResult<AppSettings>>;
   listInstances(): Promise<IpcResult<InstanceView[]>>;
   saveInstance(instance: InstanceView): Promise<IpcResult<InstanceView>>;
   windowControl(action: WindowAction): Promise<IpcResult<void>>;
+  openConsoleWindow(): Promise<IpcResult<void>>;
   /** 订阅事件，返回退订函数。 */
   on<E extends keyof AtticEventPayloads>(event: E, cb: (payload: AtticEventPayloads[E]) => void): () => void;
 }

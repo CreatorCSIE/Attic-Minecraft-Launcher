@@ -11,6 +11,7 @@ import { useBridge } from './useBridge';
 const ERA_ORDER: (VersionEra | 'unknown')[] = [
   'pre-classic',
   'classic',
+  '4k',
   'indev',
   'infdev',
   'alpha',

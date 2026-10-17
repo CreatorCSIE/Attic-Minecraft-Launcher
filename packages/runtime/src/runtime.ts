@@ -11,6 +11,7 @@ import {
   IPC_EVENTS,
   type Account,
   type AccountView,
+  type OfflineAccount,
   type AppSettings,
   type AtticEventPayloads,
   type DownloadProgressEvent,
@@ -46,10 +47,13 @@ import {
   loadSettings,
   launcherDir,
   nativesDir,
+  offlineUuid,
   resolveDataRoot,
+  saveAccounts,
   saveInstance,
   saveSettings,
   scanBinPool,
+  scanInstalledJars,
   scanInstalledVersions,
   type InstanceConfig,
   versionListCacheFile,
@@ -170,10 +174,12 @@ export class AtticRuntime {
       if (cache?.versions) refs = cache.versions;
     }
 
-    const installed = new Set(scanInstalledVersions(this.root));
-    const out: VersionRef[] = (refs ?? []).map((ref) => ({ ...ref, installed: installed.has(ref.id) }));
-    for (const id of installed) {
-      if (!out.some((ref) => ref.id === id)) out.push({ id, repository: 'local', installed: true });
+    // "已安装"= jar 实存（用户指定）；jar∪info 并集仅用于离线兜底列出本地版本
+    const jars = new Set(scanInstalledJars(this.root));
+    const local = scanInstalledVersions(this.root);
+    const out: VersionRef[] = (refs ?? []).map((ref) => ({ ...ref, installed: jars.has(ref.id) }));
+    for (const id of local) {
+      if (!out.some((ref) => ref.id === id)) out.push({ id, repository: 'local', installed: jars.has(id) });
     }
     if (out.length === 0) throw new Error('版本清单获取失败且无本地缓存/安装');
     return out;
@@ -250,6 +256,7 @@ export class AtticRuntime {
 
       fs.mkdirSync(context.gameDir, { recursive: true });
       const session = this.processes.start(config, request.versionId);
+      if (request.testLaunch) this.attachTestLaunchLog(request.versionId, config, session);
       // v1 语义（InstanceSettings.java L556）：选中版本写回实例属性——同实例切版本 gameDir 不变、存档共享。
       this.persistInstanceVersion(request);
       this.lastLaunchError = null;
@@ -276,6 +283,28 @@ export class AtticRuntime {
 
   async listAccounts(): Promise<AccountView[]> {
     return this.currentAccounts().map(toAccountView);
+  }
+
+  /**
+   * 添加离线账户：MC 用户名规则（3-16 位字母/数字/下划线，BlockHelm AccountNameValidator 同款）；
+   * 同名幂等返回既有账户（不重复建档）。微软账户无此通道（占位，登录流程未实现）。
+   */
+  addAccount(name: string): AccountView {
+    const trimmed = name.trim();
+    if (!/^[A-Za-z0-9_]{3,16}$/.test(trimmed)) {
+      throw new Error(`无效用户名（需 3-16 位字母/数字/下划线）：${name}`);
+    }
+    const stored = loadAccounts(this.root);
+    const existing = stored.find((a) => a.name === trimmed);
+    if (existing) return toAccountView(existing);
+    const account: OfflineAccount = { id: offlineUuid(trimmed), name: trimmed, type: 'offline' };
+    saveAccounts(this.root, [...stored, account]);
+    return toAccountView(account);
+  }
+
+  /** 移除账户（按 id）；移除至空时 currentAccounts 自动回落默认离线 Player。 */
+  removeAccount(id: string): void {
+    saveAccounts(this.root, loadAccounts(this.root).filter((a) => a.id !== id));
   }
 
   getSettings(): AppSettings {
@@ -336,6 +365,38 @@ export class AtticRuntime {
     const config = this.resolveInstance(request.instanceId ?? DEFAULT_INSTANCE_NAME);
     if (config.version === request.versionId) return;
     saveInstance(this.root, { ...config, version: request.versionId });
+  }
+
+  /**
+   * 测试启动日志（≡ 菜单语义）：启动器侧头行（时间戳/版本/完整命令行）+ 游戏 stdout/stderr 全量
+   * + 退出行，逐行落盘 `<root>/launcher/logs/test-launch-<ISO>.log`。
+   * 控制台窗口唤起归 UI 侧（WINDOW_CONSOLE），runtime 不触窗；落盘失败静默（不阻断启动）。
+   */
+  private attachTestLaunchLog(versionId: string, config: LaunchConfig, session: GameSession): void {
+    const logsDir = path.join(launcherDir(this.root), 'logs');
+    fs.mkdirSync(logsDir, { recursive: true });
+    // Windows 文件名禁冒点：ISO 串统一替换。
+    const file = path.join(logsDir, `test-launch-${new Date().toISOString().replace(/[:.]/g, '-')}.log`);
+    const write = (line: string): void => {
+      try {
+        fs.appendFileSync(file, `${line}\n`, 'utf8');
+      } catch {
+        /* 磁盘异常不影响游戏进程 */
+      }
+    };
+    const at = (): string => new Date().toISOString().slice(11, 23);
+    write(`# Attic test launch ${versionId} pid=${session.pid} ${new Date().toISOString()}`);
+    write(`# java=${config.javaPath}`);
+    write(`# gameDir=${config.gameDir}`);
+    write(`# command="${config.javaPath}" ${config.jvmArgs.join(' ')} -cp "${config.classpath.join(path.delimiter)}" ${config.mainClass} ${config.gameArgs.join(' ')}`);
+    const offOutput = this.on(IPC_EVENTS.GAME_OUTPUT, (event) => {
+      write(`[${at()}] [${event.stream}] ${event.chunk.trimEnd()}`);
+    });
+    const offExit = this.on(IPC_EVENTS.GAME_EXIT, (event) => {
+      write(`[${at()}] === exit code=${event.code} signal=${event.signal} crash=${event.crash?.category ?? 'none'} ===`);
+      offOutput();
+      offExit();
+    });
   }
 
   private currentAccounts(): Account[] {

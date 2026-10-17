@@ -41,6 +41,18 @@ export function eraForDate(ms: number | undefined): VersionEra | undefined {
   return era;
 }
 
+/** 清单数据缺陷矫正表（用户指定；数据矫正，非客户端推断）。
+ *  恶搞/开发版 compile+release 双 0 → eraForDate(0) 误归 Pre-Classic：
+ *  - b1.2_02-dev-20110517：id 自带日期 2011-05-17 → 归 Beta，组内排在 b1.2_02 后；
+ *  - 2.0-preview：取 2.0-red 编译时刻（1364841286000）前 1s → 归 Release，紧随其前。 */
+const DATE_FIXUPS: Record<string, number> = {
+  'b1.2_02-dev-20110517': Date.UTC(2011, 4, 17),
+  '2.0-preview': 1364841285000,
+};
+
+/** 4k-* 单开年代组（Classic 之后展示，用户指定）。 */
+const ERA_FIXUPS: { prefix: string; era: VersionEra }[] = [{ prefix: '4k-', era: '4k' }];
+
 export function parseVersionList(text: string): VersionRef[] {
   const refs: VersionRef[] = [];
   for (const line of text.split(/\r?\n/)) {
@@ -49,15 +61,26 @@ export function parseVersionList(text: string): VersionRef[] {
     const fields = trimmed.split('`');
     const id = fields[0];
     if (!id) continue;
-    const compileDate = Number(fields[2]);
-    const releaseDate = Number(fields[3]);
+    const rawCompile = Number(fields[2]);
+    const rawRelease = Number(fields[3]);
+    let compile = Number.isFinite(rawCompile) && rawCompile > 0 ? rawCompile : undefined;
+    let release = Number.isFinite(rawRelease) && rawRelease > 0 ? rawRelease : undefined;
+    const fix = DATE_FIXUPS[id];
+    if (fix !== undefined && compile === undefined && release === undefined) {
+      compile = fix;
+      release = fix;
+    }
+    let era = eraForDate(compile ?? release);
+    for (const f of ERA_FIXUPS) {
+      if (id.startsWith(f.prefix)) era = f.era;
+    }
     refs.push({
       id,
       repository: 'betacraft',
       displayName: fields[1] ? fields[1] : undefined,
-      compileDate: Number.isFinite(compileDate) ? compileDate : undefined,
-      releaseDate: Number.isFinite(releaseDate) ? releaseDate : undefined,
-      era: eraForDate(Number.isFinite(compileDate) ? compileDate : Number.isFinite(releaseDate) ? releaseDate : undefined),
+      compileDate: compile,
+      releaseDate: release,
+      era,
       installed: false,
     });
   }

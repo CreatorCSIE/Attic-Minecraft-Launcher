@@ -39,6 +39,7 @@ export {
   loadInstance,
   saveInstance,
   scanBinPool,
+  scanInstalledJars,
   scanInstalledVersions,
   loadAccounts,
   saveAccounts,

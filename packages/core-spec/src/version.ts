@@ -10,6 +10,7 @@ export type VersionRepository = 'betacraft' | 'local' | 'custom';
 export type VersionEra =
   | 'pre-classic'
   | 'classic'
+  | '4k'
   | 'indev'
   | 'infdev'
   | 'alpha'

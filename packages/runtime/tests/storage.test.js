@@ -13,6 +13,7 @@ const {
   loadInstance,
   listInstances,
   scanBinPool,
+  scanInstalledJars,
   scanInstalledVersions,
   offlineUuid,
   binDir,
@@ -132,6 +133,8 @@ test('扫描：bin 库池与已安装版本并集', (t) => {
     path.join(binDir(root), 'lwjgl-2.9.4.jar'),
   ]);
   assert.deepEqual(scanInstalledVersions(root), ['b1.7.3', 'c2.0']);
+  // "已安装"徽标真相源 = jar 实存：仅有 .info 的 c2.0 不算安装（用户指定）
+  assert.deepEqual(scanInstalledJars(root), ['b1.7.3']);
 });
 
 test('offlineUuid：确定性 + MC 离线格式（version 3 / variant 2）', () => {

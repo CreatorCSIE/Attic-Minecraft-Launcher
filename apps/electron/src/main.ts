@@ -18,6 +18,19 @@ const runtime = new AtticRuntime();
 /** 无边距主窗引用（WINDOW_CONTROL 通道操作目标）。 */
 let mainWindow: BrowserWindow | null = null;
 
+/** 独立控制台窗引用（v1 语义：MC 日志独立窗，与主页解耦；WINDOW_CONSOLE 唤起/聚焦）。 */
+let consoleWindow: BrowserWindow | null = null;
+
+/** 开发模式渲染地址：--dev-url= 或 ELECTRON_RENDERER_URL；缺省 = ui 构建产物。 */
+function resolveDevUrl(): string | undefined {
+  const devArg = process.argv.find((a) => a.startsWith('--dev-url='));
+  return devArg?.slice('--dev-url='.length) ?? process.env['ELECTRON_RENDERER_URL'];
+}
+
+function uiDistIndex(): string {
+  return path.resolve(app.getAppPath(), '..', '..', 'packages', 'ui', 'dist', 'index.html');
+}
+
 /**
  * 通道注册器：IpcResult 封装归壳层（runtime 以异常抛出）。
  * 参数透传：渲染侧 invoke(channel, ...args) → handle 回调 (event, ...args)。
@@ -47,7 +60,7 @@ function wireEvents(): void {
 /** 无边距主窗：拖拽区由 UI 的 .titlebar（-webkit-app-region: drag）承担。 */
 function createWindow(): void {
   const win = new BrowserWindow({
-    width: 1100,
+    width: 980,
     height: 720,
     minWidth: 800,
     minHeight: 560,
@@ -78,14 +91,51 @@ function createWindow(): void {
   });
   win.webContents.openDevTools({ mode: 'detach' });
 
-  // 开发模式：--dev-url=<vite 地址> 或 ELECTRON_RENDERER_URL 环境变量；否则加载 ui 构建产物。
-  const devArg = process.argv.find((a) => a.startsWith('--dev-url='));
-  const devUrl = devArg?.slice('--dev-url='.length) ?? process.env['ELECTRON_RENDERER_URL'];
+  const devUrl = resolveDevUrl();
   if (devUrl) {
     void win.loadURL(devUrl);
   } else {
     // Phase 0：直接加载 packages/ui 的构建产物；真正的打包分发留待 Phase 5。
-    void win.loadFile(path.resolve(app.getAppPath(), '..', '..', 'packages', 'ui', 'dist', 'index.html'));
+    void win.loadFile(uiDistIndex());
+  }
+}
+
+/**
+ * 独立控制台窗（v1 语义）：加载同一 UI 但带 ?window=console，App.vue 检测该 query 只渲染 ConsolePanel。
+ * 已存在则聚焦复用（不重复开窗）；游戏事件广播已覆盖全部窗口（wireEvents）。
+ */
+function createConsoleWindow(): void {
+  if (consoleWindow && !consoleWindow.isDestroyed()) {
+    consoleWindow.focus();
+    return;
+  }
+  const win = new BrowserWindow({
+    width: 860,
+    height: 600,
+    minWidth: 520,
+    minHeight: 360,
+    frame: false,
+    show: false,
+    title: 'Attic Minecraft Launcher — Console',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  });
+  consoleWindow = win;
+  win.on('closed', () => {
+    if (consoleWindow === win) consoleWindow = null;
+  });
+  win.show();
+
+  const devUrl = resolveDevUrl();
+  if (devUrl) {
+    const sep = devUrl.includes('?') ? '&' : '?';
+    void win.loadURL(`${devUrl}${sep}window=console`);
+  } else {
+    void win.loadFile(uiDistIndex(), { query: { window: 'console' } });
   }
 }
 
@@ -100,18 +150,30 @@ app.whenReady().then(() => {
   handle(IPC_CHANNELS.STATUS, () => runtime.status());
   handle(IPC_CHANNELS.JAVA_DETECT, () => runtime.detectJava());
   handle(IPC_CHANNELS.ACCOUNTS_LIST, () => runtime.listAccounts());
+  handle(IPC_CHANNELS.ACCOUNTS_ADD, (name: string) => runtime.addAccount(name));
+  handle(IPC_CHANNELS.ACCOUNTS_REMOVE, (id: string) => runtime.removeAccount(id));
   handle(IPC_CHANNELS.SETTINGS_GET, () => runtime.getSettings());
   handle(IPC_CHANNELS.SETTINGS_SET, (settings: AppSettings) => runtime.setSettings(settings));
   handle(IPC_CHANNELS.INSTANCES_LIST, () => runtime.listInstances());
   handle(IPC_CHANNELS.INSTANCES_SAVE, (instance: InstanceView) => runtime.saveInstance(instance));
   // 窗控制：动作合法性由契约类型保证；toggle-maximize 在最大化/还原间切换。
-  handle<WindowAction[], void>(IPC_CHANNELS.WINDOW_CONTROL, (action) => {
-    const win = mainWindow;
-    if (!win) return;
-    if (action === 'minimize') win.minimize();
-    else if (action === 'close') win.close();
-    else if (win.isMaximized()) win.unmaximize();
-    else win.maximize();
+  // 按发送方窗口操作（非固定 mainWindow）——独立控制台窗的顶栏三键才能控自己的窗。
+  ipcMain.handle(IPC_CHANNELS.WINDOW_CONTROL, async (event, action: WindowAction): Promise<IpcResult<void>> => {
+    try {
+      const win = BrowserWindow.fromWebContents(event.sender) ?? mainWindow;
+      if (!win) return { ok: true, value: undefined };
+      if (action === 'minimize') win.minimize();
+      else if (action === 'close') win.close();
+      else if (win.isMaximized()) win.unmaximize();
+      else win.maximize();
+      return { ok: true, value: undefined };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+  // 独立控制台窗：唤起/聚焦（v1 语义；主页 Play/测试启动后由 UI 侧触发）。
+  handle<[], void>(IPC_CHANNELS.WINDOW_CONSOLE, () => {
+    createConsoleWindow();
   });
 
   wireEvents();

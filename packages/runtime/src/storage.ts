@@ -213,7 +213,22 @@ export function scanBinPool(root: string): string[] {
   }
 }
 
-/** 已安装版本：versions/*.jar 与 versions/jsons/*.info 并集去重。 */
+/** 已安装（有客户端 jar）版本：versions/*.jar。"已安装"徽标的唯一真相源——
+ * 仅有 .info 元数据而无 jar 不算安装（用户指定）。 */
+export function scanInstalledJars(root: string): string[] {
+  const ids = new Set<string>();
+  try {
+    for (const f of fs.readdirSync(versionsDir(root))) {
+      if (f.endsWith('.jar')) ids.add(f.slice(0, -4));
+    }
+  } catch {
+    /* 目录缺失 = 无安装 */
+  }
+  return [...ids].sort();
+}
+
+/** 本地已有元数据/jar 的版本：versions/*.jar 与 versions/jsons/*.info 并集去重
+ * （离线兜底列表用；"已安装"标记请用 scanInstalledJars）。 */
 export function scanInstalledVersions(root: string): string[] {
   const ids = new Set<string>();
   try {

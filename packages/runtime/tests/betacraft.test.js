@@ -53,6 +53,25 @@ test('parseVersionList：真实行形状（反引号分隔，4/5 字段混排）
   assert.equal(refs[1].displayName, undefined);
 });
 
+test('parseVersionList：数据缺陷矫正（双 0 日期归位 + 4k 单开年代组）', () => {
+  const text = [
+    'b1.2_02-dev-20110517``0`0',
+    '2.0-preview``0`0',
+    '4k-0144``1259891046000`1259891046000',
+    'b1.2_02``1295618254000`1295618277000',
+    '2.0-red``1364841286000`1364841286001',
+  ].join('\n');
+  const by = new Map(parseVersionList(text).map((r) => [r.id, r]));
+  // 双 0 不再误归 pre-classic：dev 版按 id 日期归 Beta 且排在 b1.2_02 后
+  assert.equal(by.get('b1.2_02-dev-20110517').era, 'beta');
+  assert.ok(by.get('b1.2_02-dev-20110517').compileDate > by.get('b1.2_02').compileDate);
+  // 2.0-preview 归 Release 且紧随 2.0-red 前
+  assert.equal(by.get('2.0-preview').era, 'release-1.0-1.5.2');
+  assert.ok(by.get('2.0-preview').compileDate < by.get('2.0-red').compileDate);
+  // 4k-* 单开年代组
+  assert.equal(by.get('4k-0144').era, '4k');
+});
+
 test('eraForDate：年代边界（编译日期）', () => {
   assert.equal(eraForDate(1242245460000), 'pre-classic'); // rd-20090513
   assert.equal(eraForDate(1243796664000), 'classic'); // c0.0.15a

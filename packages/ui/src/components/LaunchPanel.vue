@@ -1,155 +1,158 @@
 <script setup lang="ts">
 /**
  * 启动面板 —— 每屏唯一 accent 实心元素 = Play（ui-design.md §2）。
+ * 排版（新主页）：Play 置右下角；右侧「| ≡」菜单收纳【实例设置】【测试启动】。
+ * 主页保持净空（用户指定）：无卡片底/版本摘要/停止钮，为后续背景图留清晰画布；
+ * 选中版本信息由左下版本面板单卡承载。
+ * v1 语义：每次启动成功自动唤起独立控制台窗口（MC 日志与主页解耦）。
  * 请求形状全走契约（LaunchRequest），UI 不拼参数（戒律 #1）。
  */
-import { computed } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useI18n } from '../i18n';
 import { useSelection } from '../composables/useSelection';
 import { useGame } from '../composables/useGame';
 import { useSettings } from '../composables/useSettings';
+import { useAccounts } from '../composables/useAccounts';
 import { useBridge } from '../composables/useBridge';
-import type { VersionEra } from '@attic/core-spec';
+
+const emit = defineEmits<{ (e: 'open-instances'): void }>();
 
 const { t } = useI18n();
 const { selected } = useSelection();
 const { status, busy, lastError, launch, kill } = useGame();
 const { settings } = useSettings();
-const { hasBridge } = useBridge();
+const { current } = useAccounts();
+const { bridge, hasBridge } = useBridge();
 
 const running = computed(() => status.value.running);
 const canPlay = computed(() => hasBridge.value && !!selected.value && !running.value && !busy.value);
-const canStop = computed(() => hasBridge.value && running.value && !busy.value);
+/* 启动/停止合为一体（用户指定）：同一按钮按状态切换动作——空闲=启动，运行=停止 */
+const canToggle = computed(() => hasBridge.value && !busy.value && (running.value || !!selected.value));
 
-const memoryLabel = computed(() => `${settings.value.maxMemoryMb ?? 1024} MB`);
+// —— 「| ≡」菜单：点外部收起 ——
+const menuOpen = ref(false);
+const menuEl = ref<HTMLElement | null>(null);
 
-function eraClass(era?: VersionEra): string {
-  return era ?? 'unknown';
+function onDocClick(e: MouseEvent): void {
+  if (!menuOpen.value) return;
+  if (menuEl.value && !menuEl.value.contains(e.target as Node)) menuOpen.value = false;
 }
 
-async function onPlay(): Promise<void> {
+onMounted(() => document.addEventListener('click', onDocClick, true));
+onBeforeUnmount(() => document.removeEventListener('click', onDocClick, true));
+
+/**
+ * 启动编排：accountId = 当前账户（契约可选字段，缺省回落宿主首个账户）；
+ * test=true 走测试启动（宿主落盘启动前后日志）；成功后唤起独立控制台窗（v1 语义）。
+ */
+async function doLaunch(test: boolean): Promise<void> {
   const v = selected.value;
   if (!v) return;
-  await launch({
+  menuOpen.value = false;
+  const ok = await launch({
     versionId: v.id,
+    accountId: current.value?.id,
     javaPath: settings.value.javaPath,
     maxMemoryMb: settings.value.maxMemoryMb,
+    ...(test ? { testLaunch: true } : {}),
   });
+  if (ok) void bridge.openConsoleWindow();
+}
+
+function onToggle(): void {
+  if (running.value) kill();
+  else void doLaunch(false);
+}
+
+function onTestLaunch(): void {
+  void doLaunch(true);
+}
+
+function onInstanceSettings(): void {
+  menuOpen.value = false;
+  emit('open-instances');
 }
 </script>
 
 <template>
   <section class="panel">
-    <div class="summary">
-      <div class="field">
-        <span class="label">{{ t('launch.version') }}</span>
-        <div class="value">
-          <template v-if="selected">
-            <span class="chip" :data-era="eraClass(selected.era)">
-              {{ t(`era.${eraClass(selected.era)}`) }}
-            </span>
-            <span class="ver mono">{{ selected.id }}</span>
-          </template>
-          <span v-else class="placeholder">{{ t('launch.noVersion') }}</span>
-        </div>
-      </div>
-      <div class="meta">
-        <span class="meta-item">
-          <span class="label">{{ t('launch.memory') }}</span>
-          <span class="tabular mono">{{ memoryLabel }}</span>
-        </span>
-        <span class="meta-item">
-          <span class="label">{{ t('launch.java') }}</span>
-          <span class="mono">{{ settings.javaPath ? 'manual' : 'auto' }}</span>
-        </span>
-      </div>
-    </div>
-
-    <div class="actions">
-      <button class="play" :disabled="!canPlay" @click="onPlay">
-        <span class="tri" aria-hidden="true"></span>
-        {{ t('launch.play') }}
-      </button>
-      <button class="stop" :disabled="!canStop" @click="kill()">
-        {{ t('launch.kill') }}
-      </button>
-      <span class="status" :class="running ? 'status--run' : 'status--idle'">
-        <span class="led"></span>
-        {{ running ? t('launch.running') : t('launch.idle') }}
-      </span>
-    </div>
-
     <p v-if="lastError" class="error">{{ t('launch.failed') }}：{{ lastError }}</p>
     <p v-else-if="status.lastError" class="error">{{ status.lastError }}</p>
+
+    <!-- 动作行：Play+菜单沉底靠右（空闲/运行状态灯已移除——合一体按钮文案即状态） -->
+    <div class="actions">
+      <button
+        class="play"
+        :class="{ 'play--stop': running }"
+        :disabled="!canToggle"
+        @click="onToggle"
+      >
+        <span v-if="running" class="sq" aria-hidden="true"></span>
+        <span v-else class="tri" aria-hidden="true"></span>
+        {{ running ? t('launch.kill') : t('launch.play') }}
+      </button>
+      <div ref="menuEl" class="menu-wrap">
+        <span class="divider" aria-hidden="true"></span>
+        <button
+          class="menu-btn"
+          type="button"
+          :aria-label="t('launch.menu')"
+          :title="t('launch.menu')"
+          :aria-expanded="menuOpen"
+          @click="menuOpen = !menuOpen"
+        >
+          <!-- lucide: align-left（≡） -->
+          <svg
+            viewBox="0 0 24 24"
+            width="18"
+            height="18"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            aria-hidden="true"
+          >
+            <path d="M15 12H3" />
+            <path d="M17 6H3" />
+            <path d="M21 18H3" />
+          </svg>
+        </button>
+        <div v-if="menuOpen" class="menu-pop" role="menu">
+          <button class="menu-item" type="button" role="menuitem" @click="onInstanceSettings">
+            {{ t('launch.instanceSettings') }}
+          </button>
+          <button
+            class="menu-item"
+            type="button"
+            role="menuitem"
+            :disabled="!canPlay"
+            @click="onTestLaunch"
+          >
+            {{ t('launch.testLaunch') }}
+          </button>
+        </div>
+      </div>
+    </div>
   </section>
 </template>
 
 <style scoped>
-/* base-card 新配方：第3级 surface 底 + 第4级 surface 描边 + 大圆角 + 卡片内 padding 升档 */
+/* 净空容器（用户指定）：无卡片底/描边/投影，为后续背景图留清晰画布 */
 .panel {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  padding: var(--space-5);
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-card);
+  flex: 1;
+  min-height: 0;
+  background: transparent;
 }
-.summary {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-.field .label {
-  display: block;
-  margin-bottom: var(--space-1);
-}
-.value {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-.placeholder {
-  color: var(--text-muted);
-  font-size: var(--fs-sm);
-}
-.meta {
-  display: flex;
-  gap: var(--space-5);
-}
-.meta-item {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  font-size: var(--fs-sm);
-}
-.ver {
-  font-size: var(--fs-md);
-  color: var(--text-primary);
-}
-.chip {
-  --chip: var(--text-muted);
-  --chip-soft: var(--surface-1);
-  font-size: var(--fs-xs);
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
-  padding: 2px var(--space-2);
-  border-radius: var(--radius-sm);
-  color: var(--chip);
-  background: var(--chip-soft);
-}
-.chip[data-era='pre-classic'] { --chip: var(--era-pre-classic); --chip-soft: var(--era-pre-classic-soft); }
-.chip[data-era='classic'] { --chip: var(--era-classic); --chip-soft: var(--era-classic-soft); }
-.chip[data-era='indev'] { --chip: var(--era-indev); --chip-soft: var(--era-indev-soft); }
-.chip[data-era='infdev'] { --chip: var(--era-infdev); --chip-soft: var(--era-infdev-soft); }
-.chip[data-era='alpha'] { --chip: var(--era-alpha); --chip-soft: var(--era-alpha-soft); }
-.chip[data-era='beta'] { --chip: var(--era-beta); --chip-soft: var(--era-beta-soft); }
-.chip[data-era='release-1.0-1.5.2'] { --chip: var(--era-release); --chip-soft: var(--era-release-soft); }
+/* 动作行：Play+菜单沉底靠右 */
 .actions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: var(--space-3);
+  margin-top: auto;
 }
 /* Play —— 质感配方样板：pill 大圆角 + 五层叠影 + 顶部内高光 + hover 抬升 + active 下压 + focus 投影环（token 定义见 tokens.css） */
 .play {
@@ -197,48 +200,86 @@ async function onPlay(): Promise<void> {
   border-top: 5px solid transparent;
   border-bottom: 5px solid transparent;
 }
-/* Stop —— 保持描边/幽灵样式（每屏唯一 accent 实心 = Play），仅补底缘内阴影厚度与 disabled 去影 */
-.stop {
-  padding: var(--space-2) var(--space-4);
-  background: transparent;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-md);
-  color: var(--text-primary);
-  box-shadow: var(--inset-bottom);
-  transition:
-    background var(--dur-fast) var(--ease-out),
-    box-shadow var(--dur-fast) var(--ease-out);
+/* 运行态：同一按钮切为停止（danger 底 + 方块图标），保持同一质感配方 */
+.play--stop {
+  background: var(--danger);
 }
-.stop:hover:not(:disabled) {
-  background: var(--surface-4);
+.play--stop:hover:not(:disabled) {
+  background: var(--danger);
 }
-.stop:disabled {
-  opacity: 0.4;
-  box-shadow: none;
-  cursor: not-allowed;
-}
-.status {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin-left: auto;
-  font-size: var(--fs-sm);
-  color: var(--text-secondary);
-}
-.led {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--text-muted);
-}
-.status--run .led {
-  background: var(--ok);
-}
-.status--idle .led {
-  background: var(--text-muted);
+.sq {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: var(--accent-ink);
 }
 .error {
   font-size: var(--fs-sm);
   color: var(--danger);
+}
+/* —— 「| ≡」：竖分隔线 + 幽灵菜单钮；弹层向上右对齐（Play 在右下角，菜单在其右侧） —— */
+.menu-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.divider {
+  width: 1px;
+  height: var(--space-5);
+  background: var(--border-strong);
+}
+.menu-btn {
+  width: var(--rail-item-size);
+  height: var(--rail-item-size);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+.menu-btn:hover {
+  background: var(--surface-4);
+  color: var(--text-primary);
+}
+.menu-pop {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + var(--space-2));
+  min-width: 160px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2);
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-3);
+  z-index: 20;
+}
+.menu-item {
+  padding: var(--space-2) var(--space-3);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: var(--fs-sm);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.menu-item:hover:not(:disabled) {
+  background: var(--surface-4);
+}
+.menu-item:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 </style>
