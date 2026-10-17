@@ -1,31 +1,20 @@
 <script setup lang="ts">
 /**
- * 控制台 —— stdout/stderr 滚动 + 崩溃摘要卡 + 下载进度（数字必带，§7 加载有数）。
+ * 控制台 —— stdout/stderr 滚动 + 崩溃摘要卡。
  * 订阅在 useConsole 模块级，切视图不丢日志。
+ * 下载进度已迁至主页启动面板聚合区（BlockHelm 形态，见 useDownloads/LaunchPanel）。
  */
 import { computed, nextTick, ref, watch } from 'vue';
 import { useI18n } from '../i18n';
 import { useConsole } from '../composables/useConsole';
-import type { DownloadProgressEvent } from '@attic/core-spec';
 
 const { t } = useI18n();
-const { lines, lastExit, downloads, clear } = useConsole();
+const { lines, lastExit, clear } = useConsole();
 
 const autoscroll = ref(true);
 const scroller = ref<HTMLElement | null>(null);
 
-const downloadList = computed<DownloadProgressEvent[]>(() => Object.values(downloads.value));
-
 const crash = computed(() => lastExit.value?.crash ?? null);
-
-function mb(bytes: number): string {
-  return (bytes / 1048576).toFixed(1);
-}
-
-function pct(e: DownloadProgressEvent): number {
-  if (!e.bytesTotal) return 0;
-  return Math.min(100, Math.round((e.bytesDone / e.bytesTotal) * 100));
-}
 
 watch(
   () => lines.value.length,
@@ -54,21 +43,6 @@ watch(
     <div v-if="crash" class="crash">
       <span class="crash-cat">{{ t(`crash.${crash.category}`) }}</span>
       <span class="crash-head mono">{{ crash.headline }}</span>
-    </div>
-
-    <div v-if="downloadList.length" class="downloads">
-      <div class="label">{{ t('console.download') }}</div>
-      <div v-for="e in downloadList" :key="`${e.item}:${e.id}`" class="dl">
-        <div class="dl-top">
-          <span class="dl-id mono">{{ e.id }}</span>
-          <span class="dl-phase" :data-phase="e.phase">{{ e.phase }}</span>
-          <span v-if="e.bytesPerSec" class="dl-rate tabular">{{ mb(e.bytesPerSec) }} MB/s</span>
-        </div>
-        <div class="dl-bar">
-          <div class="dl-fill" :class="`dl-fill--${e.phase}`" :style="{ width: pct(e) + '%' }"></div>
-        </div>
-        <div v-if="e.error" class="dl-err">{{ e.error }}</div>
-      </div>
     </div>
 
     <div ref="scroller" class="out">
@@ -153,62 +127,6 @@ watch(
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.downloads {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-.dl {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.dl-top {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--fs-xs);
-}
-.dl-id {
-  color: var(--text-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.dl-phase {
-  margin-left: auto;
-  color: var(--text-muted);
-}
-.dl-phase[data-phase='failed'] {
-  color: var(--danger);
-}
-.dl-phase[data-phase='done'] {
-  color: var(--ok);
-}
-.dl-rate {
-  color: var(--accent);
-}
-.dl-bar {
-  height: 4px;
-  background: var(--surface-1);
-  border-radius: var(--radius-sm);
-  overflow: hidden;
-}
-.dl-fill {
-  height: 100%;
-  background: var(--accent);
-  transition: width var(--dur-base) var(--ease-out);
-}
-.dl-fill--done {
-  background: var(--ok);
-}
-.dl-fill--failed {
-  background: var(--danger);
-}
-.dl-err {
-  font-size: var(--fs-xs);
-  color: var(--danger);
 }
 /* 日志输出区 = 卡片上的下沉井：第1级底 + 底缘内阴影 */
 .out {

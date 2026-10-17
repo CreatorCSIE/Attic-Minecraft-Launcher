@@ -18,8 +18,8 @@ const runtime = new AtticRuntime();
 /** 无边距主窗引用（WINDOW_CONTROL 通道操作目标）。 */
 let mainWindow: BrowserWindow | null = null;
 
-/** 独立控制台窗引用（v1 语义：MC 日志独立窗，与主页解耦；WINDOW_CONSOLE 唤起/聚焦）。 */
-let consoleWindow: BrowserWindow | null = null;
+/** 每次启动一个独立控制台窗（用户指定）：集合仅用于生命周期跟踪，不做复用。 */
+const consoleWindows = new Set<BrowserWindow>();
 
 /** 开发模式渲染地址：--dev-url= 或 ELECTRON_RENDERER_URL；缺省 = ui 构建产物。 */
 function resolveDevUrl(): string | undefined {
@@ -101,14 +101,11 @@ function createWindow(): void {
 }
 
 /**
- * 独立控制台窗（v1 语义）：加载同一 UI 但带 ?window=console，App.vue 检测该 query 只渲染 ConsolePanel。
- * 已存在则聚焦复用（不重复开窗）；游戏事件广播已覆盖全部窗口（wireEvents）。
+ * 独立控制台窗（v1 语义 + 用户指定"每次启动独立控制台"）：加载同一 UI 带 ?window=console&pid=<会话pid>。
+ * 每次调用都新建窗口（旧控制台不复用）；窗内 ConsolePanel 按 pid 过滤本会话输出，旧窗保留各自历史日志。
  */
 function createConsoleWindow(): void {
-  if (consoleWindow && !consoleWindow.isDestroyed()) {
-    consoleWindow.focus();
-    return;
-  }
+  const session = runtime.status().session;
   const win = new BrowserWindow({
     width: 860,
     height: 600,
@@ -116,7 +113,7 @@ function createConsoleWindow(): void {
     minHeight: 360,
     frame: false,
     show: false,
-    title: 'Attic Minecraft Launcher — Console',
+    title: session ? `Attic Console — ${session.versionId} (${session.pid})` : 'Attic Minecraft Launcher — Console',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -124,18 +121,20 @@ function createConsoleWindow(): void {
       sandbox: false,
     },
   });
-  consoleWindow = win;
+  consoleWindows.add(win);
   win.on('closed', () => {
-    if (consoleWindow === win) consoleWindow = null;
+    consoleWindows.delete(win);
   });
   win.show();
 
+  const query: Record<string, string> = { window: 'console' };
+  if (session) query['pid'] = String(session.pid);
   const devUrl = resolveDevUrl();
   if (devUrl) {
     const sep = devUrl.includes('?') ? '&' : '?';
-    void win.loadURL(`${devUrl}${sep}window=console`);
+    void win.loadURL(`${devUrl}${sep}${new URLSearchParams(query).toString()}`);
   } else {
-    void win.loadFile(uiDistIndex(), { query: { window: 'console' } });
+    void win.loadFile(uiDistIndex(), { query });
   }
 }
 

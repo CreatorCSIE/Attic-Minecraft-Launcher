@@ -39,6 +39,7 @@ export {
   loadInstance,
   saveInstance,
   scanBinPool,
+  scanInstalledInfos,
   scanInstalledJars,
   scanInstalledVersions,
   loadAccounts,
@@ -75,11 +76,22 @@ export {
   assembleLaunchConfig,
   filterAgentMounts,
   APPLET_LAUNCHER_CLASS,
+  APPLET_CLASS_BY_METHOD,
   type LaunchContext,
   type AssembleOptions,
 } from './launch';
 export { classifyCrash, GameProcessManager, type GameProcessEvents } from './process';
-export { extractZipTo } from './zip';
+export { detectLaunchMethod, probeIndevEntry } from './wrapperDetector';
+export { extractZipTo, listZipEntryNames } from './zip';
+export {
+  resolveAssetIndexId,
+  resolveLaunchAssetIndexId,
+  AUTHORITATIVE_ASSET_INDEXES,
+  planAssetObjects,
+  ASSET_INDEXES,
+  type AssetIndexEntry,
+  type AssetObjectPlan,
+} from './legacyAssets';
 export { AtticRuntime, type AtticRuntimeOptions } from './runtime';
 
 // 契约面透传：壳层只 import 本包即可拿到全部通道常量与类型。

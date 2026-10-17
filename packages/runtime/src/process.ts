@@ -47,6 +47,12 @@ export function classifyCrash(output: string, code: number | null): CrashSummary
 /** 输出缓冲上限（分类只用尾部，内存有界）。 */
 const OUTPUT_TAIL_LIMIT = 1024 * 1024;
 
+/** 控制台字节流 → 文本解码器（win32 = GBK/cp936，其余 = UTF-8；stream 模式跨块续接多字节字符）。 */
+function makeConsoleDecoder(): (chunk: Buffer) => string {
+  const decoder = new TextDecoder(process.platform === 'win32' ? 'gbk' : 'utf-8');
+  return (chunk: Buffer) => decoder.decode(chunk, { stream: true });
+}
+
 export interface GameProcessEvents {
   onOutput: (event: GameOutputEvent) => void;
   onExit: (event: GameExitEvent) => void;
@@ -105,15 +111,19 @@ export class GameProcessManager {
     const pid = child.pid ?? -1;
     this.session = { pid, versionId, startedAt: Date.now() };
 
-    child.stdout.setEncoding('utf8');
-    child.stderr.setEncoding('utf8');
-    child.stdout.on('data', (data: string) => {
-      this.appendOutput(data);
-      this.events.onOutput({ stream: 'stdout', chunk: data, pid });
+    // Windows 下 java.exe 控制台输出走系统代码页（GBK/cp936）：UTF-8 解码中文报错即乱码（用户实测）。
+    // stream:true 解码器处理跨 chunk 拆开的多字节字符；非 Windows 维持 UTF-8。
+    const decodeStdout = makeConsoleDecoder();
+    const decodeStderr = makeConsoleDecoder();
+    child.stdout.on('data', (data: Buffer) => {
+      const text = decodeStdout(data);
+      this.appendOutput(text);
+      this.events.onOutput({ stream: 'stdout', chunk: text, pid });
     });
-    child.stderr.on('data', (data: string) => {
-      this.appendOutput(data);
-      this.events.onOutput({ stream: 'stderr', chunk: data, pid });
+    child.stderr.on('data', (data: Buffer) => {
+      const text = decodeStderr(data);
+      this.appendOutput(text);
+      this.events.onOutput({ stream: 'stderr', chunk: text, pid });
     });
 
     // spawn 失败（如 java 不存在）走 error 事件：把原因喂进输出缓冲供分类器命中 java-missing。

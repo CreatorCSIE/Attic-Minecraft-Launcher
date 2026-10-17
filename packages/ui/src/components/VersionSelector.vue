@@ -153,6 +153,7 @@ function subtitleOf(v: VersionRef): string {
   const parts = [t(`era.${eraKey(v.era ?? 'unknown')}`)];
   const date = fmtDate(v.compileDate ?? v.releaseDate);
   if (date) parts.push(date);
+  if (v.custom) parts.push('Custom'); // v1 customSuffix 语义（英文原样，与 era 标签同策略）
   return parts.join(' · ');
 }
 </script>
@@ -243,6 +244,7 @@ function subtitleOf(v: VersionRef): string {
                 <span class="name">{{ titleOf(v) }}</span>
                 <span v-if="aliasOf(v)" class="subtitle">{{ aliasOf(v) }}</span>
               </span>
+              <span v-if="v.custom" class="badge badge--custom">Custom</span>
               <span v-if="v.installed" class="badge badge--ok">{{ t('version.installed') }}</span>
             </button>
           </div>
@@ -474,6 +476,12 @@ function subtitleOf(v: VersionRef): string {
 .badge--ok {
   color: var(--ok);
   background: var(--ok-soft);
+}
+/* Custom 徽标（v1 [Custom] 后缀语义）：中性描边形态，不与"已安装"状态色抢层级 */
+.badge--custom {
+  color: var(--text-muted);
+  border: 1px solid var(--card-border);
+  background: transparent;
 }
 .pfoot {
   display: flex;

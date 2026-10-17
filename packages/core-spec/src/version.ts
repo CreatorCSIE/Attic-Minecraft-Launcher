@@ -30,6 +30,8 @@ export interface VersionRef {
   compileDate?: number;
   /** 本地是否已有可用 jar。 */
   installed: boolean;
+  /** 自定义版本（v1 语义：裸 jar = 有 jar 无 .info，或 .info 声明 custom=true）；缺省 = 干净原版。 */
+  custom?: boolean;
 }
 
 /** 规则节点（Mojang 现代格式，远古 JSON 不出现但解析器须容忍）。 */

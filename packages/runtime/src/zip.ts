@@ -8,6 +8,32 @@ import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
 
+/** 中央目录条目名清单（不解压、不校验 CRC——够类存在性检测用）。文件无效时抛错。 */
+export function listZipEntryNames(zipFile: string): string[] {
+  const buf = fs.readFileSync(zipFile);
+  let eocd = -1;
+  const minPos = Math.max(0, buf.length - 65557);
+  for (let i = buf.length - 22; i >= minPos; i--) {
+    if (buf.readUInt32LE(i) === 0x06054b50) {
+      eocd = i;
+      break;
+    }
+  }
+  if (eocd < 0) throw new Error(`不是有效 zip：${zipFile}`);
+  const entryCount = buf.readUInt16LE(eocd + 10);
+  let offset = buf.readUInt32LE(eocd + 16);
+  const names: string[] = [];
+  for (let n = 0; n < entryCount; n++) {
+    if (buf.readUInt32LE(offset) !== 0x02014b50) throw new Error(`zip 中央目录损坏：${zipFile}`);
+    const nameLen = buf.readUInt16LE(offset + 28);
+    const extraLen = buf.readUInt16LE(offset + 30);
+    const commentLen = buf.readUInt16LE(offset + 32);
+    names.push(buf.toString('utf8', offset + 46, offset + 46 + nameLen));
+    offset += 46 + nameLen + extraLen + commentLen;
+  }
+  return names;
+}
+
 /** 从 zip 文件解出全部文件条目到 destDir；已存在的目标文件跳过。返回解出条目数。 */
 export function extractZipTo(zipFile: string, destDir: string): number {
   const buf = fs.readFileSync(zipFile);

@@ -22,7 +22,7 @@
 
 ### 2.2 VersionRef / VersionManifest（[version.ts](../packages/core-spec/src/version.ts)）
 
-清单条目轻量形状。事实来源：Betacraft v1 `version_list.txt`（反引号分隔行，字段 0 为 id）+ `.info` 属性文件（`release-date`/`compile-date`/`other-name`）。`era` 供 Phase 3 年代分层 UI；`installed` 由本地扫描填充。
+清单条目轻量形状。事实来源：Betacraft v1 `version_list.txt`（反引号分隔行，字段 0 为 id）+ `.info` 属性文件（`release-date`/`compile-date`/`other-name`）。`era` 供 Phase 3 年代分层 UI；`installed` 由本地扫描填充（真相源 = `versions/<id>.jar` 实存）。`custom` 按 v1 语义标记自定义版本：裸 jar（有 jar 无 `.info`）或 `.info` 声明 `custom=true`；custom 版本的 `.info` 归用户所有，启动时跳过远端重下/覆盖（v1 Launcher.java L412/L432 豁免），裸 jar 由类检测（`wrapperDetector.ts`，v1 WrapperDetector 移植，4k 除外——4k 走 `--appletClass M` 显式数据路径）合成启动元数据，检测失败显式报错（Error 7 语义）。
 
 ### 2.3 VersionJson（Mojang 兼容 + Betacraft 扩展）
 
@@ -95,7 +95,7 @@ Applet 容器（主类 `AppletLauncher`）的 `gameArgs` 末尾追加 `--width <
 | `attic:instances:list` | — | `IpcResult<InstanceView[]>` |
 | `attic:instances:save` | `InstanceView` | `IpcResult<InstanceView>` |
 | `attic:window:control` | `WindowAction`（`minimize` \| `toggle-maximize` \| `close`） | `IpcResult<void>`（无边距窗顶栏三键；`toggle-maximize` 由宿主在最大化/还原间切换） |
-| `attic:window:console` | — | `IpcResult<void>`（打开/聚焦独立控制台窗口；v1 语义：MC 日志独立窗，与主页解耦。已存在则聚焦复用） |
+| `attic:window:console` | — | `IpcResult<void>`（独立控制台窗口；v1 语义：MC 日志独立窗，与主页解耦。每次调用新建窗口并绑定当前会话 pid（`?window=console&pid=`），旧控制台不复用；ConsolePanel 按 pid 过滤本会话输出） |
 
 统一 `IpcResult<T>` 封装：错误以 `{ ok:false, error }` 返回，不跨进程抛异常。未实现通道返回 `error: 'not-implemented'`（Phase 1 桥面占位即此值）。
 

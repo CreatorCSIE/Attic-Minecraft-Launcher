@@ -67,7 +67,8 @@
       "-Dhttp.nonProxyHosts=api.betacraft.uk|files.betacraft.uk|checkip.amazonaws.com",
       "-Dorg.lwjgl.librarypath=/data/bin/natives",
       "-Dnet.java.games.input.librarypath=/data/bin/natives",
-      "-Dhttp.proxyHost=betacraft.uk"
+      "-Dhttp.proxyHost=betacraft.uk",
+      "-Dlf.assetsDir=/game/assets"
     ],
     "gameArgs": [
       "steve",

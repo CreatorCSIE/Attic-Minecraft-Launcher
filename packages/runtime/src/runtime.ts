@@ -32,12 +32,13 @@ import { BetacraftClient, type FetchImpl } from './betacraft';
 import { endpointsFromOverrides, resolveEndpoints, type Endpoints } from './endpoints';
 import { infoToVersionJson } from './info';
 import { detectJavaRuntime } from './java/detect';
-import { assembleLaunchConfig, type LaunchContext } from './launch';
+import { APPLET_LAUNCHER_CLASS, assembleLaunchConfig, type LaunchContext } from './launch';
 import { GameProcessManager } from './process';
 import { parseProperties } from './properties';
 import { DEFAULT_AGENT_MOUNTS } from './quirks';
 import {
   binDir,
+  clientJarFile,
   defaultOfflineAccount,
   ensureLayout,
   infoFile,
@@ -48,17 +49,20 @@ import {
   launcherDir,
   nativesDir,
   offlineUuid,
+  readPropertiesFile,
   resolveDataRoot,
   saveAccounts,
   saveInstance,
   saveSettings,
   scanBinPool,
+  scanInstalledInfos,
   scanInstalledJars,
   scanInstalledVersions,
   type InstanceConfig,
   versionListCacheFile,
   zuluJavaDir,
 } from './storage';
+import { detectLaunchMethod, probeIndevEntry } from './wrapperDetector';
 import { extractZipTo } from './zip';
 import { installZuluPackage, queryZuluPackages } from './zulu';
 
@@ -176,35 +180,92 @@ export class AtticRuntime {
 
     // "已安装"= jar 实存（用户指定）；jar∪info 并集仅用于离线兜底列出本地版本
     const jars = new Set(scanInstalledJars(this.root));
+    const infos = new Set(scanInstalledInfos(this.root));
+    const isCustom = (id: string): boolean =>
+      // v1 语义（offlineVersionList）：裸 jar（有 jar 无 .info）即 custom；.info 显式声明同判
+      (jars.has(id) && !infos.has(id)) ||
+      (infos.has(id) && readPropertiesFile(infoFile(this.root, id))['custom']?.toLowerCase() === 'true');
     const local = scanInstalledVersions(this.root);
-    const out: VersionRef[] = (refs ?? []).map((ref) => ({ ...ref, installed: jars.has(ref.id) }));
+    const out: VersionRef[] = (refs ?? []).map((ref) => ({
+      ...ref,
+      installed: jars.has(ref.id),
+      ...(isCustom(ref.id) ? { custom: true } : {}),
+    }));
     for (const id of local) {
-      if (!out.some((ref) => ref.id === id)) out.push({ id, repository: 'local', installed: jars.has(id) });
+      if (!out.some((ref) => ref.id === id)) {
+        out.push({ id, repository: 'local', installed: jars.has(id), ...(isCustom(id) ? { custom: true } : {}) });
+      }
     }
     if (out.length === 0) throw new Error('版本清单获取失败且无本地缓存/安装');
     return out;
   }
 
-  /** 本地 .info 优先（离线可用），缺失才下载并落盘。 */
+  /** 本地 .info 优先（离线可用），缺失才下载并落盘；下载失败退裸 jar custom 路径。 */
   async getVersionJson(versionId: string): Promise<VersionJson> {
     const local = readTextIfPresent(infoFile(this.root, versionId));
     if (local !== null) return this.withAgentMounts(infoToVersionJson(versionId, parseProperties(local)));
-    const text = await this.client.fetchVersionInfo(versionId);
-    this.client.saveVersionInfo(this.root, versionId, text);
-    return this.withAgentMounts(infoToVersionJson(versionId, parseProperties(text)));
-  }
-
-  /** 每次启动重下 .info（v2 已知坑：元数据陈旧）；网络失败退本地。 */
-  private async refreshVersionInfo(versionId: string): Promise<VersionJson> {
     try {
       const text = await this.client.fetchVersionInfo(versionId);
       this.client.saveVersionInfo(this.root, versionId, text);
       return this.withAgentMounts(infoToVersionJson(versionId, parseProperties(text)));
     } catch (error) {
-      const local = readTextIfPresent(infoFile(this.root, versionId));
-      if (local === null) throw error;
-      return this.withAgentMounts(infoToVersionJson(versionId, parseProperties(local)));
+      const custom = this.tryCustomVersionJson(versionId);
+      if (custom) return custom;
+      throw error;
     }
+  }
+
+  /**
+   * 每次启动重下 .info（v2 已知坑：元数据陈旧）；网络失败退本地。
+   * v1 豁免（Launcher.java L412/L432）：custom=true 的 .info 归用户所有，跳过重下/覆盖。
+   */
+  private async refreshVersionInfo(versionId: string): Promise<VersionJson> {
+    const localText = readTextIfPresent(infoFile(this.root, versionId));
+    if (localText !== null) {
+      const props = parseProperties(localText);
+      if (props['custom']?.toLowerCase() === 'true') return this.withAgentMounts(infoToVersionJson(versionId, props));
+    }
+    try {
+      const text = await this.client.fetchVersionInfo(versionId);
+      this.client.saveVersionInfo(this.root, versionId, text);
+      return this.withAgentMounts(infoToVersionJson(versionId, parseProperties(text)));
+    } catch (error) {
+      if (localText !== null) return this.withAgentMounts(infoToVersionJson(versionId, parseProperties(localText)));
+      const custom = this.tryCustomVersionJson(versionId);
+      if (custom) return custom;
+      throw error;
+    }
+  }
+
+  /**
+   * 裸 jar custom 路径（v1：bare jar 即 custom，downloadJson 豁免）：类检测合成元数据。
+   * 检测失败 = Error 7 语义：显式报错并指引手编 .info（数据缺口可见，不静默兜底）。
+   */
+  private tryCustomVersionJson(versionId: string): VersionJson | null {
+    if (fs.existsSync(infoFile(this.root, versionId))) return null;
+    const jar = clientJarFile(this.root, versionId);
+    if (!fs.existsSync(jar)) return null;
+    const method = detectLaunchMethod(jar);
+    if (method === 'custom') {
+      throw new Error(
+        `无法识别启动方式（v1 Error 7）：请编辑 ${infoFile(this.root, versionId)} 配置 launch-method`,
+      );
+    }
+    return this.withAgentMounts(infoToVersionJson(versionId, { 'launch-method': method, custom: 'true' }));
+  }
+
+  /**
+   * indev 混代归位（用户报障：早期 indev jar 无 Minecraft.main → "找不到主类"）：
+   * launch-method=indev 覆盖 2.0-preview→1.5.2，按本地 jar 探测——仅 MinecraftApplet 形态
+   * 改走 legacyfix AppletLauncher 容器（候选表首项即 net.minecraft.client.MinecraftApplet，
+   * jar 已在 classpath，无需 --appletClass）；beta+ 维持 Minecraft 主类直启。
+   */
+  private resolveIndevMainClass(json: VersionJson): VersionJson {
+    if (json.betacraft?.launchMethod !== 'indev') return json;
+    if (probeIndevEntry(clientJarFile(this.root, json.id)) === 'applet') {
+      return { ...json, mainClass: APPLET_LAUNCHER_CLASS };
+    }
+    return json;
   }
 
   /** 真实 betacraft .info 不含 agentMount——并入 Attic 自带决策表（数据，非代码）。 */
@@ -214,7 +275,7 @@ export class AtticRuntime {
   }
 
   async dryRunLaunch(request: LaunchRequest): Promise<LaunchConfig> {
-    const json = await this.getVersionJson(request.versionId);
+    const json = this.resolveIndevMainClass(await this.getVersionJson(request.versionId));
     const context = await this.buildContext(request);
     return assembleLaunchConfig(json, context, {
       extraJvmArgs: request.extraJvmArgs,
@@ -225,7 +286,7 @@ export class AtticRuntime {
   async launch(request: LaunchRequest): Promise<GameSession> {
     try {
       if (this.processes.running) throw new Error('游戏进程已在运行');
-      const json = await this.refreshVersionInfo(request.versionId);
+      let json = await this.refreshVersionInfo(request.versionId);
       // BC `.info` 无 libraries → 从 Mojang 重发布 JSON 回填库池（classic 等不在清单：BC jar 自捆绑依赖，静默跳过）。
       if (!json.libraries || json.libraries.length === 0) {
         try {
@@ -234,10 +295,15 @@ export class AtticRuntime {
           /* 无重发布数据 */
         }
       }
-      await this.client.downloadClientJar(json, this.root);
+      // 裸 jar custom 合成元数据无下载地址：jar 本体已在位，跳过下载（v1 downloadJson 豁免）
+      if (json.jar?.url || json.downloads?.client?.url) await this.client.downloadClientJar(json, this.root);
+      json = this.resolveIndevMainClass(json);
       await this.client.downloadLibrariesToBin(json, this.root);
       this.extractNatives();
-      await this.client.downloadAssetIndex(json, this.root);
+      // 资产补全（v2 语义）：索引 + objects 全体由启动器预置——legacyfix 只自动补 custom 段，
+      // objects 缺失即游戏内 CodecJOrbis/OpenAL 声音 NPE（用户实测 c0.0.22a）。
+      const assetIndexId = await this.client.downloadAssetIndex(json, this.root);
+      if (assetIndexId) await this.client.downloadAssetObjects(this.root, assetIndexId);
 
       const context = await this.buildContext(request);
       const config = assembleLaunchConfig(json, context, {

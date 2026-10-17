@@ -127,6 +127,32 @@ test('levelServer：proxyArgs 后、javaagent 前注入 -Dlf.proxy.levelServer�
   assert.ok(!without.jvmArgs.some((a) => a.includes('lf.proxy.levelServer')));
 });
 
+test('资产索引钉死：assetsDir 后、javaagent 前注入 -Dlf.assetIndex（0130 → 权威 20100124）', () => {
+  const versionJson = {
+    id: 'in-20100130',
+    mainClass: 'net.minecraft.client.Minecraft',
+    betacraft: { agentMount: [{ form: 'javaagent', path: 'legacyfix/lf.jar' }] },
+  };
+  const config = assembleLaunchConfig(versionJson, baseContext());
+  const idxDir = config.jvmArgs.indexOf('-Dlf.assetsDir=/game/assets');
+  assert.ok(idxDir >= 0);
+  // BC v2 权威：0130 → 20100124（标题探测同值），而非 ID 正则表的 20100212。
+  assert.equal(config.jvmArgs[idxDir + 1], '-Dlf.assetIndex=20100124');
+  const idxAgent = config.jvmArgs.findIndex((a) => a.startsWith('-javaagent:'));
+  assert.ok(idxDir + 1 < idxAgent);
+
+  // legacy/pre-1.6（legacyfix isInvalidIndex 语义）→ 不注入，保留缺省行为。
+  for (const assets of ['legacy', 'pre-1.6']) {
+    const c = assembleLaunchConfig({ id: '1.5.2', mainClass: 'net.minecraft.client.Minecraft', assets }, baseContext());
+    assert.ok(!c.jvmArgs.some((a) => a.includes('lf.assetIndex')), `${assets} 不应注入`);
+  }
+  // 无资产（pre-classic → empty / 4k → 表外）→ 不注入。
+  for (const id of ['pc-132011', '4k-0144']) {
+    const c = assembleLaunchConfig({ id, mainClass: 'net.minecraft.client.Minecraft' }, baseContext());
+    assert.ok(!c.jvmArgs.some((a) => a.includes('lf.assetIndex')), `${id} 不应注入`);
+  }
+});
+
 test('实例 launchArgs 紧随固定 -Xmx 注入；Applet 容器 gameArgs 末尾带 --width/--height，非 Applet 不带', () => {
   const appletJson = { id: 'c0.0.15a', mainClass: APPLET_LAUNCHER_CLASS };
   const context = { ...baseContext(), launchArgs: '-Xmx1G -XX:+UseG1GC', width: 854, height: 480 };

@@ -13,6 +13,7 @@ const {
   loadInstance,
   listInstances,
   scanBinPool,
+  scanInstalledInfos,
   scanInstalledJars,
   scanInstalledVersions,
   offlineUuid,
@@ -21,8 +22,10 @@ const {
   jsonsDir,
   nativesDir,
   instancesDir,
+  versionListCacheFile,
   AtticRuntime,
 } = require('../dist/index.js');
+const { buildJarBuffer } = require('./zipFixture.js');
 
 function tempRoot(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'attic-test-'));
@@ -135,6 +138,80 @@ test('扫描：bin 库池与已安装版本并集', (t) => {
   assert.deepEqual(scanInstalledVersions(root), ['b1.7.3', 'c2.0']);
   // "已安装"徽标真相源 = jar 实存：仅有 .info 的 c2.0 不算安装（用户指定）
   assert.deepEqual(scanInstalledJars(root), ['b1.7.3']);
+  assert.deepEqual(scanInstalledInfos(root), ['b1.7.3', 'c2.0']);
+});
+
+test('custom 语义（v1）：列表打标 + 裸 jar 检测合成 + Error 7 + 4k --appletClass', async (t) => {
+  const root = tempRoot(t);
+  ensureLayout(root);
+  fs.writeFileSync(path.join(versionsDir(root), 'b1.7.3.jar'), buildJarBuffer([]));
+  fs.writeFileSync(path.join(jsonsDir(root), 'b1.7.3.info'), 'launch-method=beta\n');
+  // 裸 jar（有 jar 无 .info，classic 形态类）= custom（v1 offlineVersionList 语义）
+  fs.writeFileSync(
+    path.join(versionsDir(root), 'myver.jar'),
+    buildJarBuffer(['com.mojang.minecraft.MinecraftApplet']),
+  );
+  // 无类可检测的裸 jar → Error 7 指引
+  fs.writeFileSync(path.join(versionsDir(root), 'emptyver.jar'), buildJarBuffer(['com.example.Nothing']));
+  // .info 显式声明 custom=true（无 jar：未安装但 custom）
+  fs.writeFileSync(path.join(jsonsDir(root), 'declared.info'), 'launch-method=beta\ncustom=true\n');
+  fs.writeFileSync(path.join(jsonsDir(root), '4k-021742.info'), 'launch-method=4k\n');
+
+  const rt = new AtticRuntime({ rootDir: root, fetchImpl: () => Promise.reject(new Error('offline')) });
+  // 离线兜底：远端失败 → 读缓存清单
+  fs.writeFileSync(
+    versionListCacheFile(root),
+    JSON.stringify({
+      generatedAt: Date.now(),
+      versions: [
+        { id: 'b1.7.3', repository: 'betacraft', installed: false },
+        { id: 'myver', repository: 'betacraft', installed: false },
+      ],
+    }),
+  );
+  const java = 'C:\\Java\\jdk1.8\\bin\\java.exe';
+
+  const list = await rt.listVersions();
+  const byId = Object.fromEntries(list.map((v) => [v.id, v]));
+  assert.equal(byId['b1.7.3'].custom, undefined, 'jar+info 齐备 = 干净原版');
+  assert.equal(byId['myver'].custom, true, '裸 jar = custom');
+  assert.equal(byId['myver'].installed, true);
+  assert.equal(byId['declared'].custom, true, '.info 声明 custom=true');
+  assert.equal(byId['declared'].installed, false);
+  assert.equal(byId['emptyver'].custom, true);
+
+  // 裸 jar 启动：远端 404/离线 → 类检测合成（classic → AppletLauncher 容器）
+  const cfgMy = await rt.dryRunLaunch({ versionId: 'myver', javaPath: java });
+  assert.equal(cfgMy.mainClass, 'uk.betacraft.legacyfix.applet.AppletLauncher');
+  // 检测失败 = Error 7 语义：显式报错并指引手编 .info
+  await assert.rejects(rt.dryRunLaunch({ versionId: 'emptyver', javaPath: java }), /Error 7/);
+  // 4k：显式启动方法数据路径（不依赖检测），gameArgs 末尾注入 --appletClass M
+  const cfg4k = await rt.dryRunLaunch({ versionId: '4k-021742', javaPath: java });
+  assert.deepEqual(cfg4k.gameArgs.slice(-2), ['--appletClass', 'M']);
+});
+
+test('indev 混代（用户报障修复）：按本地 jar 探测选主类——仅 Applet → AppletLauncher 容器', async (t) => {
+  const root = tempRoot(t);
+  ensureLayout(root);
+  const INDEV_APPLET = 'net.minecraft.client.MinecraftApplet';
+  const INDEV_MAIN = 'net.minecraft.client.Minecraft';
+  fs.writeFileSync(path.join(jsonsDir(root), 'in-20100223.info'), 'launch-method=indev\n');
+  fs.writeFileSync(path.join(jsonsDir(root), 'b-mix.info'), 'launch-method=indev\n');
+  // 早期 indev 形态：仅 MinecraftApplet（无 main）→ 容器
+  fs.writeFileSync(path.join(versionsDir(root), 'in-20100223.jar'), buildJarBuffer([INDEV_APPLET]));
+  // beta+ 形态：两类齐备 → 维持 Minecraft 主类直启（不回归）
+  fs.writeFileSync(path.join(versionsDir(root), 'b-mix.jar'), buildJarBuffer([INDEV_MAIN, INDEV_APPLET]));
+
+  const rt = new AtticRuntime({ rootDir: root, fetchImpl: () => Promise.reject(new Error('offline')) });
+  const java = 'C:\\Java\\jdk1.8\\bin\\java.exe';
+
+  const cfgApplet = await rt.dryRunLaunch({ versionId: 'in-20100223', javaPath: java });
+  assert.equal(cfgApplet.mainClass, 'uk.betacraft.legacyfix.applet.AppletLauncher');
+  // 容器形态：AppletFrame 尺寸参数注入（--width/--height 归 gameArgs 末尾）
+  assert.deepEqual(cfgApplet.gameArgs.slice(-4), ['--width', '854', '--height', '480']);
+
+  const cfgMain = await rt.dryRunLaunch({ versionId: 'b-mix', javaPath: java });
+  assert.equal(cfgMain.mainClass, 'net.minecraft.client.Minecraft');
 });
 
 test('offlineUuid：确定性 + MC 离线格式（version 3 / variant 2）', () => {

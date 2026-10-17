@@ -227,6 +227,19 @@ export function scanInstalledJars(root: string): string[] {
   return [...ids].sort();
 }
 
+/** 本地已有元数据的版本：versions/jsons/*.info（裸 jar = 有 jar 无 info = custom，v1 语义）。 */
+export function scanInstalledInfos(root: string): string[] {
+  const ids = new Set<string>();
+  try {
+    for (const f of fs.readdirSync(jsonsDir(root))) {
+      if (f.endsWith('.info')) ids.add(f.slice(0, -5));
+    }
+  } catch {
+    /* 目录缺失 = 无元数据 */
+  }
+  return [...ids].sort();
+}
+
 /** 本地已有元数据/jar 的版本：versions/*.jar 与 versions/jsons/*.info 并集去重
  * （离线兜底列表用；"已安装"标记请用 scanInstalledJars）。 */
 export function scanInstalledVersions(root: string): string[] {

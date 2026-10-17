@@ -5,6 +5,8 @@
 
 import type { AgentMount, LaunchConfig, VersionJson } from '@attic/core-spec';
 
+import { resolveLaunchAssetIndexId } from './legacyAssets';
+
 /** 拼装输入：宿主侧运行上下文（binPool/versionOrder 由运行时注入，见 contract.md §4）。 */
 export interface LaunchContext {
   javaPath: string;
@@ -39,6 +41,16 @@ const NON_PROXY_HOSTS = 'api.betacraft.uk|files.betacraft.uk|checkip.amazonaws.c
 
 /** Applet 容器主类（legacyfix）：需要把 javaagent 形态的 jar 本体也送上 classpath。 */
 export const APPLET_LAUNCHER_CLASS = 'uk.betacraft.legacyfix.applet.AppletLauncher';
+
+/**
+ * Applet 容器子类型 → 游戏参数 `--appletClass`（legacyfix AppletLauncher.java L56 读取，
+ * launchEntry 检查直接父类 = java.applet.Applet 则 AppletFrame 嵌入）。
+ * 缺省不传 = legacyfix 候选表自动探测（MinecraftApplet 系）；4k-* jar 仅含 M.class，
+ * 须显式指定（v1 FkWrapper loadClass("M") 同语义）。表按启动方法键控（戒律 #1）。
+ */
+export const APPLET_CLASS_BY_METHOD: Record<string, string> = {
+  '4k': 'M',
+};
 
 function indexOfOr(list: string[], value: string, fallback: number): number {
   const idx = list.indexOf(value);
@@ -138,6 +150,19 @@ export function assembleLaunchConfig(
   // 属性优先于 gameDir/legacyfix/level-server.txt（LevelProxyConfig 源码实锤）：
   // 设置里有值即直通覆盖，用户无需删 txt 重触发一次性对话框；缺省不传，保留 LegacyFix 原行为。
   if (context.levelServer) jvmArgs.push(`-Dlf.proxy.levelServer=${context.levelServer}`);
+  // legacyfix GameArgs.getAssetsDir() 缺省回退 = cwd 相对 "assets"（即 gameDir/assets），读不到启动器共享资产根
+  // （c0.0.22a 声音 NPE 根因之一）。官方提示通道 -Dlf.assetsDir 显式钉死共享根，initAssets 的 objects 路径随之前移。
+  jvmArgs.push(`-Dlf.assetsDir=${context.assetsDir.replace(/\\/g, '/')}`);
+  // 资产索引钉死（BC v2 语义：每版本 JSON 权威 assetIndex.id）。legacyfix 运行时标题探测
+  // （ProxyPatch→setVersion→resolveIndex）无条件覆写 GameArgs.assetIndex 静态字段，标题变换串
+  // （如 0130 标题 "Minecraft 0.31"→c0.31→20100124）与预取的版本 ID 表结果（in-.+→20100212）不同源
+  // → objects 错配、部分声音缺失。-Dlf.assetIndex 走 Agent SETTINGS 通道（Agent.java 收 lf.* 系统属性），
+  // getAssetIndexPath/getAssetIndexId 优先读它、标题探测覆写不到 → 与预取同源。
+  // legacyfix isInvalidIndex 语义：'legacy'/'pre-1.6' 不注入（保留 legacyfix 缺省行为）。
+  const assetIndexId = resolveLaunchAssetIndexId(versionJson);
+  if (assetIndexId && assetIndexId !== 'legacy' && assetIndexId !== 'pre-1.6') {
+    jvmArgs.push(`-Dlf.assetIndex=${assetIndexId}`);
+  }
   for (const mount of mounts) {
     if (mount.form === 'javaagent') jvmArgs.push(`-javaagent:${dataDir}/${mount.path}=${context.gameDir}`);
   }
@@ -174,6 +199,14 @@ export function assembleLaunchConfig(
   // 实例值以 v1 缺省 854x480 显式传入；非 Applet 版本窗口由 LWJGL/DeAwt 自管，不注入（避免污染主类参数解析）。
   if (isAppletContainer && context.width && context.height) {
     gameArgs.push('--width', String(context.width), '--height', String(context.height));
+  }
+  // Applet 子类型指定（4k-* → --appletClass M）：deawt 保持缺省开启（4k 纯 AWT 渲染是否需
+  // -Dlf.deawt.disable 以实机窗口测试为准，见 launch 实测记录）。
+  if (isAppletContainer) {
+    const appletClass = versionJson.betacraft?.launchMethod
+      ? APPLET_CLASS_BY_METHOD[versionJson.betacraft.launchMethod]
+      : undefined;
+    if (appletClass) gameArgs.push('--appletClass', appletClass);
   }
 
   const config: LaunchConfig = {

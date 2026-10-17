@@ -13,7 +13,8 @@ import path from 'node:path';
 import type { DownloadItem, DownloadProgressEvent, LibraryInfo, VersionEra, VersionJson, VersionRef } from '@attic/core-spec';
 
 import { resolveEndpoints, type Endpoints } from './endpoints';
-import { assetIndexFile, binDir, clientJarFile, infoFile } from './storage';
+import { ASSET_INDEXES, planAssetObjects, resolveLaunchAssetIndexId } from './legacyAssets';
+import { assetIndexFile, assetsDir, binDir, clientJarFile, infoFile } from './storage';
 
 export type FetchImpl = (url: string, init?: RequestInit) => Promise<Response>;
 
@@ -215,17 +216,44 @@ export class BetacraftClient {
     await this.download(url, dest, 'client-jar', json.id, sha1 ? { algo: 'sha1', value: sha1 } : undefined);
   }
 
-  /** 资产索引 → assets/indexes/<id>.json；无 assetIndex 的远古版本静默跳过。 */
-  async downloadAssetIndex(json: VersionJson, root: string): Promise<void> {
+  /**
+   * 资产索引 → assets/indexes/<id>.json，返回落位的索引 ID（无资产/无数据 → null）。
+   * ID 四级来源（resolveLaunchAssetIndexId 统一入口，与启动注入 -Dlf.assetIndex 同源）：
+   * Mojang 形状 assetIndex > .info assets 字段 > BC v2 权威表 > legacyfix version_data 表。
+   * BC `.info` 全线无 assets 字段；Indev 年代标题探测与 ID 表不同源（0130 标题 "Minecraft 0.31"
+   * → c0.31 → 20100124，ID 表 → 20100212），必须由 BC v2 权威表钉死，否则 objects 错配、部分声音缺失。
+   */
+  async downloadAssetIndex(json: VersionJson, root: string): Promise<string | null> {
     const ai = json.assetIndex;
-    const id = ai?.id ?? json.assets;
-    if (!ai?.url || !id) return;
+    const id = resolveLaunchAssetIndexId(json);
+    if (!id) return null;
+    const entry = ASSET_INDEXES[id];
+    const url = ai?.url ?? entry?.url;
+    if (!url) return null;
+    const sha1 = ai?.sha1 ?? entry?.sha1;
     const dest = assetIndexFile(root, id);
     if (fs.existsSync(dest)) {
-      if (!ai.sha1) return;
-      if ((await hashFile(dest, 'sha1')) === ai.sha1.toLowerCase()) return;
+      if (!sha1) return id;
+      if ((await hashFile(dest, 'sha1')) === sha1.toLowerCase()) return id;
     }
-    await this.download(ai.url, dest, 'asset-index', id, ai.sha1 ? { algo: 'sha1', value: ai.sha1 } : undefined);
+    await this.download(url, dest, 'asset-index', id, sha1 ? { algo: 'sha1', value: sha1 } : undefined);
+    return id;
+  }
+
+  /**
+   * 资产对象补全 → assets/objects/<2位前缀>/<hash>（v2 bc_game_download_assets 语义：
+   * 存在且 size 相符即跳过；hash 即 sha1，下载时校验）。
+   * legacyfix 只自动补索引 `custom` 段，`objects` 全体是启动器责任——缺失即游戏内声音 NPE（用户实测）。
+   */
+  async downloadAssetObjects(root: string, indexId: string): Promise<void> {
+    const indexFile = assetIndexFile(root, indexId);
+    if (!fs.existsSync(indexFile)) return;
+    const plan = planAssetObjects(JSON.parse(fs.readFileSync(indexFile, 'utf8')) as unknown);
+    for (const obj of plan) {
+      const dest = path.join(assetsDir(root), 'objects', obj.hash.slice(0, 2), obj.hash);
+      if (fs.existsSync(dest) && fs.statSync(dest).size === obj.size) continue;
+      await this.download(obj.url, dest, 'asset', `${indexId}:${obj.key}`, { algo: 'sha1', value: obj.hash });
+    }
   }
 
   /** json.libraries → bin/<basename>（整目录上 classpath，缺失才下）。 */

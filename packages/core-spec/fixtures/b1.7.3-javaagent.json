@@ -71,6 +71,8 @@
       "-Dorg.lwjgl.librarypath=/data/bin/natives",
       "-Dnet.java.games.input.librarypath=/data/bin/natives",
       "-Dhttp.proxyHost=betacraft.uk",
+      "-Dlf.assetsDir=/game/assets",
+      "-Dlf.assetIndex=beta",
       "-javaagent:/data/legacyfix/legacyfix-3.6.0.jar=/game/b1.7.3"
     ],
     "gameArgs": [
