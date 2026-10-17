@@ -105,6 +105,8 @@ export interface AtticEventPayloads {
 
 export interface LaunchRequest {
   versionId: string;
+  /** 实例名；缺省 = `default instance`（v1 语义：gameDir 由实例派生，同实例切版本共享存档，选中版本写回实例）。 */
+  instanceId?: string;
   /** 缺省 = 当前选中账户；离线单用户起步时可为空。 */
   accountId?: string;
   /** 覆盖 Java 探测自动选择的结果。 */

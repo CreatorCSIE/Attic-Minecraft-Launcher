@@ -4,7 +4,7 @@
  * 启动视图三栏（rail | 版本列表 | 启动/控制台堆叠），实例/设置为 rail + 居中内容区。
  * view 切换仍是 ref 状态，零 vue-router；图标为内联 lucide 路径（MIT），零新依赖。
  */
-import { ref } from 'vue';
+import { onMounted, ref } from 'vue';
 import { useI18n } from './i18n';
 import { useBridge } from './composables/useBridge';
 import TitleBar from './components/TitleBar.vue';
@@ -18,6 +18,56 @@ type View = 'launch' | 'instances' | 'settings';
 const view = ref<View>('launch');
 const { t } = useI18n();
 const { hasBridge } = useBridge();
+
+// —— rail 底部作者头像：在线取 GitHub 头像，localStorage 缓存（TTL 7 天），失败回落旧缓存/占位 ——
+const CREATOR_GITHUB = 'CreatorCSIE';
+const AVATAR_CACHE_KEY = 'attic:creator-avatar:v1';
+const AVATAR_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const avatarSrc = ref('');
+
+function readAvatarCache(): { at: number; src: string } | null {
+  try {
+    const raw = localStorage.getItem(AVATAR_CACHE_KEY);
+    if (!raw) return null;
+    const v = JSON.parse(raw) as { at?: unknown; src?: unknown };
+    return typeof v.src === 'string' && typeof v.at === 'number' ? { at: v.at, src: v.src } : null;
+  } catch {
+    return null;
+  }
+}
+
+async function loadCreatorAvatar(): Promise<void> {
+  const cached = readAvatarCache();
+  if (cached && Date.now() - cached.at < AVATAR_TTL_MS) {
+    avatarSrc.value = cached.src;
+    return;
+  }
+  try {
+    // api.github.com 带 CORS；avatar_url（avatars.githubusercontent.com）同样允许跨域 fetch。
+    const user = await fetch(`https://api.github.com/users/${CREATOR_GITHUB}`).then((r) => {
+      if (!r.ok) throw new Error(`github api ${r.status}`);
+      return r.json();
+    });
+    const blob = await fetch(`${user.avatar_url}&s=128`).then((r) => {
+      if (!r.ok) throw new Error(`avatar ${r.status}`);
+      return r.blob();
+    });
+    const src = await new Promise<string>((resolve, reject) => {
+      const fr = new FileReader();
+      fr.onload = () => resolve(String(fr.result));
+      fr.onerror = () => reject(fr.error);
+      fr.readAsDataURL(blob);
+    });
+    localStorage.setItem(AVATAR_CACHE_KEY, JSON.stringify({ at: Date.now(), src }));
+    avatarSrc.value = src;
+  } catch {
+    if (cached) avatarSrc.value = cached.src; // 断网/限流：过期缓存兜底
+  }
+}
+
+onMounted(() => {
+  void loadCreatorAvatar();
+});
 </script>
 
 <template>
@@ -112,9 +162,16 @@ const { hasBridge } = useBridge();
           </svg>
         </button>
 
-        <!-- rail 底部账户/状态占位区（空态装饰，桥面接入前不臆造交互） -->
-        <div class="rail-foot" aria-hidden="true">
-          <span class="rail-avatar"></span>
+        <!-- rail 底部作者头像（GitHub 在线获取 + 本地缓存；未就绪时保留圆形占位） -->
+        <div class="rail-foot">
+          <img
+            v-if="avatarSrc"
+            class="rail-avatar"
+            :src="avatarSrc"
+            :alt="`GitHub: ${CREATOR_GITHUB}`"
+            :title="`GitHub: ${CREATOR_GITHUB}`"
+          />
+          <span v-else class="rail-avatar" aria-hidden="true"></span>
         </div>
       </nav>
 
@@ -211,6 +268,8 @@ const { hasBridge } = useBridge();
   border-radius: var(--radius-pill);
   background: var(--surface-3);
   border: 1px solid var(--surface-4);
+  object-fit: cover; /* img 态：头像裁正方形铺满圆 */
+  display: block;
 }
 .body {
   flex: 1;

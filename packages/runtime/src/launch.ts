@@ -18,8 +18,15 @@ export interface LaunchContext {
   minMemoryMb?: number;
   /** `<root>/bin/*.jar` 库池绝对路径清单。 */
   binPool: string[];
-  /** 年代序（编译日期升序）的版本 id 数组（agentMount 区间判定用；上游清单行序不可当年代序）。 */
+  /** 年代序（编译日期升序）的版本 id 数组（agentMount 区间判定用；上游清单行序不可当年代序用）。 */
   versionOrder: string[];
+  /** LegacyFix 关卡存档模式（`lf.proxy.levelServer`）：'local'/URL；缺省=LegacyFix 一次性对话框。 */
+  levelServer?: string;
+  /** 实例 JVM 参数（v1 launchArgs，如 `-Xmx1G`），空白分隔注入 jvmArgs。 */
+  launchArgs?: string;
+  /** 窗口尺寸（Applet 容器 `--width/--height` 游戏参数；v1 缺省 854x480）。 */
+  width?: number;
+  height?: number;
 }
 
 export interface AssembleOptions {
@@ -118,12 +125,19 @@ export function assembleLaunchConfig(
   // ---------- jvmArgs 固定组（顺序即契约） ----------
   const jvmArgs: string[] = [`-Xmx${context.maxMemoryMb}m`];
   if (context.minMemoryMb !== undefined) jvmArgs.push(`-Xms${context.minMemoryMb}m`);
+  // v1 语义：实例 launchArgs（如 "-Xmx1G"）紧随固定 -Xmx 注入——JVM 对重复 -Xmx 取后者，实例覆盖全局。
+  for (const token of (context.launchArgs ?? '').trim().split(/\s+/)) {
+    if (token) jvmArgs.push(token);
+  }
   jvmArgs.push('-Djava.util.Arrays.useLegacyMergeSort=true');
   jvmArgs.push(`-Dhttp.nonProxyHosts=${NON_PROXY_HOSTS}`);
   const natives = `${dataDir}/bin/natives`;
   jvmArgs.push(`-Dorg.lwjgl.librarypath=${natives}`);
   jvmArgs.push(`-Dnet.java.games.input.librarypath=${natives}`);
   for (const arg of versionJson.betacraft?.proxyArgs ?? []) jvmArgs.push(arg);
+  // 属性优先于 gameDir/legacyfix/level-server.txt（LevelProxyConfig 源码实锤）：
+  // 设置里有值即直通覆盖，用户无需删 txt 重触发一次性对话框；缺省不传，保留 LegacyFix 原行为。
+  if (context.levelServer) jvmArgs.push(`-Dlf.proxy.levelServer=${context.levelServer}`);
   for (const mount of mounts) {
     if (mount.form === 'javaagent') jvmArgs.push(`-javaagent:${dataDir}/${mount.path}=${context.gameDir}`);
   }
@@ -155,6 +169,11 @@ export function assembleLaunchConfig(
     for (const [key, value] of Object.entries(opts.gameParams)) {
       gameArgs.push(`--${key}`, value);
     }
+  }
+  // Applet 容器窗口尺寸（AppletFrame.java L24-25 读 --width/--height，缺省兜底 640x480）：
+  // 实例值以 v1 缺省 854x480 显式传入；非 Applet 版本窗口由 LWJGL/DeAwt 自管，不注入（避免污染主类参数解析）。
+  if (isAppletContainer && context.width && context.height) {
+    gameArgs.push('--width', String(context.width), '--height', String(context.height));
   }
 
   const config: LaunchConfig = {

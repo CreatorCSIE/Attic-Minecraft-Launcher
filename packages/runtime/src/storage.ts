@@ -155,18 +155,23 @@ function toNumber(value: string | undefined): number | undefined {
 export function loadInstance(root: string, name: string): InstanceConfig | null {
   const props = readPropertiesFile(INSTANCE_FILE(root, name));
   if (Object.keys(props).length === 0) return null;
+  // v1 语义（Instance.loadInstance 以 newInstance 缺省为底、属性覆盖）：
+  // 缺 launchArgs/width/height 的老档案也拿到 v1 缺省（854x480，而非 legacyfix 兜底的 640x480）。
   const config: InstanceConfig = {
     name: props['name'] ?? name,
     version: props['version'] ?? 'b1.7.3',
     gameDir: props['gameDir'] ?? path.join(root, props['name'] ?? name),
+    launchArgs: props['launchArgs'] ?? '-Xmx1G',
+    width: 854,
+    height: 480,
   };
-  for (const key of ['launchArgs', 'javaPath', 'addons'] as const) {
-    if (props[key] !== undefined) config[key] = props[key];
-  }
   const width = toNumber(props['width']);
   if (width !== undefined) config.width = width;
   const height = toNumber(props['height']);
   if (height !== undefined) config.height = height;
+  for (const key of ['javaPath', 'addons'] as const) {
+    if (props[key] !== undefined) config[key] = props[key];
+  }
   for (const key of ['proxy', 'keepopen', 'RPC', 'intelFix', 'console', 'isJavaPathNew'] as const) {
     const b = toBool(props[key]);
     if (b !== undefined) config[key] = b;

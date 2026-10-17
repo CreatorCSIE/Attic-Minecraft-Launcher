@@ -24,6 +24,7 @@ export function settingsFromProps(props: Record<string, string>): AppSettings {
   if (Number.isFinite(mem) && mem > 0) out.maxMemoryMb = mem;
   if (props['username']) out.username = props['username'];
   if (THEMES.includes(props['theme'] as ThemeMode)) out.theme = props['theme'] as ThemeMode;
+  if (props['levelServer']) out.levelServer = props['levelServer'];
 
   const endpoints: EndpointOverrides = {};
   let hasEndpoint = false;
@@ -57,6 +58,7 @@ export function applySettingsToProps(
   put('maxMemoryMb', settings.maxMemoryMb === undefined ? undefined : String(settings.maxMemoryMb));
   put('username', settings.username);
   put('theme', settings.theme);
+  put('levelServer', settings.levelServer);
 
   for (const key of ENDPOINT_KEYS) {
     put(`${ENDPOINT_PREFIX}${key}`, settings.endpoints?.[key]);
@@ -64,13 +66,21 @@ export function applySettingsToProps(
   return next;
 }
 
-/** 实例薄档案 ↔ v1 InstanceConfig 字段（gameDir 由调用方按 v1 惯例派生，不进视图）。 */
+/** 实例视图 ↔ v1 InstanceConfig（对齐 v1 Instance Settings 可编辑集，全字段往返）。 */
 export function instanceViewFromConfig(config: {
   name: string;
   version: string;
+  gameDir?: string;
+  launchArgs?: string;
+  width?: number;
+  height?: number;
   javaPath?: string;
 }): InstanceView {
   const view: InstanceView = { name: config.name, version: config.version };
+  if (config.gameDir) view.gameDir = config.gameDir;
+  if (config.launchArgs) view.launchArgs = config.launchArgs;
+  if (config.width !== undefined) view.width = config.width;
+  if (config.height !== undefined) view.height = config.height;
   if (config.javaPath) view.javaPath = config.javaPath;
   return view;
 }

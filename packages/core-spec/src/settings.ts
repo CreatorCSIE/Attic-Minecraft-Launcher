@@ -36,16 +36,31 @@ export interface AppSettings {
   username?: string;
   /** 主题；缺省 = system。 */
   theme?: ThemeMode;
+  /**
+   * LegacyFix 关卡存档模式（JVM 属性 `lf.proxy.levelServer` 直通）：
+   * `local`=强制本地单人存档；URL=在线关卡代理；缺省=LegacyFix 一次性对话框。
+   * 有值时对话框永不弹，且覆盖游戏目录里陈旧的 `legacyfix/level-server.txt`（属性优先于文件）。
+   */
+  levelServer?: string;
   /** 端点覆盖；改动在下次启动应用后生效（端点属构造级配置）。 */
   endpoints?: EndpointOverrides;
 }
 
 /**
- * 实例的渲染侧视图——薄档案：仅携带版本与可选 Java 覆盖。
- * gameDir 由宿主按 v1 惯例派生（`<root>/<version>`），不进契约；内存取全局设置。
+ * 实例的渲染侧视图——对齐 v1 Instance Settings 可编辑集（名字/版本/目录/JVM 参数/窗口尺寸/Java 路径）。
+ * 版本是实例属性（v1 `InstanceSettings` 语义：同实例切版本存档共享）。gameDir 缺省 = 宿主派生
+ * `root/<实例名>`（v1 `Instance.newInstance`）；内存另有全局设置，实例 `launchArgs` 在其后注入（后者生效）。
  */
 export interface InstanceView {
   name: string;
   version: string;
+  /** 游戏目录；缺省 = `root/<实例名>`。 */
+  gameDir?: string;
+  /** JVM 参数（v1 `launchArgs`，如 `-Xmx1G`），空白分隔注入 jvmArgs。 */
+  launchArgs?: string;
+  /** 窗口宽（Applet 容器 `--width`；v1 缺省 854）。 */
+  width?: number;
+  /** 窗口高（Applet 容器 `--height`；v1 缺省 480）。 */
+  height?: number;
   javaPath?: string;
 }

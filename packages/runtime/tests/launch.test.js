@@ -6,7 +6,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { assembleLaunchConfig, filterAgentMounts } = require('../dist/index.js');
+const { assembleLaunchConfig, filterAgentMounts, APPLET_LAUNCHER_CLASS } = require('../dist/index.js');
 
 const FIXTURES_DIR = path.join(path.dirname(require.resolve('@attic/core-spec/package.json')), 'fixtures');
 
@@ -107,6 +107,39 @@ test('主类缺失（launch-method 不在表）→ 显式报错不静默兜底',
     () => assembleLaunchConfig(versionJson, baseContext()),
     /无法确定主类.*4k/,
   );
+});
+
+test('levelServer：proxyArgs 后、javaagent 前注入 -Dlf.proxy.levelServer；缺省不注入', () => {
+  const versionJson = {
+    id: 'b1.7.3',
+    mainClass: 'net.minecraft.client.Minecraft',
+    betacraft: {
+      proxyArgs: ['-Dhttp.proxyHost=betacraft.uk'],
+      agentMount: [{ form: 'javaagent', path: 'legacyfix/lf.jar' }],
+    },
+  };
+  const withLs = assembleLaunchConfig(versionJson, { ...baseContext(), levelServer: 'local' });
+  const idxProxy = withLs.jvmArgs.indexOf('-Dhttp.proxyHost=betacraft.uk');
+  const idxLs = withLs.jvmArgs.indexOf('-Dlf.proxy.levelServer=local');
+  const idxAgent = withLs.jvmArgs.findIndex((a) => a.startsWith('-javaagent:'));
+  assert.ok(idxProxy >= 0 && idxLs === idxProxy + 1 && idxLs < idxAgent);
+  const without = assembleLaunchConfig(versionJson, baseContext());
+  assert.ok(!without.jvmArgs.some((a) => a.includes('lf.proxy.levelServer')));
+});
+
+test('实例 launchArgs 紧随固定 -Xmx 注入；Applet 容器 gameArgs 末尾带 --width/--height，非 Applet 不带', () => {
+  const appletJson = { id: 'c0.0.15a', mainClass: APPLET_LAUNCHER_CLASS };
+  const context = { ...baseContext(), launchArgs: '-Xmx1G -XX:+UseG1GC', width: 854, height: 480 };
+  const config = assembleLaunchConfig(appletJson, context);
+  assert.equal(config.jvmArgs[0], '-Xmx1024m');
+  assert.equal(config.jvmArgs[1], '-Xmx1G');
+  assert.equal(config.jvmArgs[2], '-XX:+UseG1GC');
+  const tail = config.gameArgs.slice(-4);
+  assert.deepEqual(tail, ['--width', '854', '--height', '480']);
+
+  const betaConfig = assembleLaunchConfig({ id: 'b1.7.3', mainClass: 'net.minecraft.client.Minecraft' }, context);
+  assert.ok(!betaConfig.gameArgs.includes('--width'));
+  assert.ok(betaConfig.jvmArgs.includes('-Xmx1G'));
 });
 
 function baseContext() {

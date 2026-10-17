@@ -57,7 +57,9 @@
 5. `gameArgs[0]` 是用户名；
 6. `betacraft.proxyArgs` 全量进 `jvmArgs`。
 
-`jvmArgs` 固定组（顺序即拼装顺序）：`-Xmx`（+可选 `-Xms`）→ `-Djava.util.Arrays.useLegacyMergeSort=true` → `-Dhttp.nonProxyHosts=api.betacraft.uk|files.betacraft.uk|checkip.amazonaws.com` → LWJGL2 natives 两参（`org.lwjgl.librarypath`/`net.java.games.input.librarypath` = `<dataDir>/bin/natives`）→ `proxyArgs` → `javaagent` 展开 → 请求侧 `extraJvmArgs`。
+`jvmArgs` 固定组（顺序即拼装顺序）：`-Xmx`（+可选 `-Xms`）→ 实例 `launchArgs` 空白分隔逐 token 注入（v1 语义：重复 `-Xmx` JVM 取后者，实例覆盖全局）→ `-Djava.util.Arrays.useLegacyMergeSort=true` → `-Dhttp.nonProxyHosts=api.betacraft.uk|files.betacraft.uk|checkip.amazonaws.com` → LWJGL2 natives 两参（`org.lwjgl.librarypath`/`net.java.games.input.librarypath` = `<dataDir>/bin/natives`）→ `proxyArgs` → `-Dlf.proxy.levelServer=<AppSettings.levelServer>`（仅设置里有值时注入，覆盖 `gameDir/legacyfix/level-server.txt`）→ `javaagent` 展开 → 请求侧 `extraJvmArgs`。
+
+Applet 容器（主类 `AppletLauncher`）的 `gameArgs` 末尾追加 `--width <w> --height <h>`（实例值，v1 缺省 854×480；`AppletFrame.java` 读取，缺省兜底 640×480）。非 Applet 版本窗口由 LWJGL/DeAwt 自管，不注入。
 
 `CrashCategory`（v0 分类器枚举）：`none/java-missing/out-of-memory/gl-init/lwjgl-native/unsatisfied-link/unknown`。
 
@@ -65,9 +67,9 @@
 
 渲染侧只通过契约读写设置/实例，绝不直接碰 `launcher.settings` / `instances/*.txt`（戒律 #1：设置是数据）。
 
-- `AppSettings`：`javaPath?`、`maxMemoryMb?`、`username?`、`theme?`（`dark|light|system`）、`endpoints?`。落盘键：`javaPath`/`maxMemoryMb`/`username`/`theme` + `endpoint.*`；`setSettings` 合并写回、未知键保留（v1 遗留键不丢）。
+- `AppSettings`：`javaPath?`、`maxMemoryMb?`、`username?`、`theme?`（`dark|light|system`）、`levelServer?`（LegacyFix 关卡存档模式：`local`/URL；有值时直通 `-Dlf.proxy.levelServer`，抑制一次性对话框并覆盖陈旧 txt）、`endpoints?`。落盘键：`javaPath`/`maxMemoryMb`/`username`/`theme`/`levelServer` + `endpoint.*`；`setSettings` 合并写回、未知键保留（v1 遗留键不丢）。
 - `EndpointOverrides`：全为可序列化的纯字符串（`versionList`/`filesBase`/`legacyfixRelease`/`zuluMetadata`/`mojangManifest`）。函数形态的 `versionJson(id)`/`assetIndex(id)` 由 `filesBase` 在 runtime 侧派生（`endpointsFromOverrides`），契约层不携带可调用形状。端点属构造级配置——改动在下次启动应用后生效。
-- `InstanceView`：薄档案 `{ name, version, javaPath? }`。`gameDir` 由宿主按 v1 惯例派生（`root/<version>`，与 `buildContext` 一致），不进契约；内存取全局设置。
+- `InstanceView`：对齐 v1 Instance Settings 可编辑集 `{ name, version, gameDir?, launchArgs?, width?, height?, javaPath? }`。`gameDir` 缺省 = 宿主派生 `root/<实例名>`（v1 `Instance.newInstance`；已存在实例保留其落位）；`launchArgs`/`width`/`height` 缺省 = v1 `newInstance` 值（`-Xmx1G`、854×480，`loadInstance` 以缺省为底、属性覆盖）。版本是实例属性——launch 时选中版本写回实例（v1 `InstanceSettings` 语义：同实例切版本存档共享）。`LaunchRequest.instanceId?` 缺省 = `default instance`（v1 首启自动建档）。
 
 ## 3. IPC 通道与事件
 
