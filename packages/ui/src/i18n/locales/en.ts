@@ -57,6 +57,7 @@ export const en = {
     unknown: 'Other',
   },
   version: {
+    list: 'Version list',
     installed: 'Installed',
     empty: 'No versions match',
     emptyHint: 'Try a different search term.',

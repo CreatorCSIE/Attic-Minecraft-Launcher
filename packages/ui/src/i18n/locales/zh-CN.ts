@@ -47,6 +47,7 @@ export const zhCN: Record<string, unknown> = {
   },
   // era 标签不翻译（用户指定）：统一回落 en 英文首字母大写形态（Pre-Classic/Classic/…/Release/Other）。
   version: {
+    list: '版本列表',
     installed: '已安装',
     empty: '没有匹配的版本',
     emptyHint: '换个关键词试试。',

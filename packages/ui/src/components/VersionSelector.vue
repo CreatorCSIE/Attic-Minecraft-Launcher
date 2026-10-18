@@ -2,13 +2,19 @@
 /**
  * 版本选择器 —— BlockHelm 式浮动面板，交互为鼠标驱动（用户指定）：
  * 悬浮 dock = 伸展列表；移出 dock = 收起（图钉固定时移出也不收）；
- * 收起态 = 左下角单卡（当前选中版本双行）；图钉/收起按钮为显式操作。
+ * 图钉/收起按钮为显式操作。
  * 显式收起后直到鼠标移出 dock 前不再被 hover 重新展开（dismissed 标志，防止"点了收起没反应"）。
  * 默认折叠：仅持久化图钉偏好，不持久化展开态。
  * 列表项为纯文本双行（Name 主标题 / Subtitle 小字），不用 BlockHelm 方块图标（用户撤回项）。
  * 数据驱动：分组/排序全来自清单 era + 日期字段，UI 零版本判断（戒律 #1）。
+ *
+ * 几何 = BlockHelm HomeLaunchGameListView 单组件配方（用户指定移植）：
+ * 裁剪窗固定为展开高度（实测 scrollHeight，UpdateMenuClipHost 同语义），面板**始终挂载**，
+ * 收起=面板整体下移 (panelH - peekH)、露出多少由静态裁剪窗决定（XAML.cs L393-395 同式）；
+ * 收起态卡片 = 覆盖在面板顶缘的 peekbar（绝对定位，不占内容流 → panelH 恒稳），
+ * 展开时淡出上移、被裁剪窗顶缘吞掉——无 v-if/Transition，动画纯 transform+opacity。
  */
-import { computed, ref } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { useI18n } from '../i18n';
 import { useVersions } from '../composables/useVersions';
 import { useSelection } from '../composables/useSelection';
@@ -45,7 +51,7 @@ function persist(): void {
 const COLLAPSE_DELAY_MS = 110;
 let leaveTimer: ReturnType<typeof setTimeout> | null = null;
 
-// 选中收起后的重入抑制窗：面板从 DOM 移除时，悬在 dock 盒上方的指针会合成触发
+// 选中收起后的重入抑制窗：收起瞬间指针仍悬在 dock 盒上方，会合成触发
 // mouseleave→mouseenter，dismissed 被复位后 hover 立即再展开（用户报"选中后不关闭"）。
 // 窗口期内拒绝 hover 展开；显式点击/图钉不受限。
 const SUPPRESS_REENTER_MS = 600;
@@ -90,39 +96,22 @@ function onPick(id: string): void {
   if (!pinned.value) collapse(true);
 }
 
-// —— 展开动画：对齐 BlockHelm HomeLaunchGameListView 实测机制——ClipHost 底缘固定、
-// Height 从 CollapsedHeight 动画到 ExpandedHeight，内容钉在面板顶缘随顶缘一起上移
-// （XAML：HomeLaunchMenuPanel VerticalAlignment=Top 于 HomeLaunchMenuClipHost 内），
-// 即"卡片顶边上浮、列表在下方陆续显形"，而非幕布式内容静止。
-// 时长 380ms + PowerEase(3.2, EaseOut) 取源码值（--dur-grow/--ease-grow）。
-// 计时不依赖 Vue after-enter/transitionend（内联驱动的 max-height 过渡事件不可靠），
-// 用显式 setTimeout 与 --dur-grow 对齐后解除定高 ——
-const GROW_MS = 400; // --dur-grow(380ms) + 余量
-let growTimer: ReturnType<typeof setTimeout> | null = null;
-function animIn(el: Element): void {
-  const h = el as HTMLElement;
-  if (growTimer) clearTimeout(growTimer);
-  h.style.maxHeight = '0px';
-  void h.offsetHeight; // 强制 reflow，确保 0 起点被渲染
-  requestAnimationFrame(() => {
-    h.style.maxHeight = `${h.scrollHeight}px`;
-  });
-  growTimer = setTimeout(() => {
-    h.style.maxHeight = 'none'; // 解除定高，列表内部滚动不受限
-  }, GROW_MS);
+// —— 高度实测（BlockHelm MeasureExpandedHeight / GetCollapsedHeight 同语义）：
+// panelH = 面板内容流全高（peekbar 绝对定位不计入，值恒稳）；
+// peekH = peekbar 自然高（内容决定，零硬编码）。两者写进 CSS 变量驱动平移与裁剪。
+// onMounted 同步测（DOM 已插入、浏览器尚未绘制）→ 无闪帧；内容变化经 nextTick 重测。
+const panelEl = ref<HTMLElement | null>(null);
+const peekbarEl = ref<HTMLElement | null>(null);
+const panelH = ref(0);
+const peekH = ref(0);
+function remeasure(): void {
+  if (panelEl.value) panelH.value = panelEl.value.scrollHeight;
+  if (peekbarEl.value) peekH.value = peekbarEl.value.offsetHeight;
 }
-function animOut(el: Element): void {
-  if (growTimer) {
-    clearTimeout(growTimer); // 收起打断生长计时，防止面板已不在时误触发
-    growTimer = null;
-  }
-  const h = el as HTMLElement;
-  h.style.maxHeight = `${h.scrollHeight}px`;
-  void h.offsetHeight;
-  requestAnimationFrame(() => {
-    h.style.maxHeight = '0px';
-  });
-}
+onMounted(remeasure);
+watch([groups, search, loading, error], () => void nextTick(remeasure));
+// 选中版本变化 → peekbar 文案双行长度变化，高度可能微差 → 一并重测
+watch(selectedId, () => void nextTick(remeasure));
 
 function fmtDate(ts?: number): string {
   if (!ts) return '';
@@ -159,28 +148,46 @@ function subtitleOf(v: VersionRef): string {
 </script>
 
 <template>
-  <div class="dock" @mouseenter="onEnter" @mouseleave="onLeave">
-    <!-- 收起态单卡 + 展开态面板（绝对定位底部锚定）。伸展=单卡淡出、面板从原位置生长
-         （BlockHelm 语义：收起卡不残留被遮挡）；收起=面板缩回、单卡淡入露出。
-         淡出/淡入与生长同步，无 out-in 串行，不存在"先消失一下"的空窗（用户指定） -->
-    <button class="peek" :class="{ 'peek--away': expanded }" type="button" @click="hover = true">
-      <span class="lines">
-        <span class="name">{{ selected ? titleOf(selected) : t('version.pick') }}</span>
-        <span class="subtitle">{{ selected ? subtitleOf(selected) : t('version.pickHint') }}</span>
-      </span>
-      <span class="peek-chevron" aria-hidden="true">
-        <!-- lucide: chevrons-up -->
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="m17 11-5-5-5 5" />
-          <path d="m17 18-5-5-5 5" />
-        </svg>
-      </span>
-    </button>
+  <div
+    class="dock"
+    :style="{
+      '--panel-h': panelH ? `${panelH}px` : '0px',
+      '--peek-h': peekH ? `${peekH}px` : '0px',
+    }"
+    @mouseenter="onEnter"
+    @mouseleave="onLeave"
+  >
+    <!-- 裁剪窗：BlockHelm HomeLaunchMenuClipHost——底缘锚定、高度固定为展开值，
+         overflow 决定露出多少；窗本身不吃指针（收起态只有 peekbar 可点）。 -->
+    <div class="window">
+      <!-- 面板：常驻挂载。收起=整体下移 (panel-h - peek-h)（targetPanelOffset 同式），
+           顶缘 peekbar 恰好落进 dock 槽位；展开=平移归零，顶缘上移、内容随之显形。
+           时长/缓动沿用既定配方（--dur-grow 380ms / --ease-grow）。 -->
+      <section ref="panelEl" class="panel" :class="{ 'panel--open': expanded }">
+        <!-- 收起态卡片：覆盖面板顶缘（不占内容流 → panel-h 恒稳）。展开时淡出上移，
+             被裁剪窗顶缘吞掉；收起态点击=伸展。 -->
+        <button
+          ref="peekbarEl"
+          class="peekbar"
+          :class="{ 'peekbar--away': expanded }"
+          type="button"
+          @click="hover = true"
+        >
+          <span class="lines">
+            <span class="name">{{ selected ? titleOf(selected) : t('version.pick') }}</span>
+            <span class="subtitle">{{ selected ? subtitleOf(selected) : t('version.pickHint') }}</span>
+          </span>
+          <span class="peek-chevron" aria-hidden="true">
+            <!-- lucide: chevrons-up -->
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="m17 11-5-5-5 5" />
+              <path d="m17 18-5-5-5 5" />
+            </svg>
+          </span>
+        </button>
 
-    <Transition name="grow" @enter="animIn" @leave="animOut">
-      <section v-if="expanded" class="panel">
         <header class="phead">
-          <span class="ptitle">{{ t('nav.launch') }}</span>
+          <span class="ptitle">{{ t('version.list') }}</span>
           <span class="phead-actions">
             <button
               class="icon-btn"
@@ -254,7 +261,7 @@ function subtitleOf(v: VersionRef): string {
           <span class="count tabular">{{ t('version.count', { n: total }) }}</span>
         </footer>
       </section>
-    </Transition>
+    </div>
   </div>
 </template>
 
@@ -263,37 +270,86 @@ function subtitleOf(v: VersionRef): string {
   position: relative;
   width: 300px;
   max-width: 100%;
+  /* 页面流里只占收起高度（实测 peek-h）；展开部分经裁剪窗浮层覆盖，不推挤布局 */
+  height: var(--peek-h);
 }
-/* —— 收起态单卡：base-card 配方 + hover 抬升（提示可伸展） —— */
-.peek {
+.window {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  /* border-box：内高 = panel-h - 1px，面板底缘恰好悬出裁剪线 1px
+     （BlockHelm MenuPanelBottomOverhang 同语义）→ 面板自带底描边永不可见，
+     底缘线统一由窗的 border-bottom 提供，收起/展开两态一致。 */
+  height: var(--panel-h);
+  overflow: hidden;
+  pointer-events: none;
+  /* 静态底缘端帽 = BlockHelm HomeLaunchMenuBottomEdge 的 CSS 等价：
+     圆角裁剪 + 1px 底描边，收起态被裁平的卡片底缘由此复原。 */
+  border-bottom: 1px solid var(--card-border);
+  border-radius: var(--radius-lg);
+  /* 投影挂窗上、随可见轮廓渲染（drop-shadow 对 overflow 裁剪后的结果取形），
+     两态都有完整投影，且不会在窗内被 overflow:hidden 裁掉。 */
+  filter: drop-shadow(var(--shadow-3));
+}
+/* 面板：常驻挂载，内容流 = header/search/list/footer（peekbar 绝对定位不计入）。
+   收起=下移 (panel-h - peek-h)，窗口顶缘露出恰为 peek-h 高的 peekbar；展开=归零。 */
+.panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: var(--space-3);
-  width: 100%;
-  padding: var(--space-4) var(--space-5);
+  padding: var(--space-4);
   background: var(--card-bg);
   border: 1px solid var(--card-border);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-card);
+  /* 投影不写在面板上：overflow 裁剪窗会切掉外投影，统一由 .window 的 drop-shadow 承担 */
+  transform: translateY(calc(var(--panel-h) - var(--peek-h)));
+  transition: transform var(--dur-grow) var(--ease-grow);
+  pointer-events: none;
+}
+.panel--open {
+  transform: translateY(0);
+  pointer-events: auto;
+}
+.panel > * {
+  flex-shrink: 0;
+}
+/* —— peekbar：收起态卡片 = 覆盖面板顶缘的绝对层（与面板同底色/圆角，无缝）。
+   展开时淡出+上移，被裁剪窗顶缘吞掉；不吃指针，避免挡住 header 操作。 */
+.peekbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  background: var(--card-bg);
+  /* 必须显式清掉 UA 默认按钮边框（base.css reset 不删 border，项目惯例逐组件自管） */
+  border: none;
+  border-radius: calc(var(--radius-lg) - 1px);
   text-align: left;
   cursor: pointer;
+  /* .window 的 pointer-events:none 会继承下来——收起态唯一可点的就是这张卡，必须显式吃指针 */
+  pointer-events: auto;
   transition:
-    transform var(--dur-fast) var(--ease-out),
-    border-color var(--dur-fast) var(--ease-out),
-    background var(--dur-fast) var(--ease-out),
-    opacity var(--dur-grow) var(--ease-grow);
+    transform var(--dur-grow) var(--ease-grow),
+    opacity var(--dur-grow) var(--ease-grow),
+    background var(--dur-fast) var(--ease-out);
 }
-/* 展开态：收起卡淡出消失而非被面板盖住（BlockHelm 语义：收起/展开为同一形态的两种状态）。
-   淡出与面板生长同步（--dur-grow），不存在"先消失一下"的空窗；visibility 不参与过渡，
-   用 pointer-events 屏蔽隐藏期间的点击。 */
-.peek--away {
+.peekbar--away {
+  transform: translateY(calc(-1 * (var(--peek-h) + var(--space-4))));
   opacity: 0;
   pointer-events: none;
 }
-.peek:hover {
-  transform: translateY(-1px);
+.peekbar:hover {
   background: var(--surface-3);
-  border-color: var(--surface-4);
 }
 .peek-chevron {
   margin-left: auto;
@@ -322,27 +378,6 @@ function subtitleOf(v: VersionRef): string {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-/* —— 展开态面板：绝对定位悬浮于常驻单卡之上，底部锚定向上生长（无空窗） —— */
-.panel {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 2;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-4);
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-3);
-}
-/* BlockHelm 机制：内容钉在顶缘（默认文档流），生长时随面板顶缘一起上移、底缘裁剪；
-   flex-shrink:0 保证裁剪期间子项保持自然高度不被压扁 */
-.panel > * {
-  flex-shrink: 0;
 }
 .phead {
   display: flex;
@@ -446,7 +481,7 @@ function subtitleOf(v: VersionRef): string {
 .chip[data-era='beta'] { --chip: var(--era-beta); --chip-soft: var(--era-beta-soft); }
 .chip[data-era='release-1.0-1.5.2'] { --chip: var(--era-release); --chip-soft: var(--era-release-soft); }
 /* 列表项：纯文本双行（Name/Subtitle），点击选中；未固定时选中即收起。
-   列表始终"已准备好"（用户指定：无逐行动画），展开观感全部交给面板生长 */
+   列表始终"已准备好"（用户指定：无逐行动画），展开观感全部交给面板平移 */
 .row {
   display: flex;
   align-items: center;
@@ -537,12 +572,5 @@ function subtitleOf(v: VersionRef): string {
   0% { opacity: 0.5; }
   50% { opacity: 1; }
   100% { opacity: 0.5; }
-}
-/* 伸展/收起过渡：面板 max-height 由 JS 钩子给 0↔内容高真实生长；
-   纯"幕布"揭示不加位移/淡入（height=0 本就不可见，淡入反而会盖掉缩回过程） */
-.grow-enter-active,
-.grow-leave-active {
-  overflow: hidden;
-  transition: max-height var(--dur-grow) var(--ease-grow);
 }
 </style>
