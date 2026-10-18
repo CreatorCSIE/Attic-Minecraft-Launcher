@@ -6,7 +6,7 @@
  * 控制台解耦（v1 语义）：主页不再内嵌 ConsolePanel；?window=console 的独立窗只渲染顶栏+全屏控制台。
  * view 切换仍是 ref 状态，零 vue-router；图标为内联 lucide 路径（MIT），零新依赖。
  */
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, watch } from 'vue';
 import { useI18n } from './i18n';
 import { useBridge } from './composables/useBridge';
 import TitleBar from './components/TitleBar.vue';
@@ -27,6 +27,14 @@ const isConsoleWindow =
 
 type View = 'launch' | 'instances' | 'accounts' | 'custom' | 'settings';
 const view = ref<View>('launch');
+
+// —— 页面切换方向（BlockHelm GetTransitionStartOffset 实测配方，用户指定）：
+//    按导航序前进 → 新页自下方 +22px 浮现；后退 → 自上方 -22px。 ——
+const VIEW_ORDER: readonly View[] = ['launch', 'instances', 'accounts', 'custom', 'settings'];
+const pageDy = ref('22px');
+watch(view, (next, prev) => {
+  pageDy.value = VIEW_ORDER.indexOf(next) >= VIEW_ORDER.indexOf(prev) ? '22px' : '-22px';
+});
 const { t } = useI18n();
 const { hasBridge } = useBridge();
 
@@ -256,18 +264,22 @@ onMounted(() => {
       </nav>
 
       <main class="body">
-        <!-- 启动舞台：AccountHero 左上、LaunchPanel 铺满、版本列表面板浮动左下（BlockHelm 式 dock） -->
-        <div v-if="view === 'launch'" class="launch-stage">
-          <AccountHero class="stage-hero" @open-accounts="view = 'accounts'" />
-          <div class="stage-main"><LaunchPanel @open-instances="view = 'instances'" /></div>
-          <div class="stage-dock"><VersionSelector /></div>
-        </div>
-        <div v-else class="content">
-          <InstanceList v-if="view === 'instances'" />
-          <AccountsPanel v-else-if="view === 'accounts'" />
-          <CustomVersionsPanel v-else-if="view === 'custom'" />
-          <SettingsPanel v-else />
-        </div>
+        <!-- 页面切换浮现动画（BlockHelm PageTransitionService 实测配方，用户指定）：
+             240ms ease-out，淡入 + Y 轴 22px 位移，方向随导航序（前进自下、后退自上）；
+             key=view 保证每次切换都重新触发入场过渡。 -->
+        <Transition name="page">
+          <div v-if="view === 'launch'" key="launch" class="launch-stage" :style="{ '--page-dy': pageDy }">
+            <AccountHero class="stage-hero" @open-accounts="view = 'accounts'" />
+            <div class="stage-main"><LaunchPanel @open-instances="view = 'instances'" /></div>
+            <div class="stage-dock"><VersionSelector /></div>
+          </div>
+          <div v-else :key="view" class="content" :style="{ '--page-dy': pageDy }">
+            <InstanceList v-if="view === 'instances'" />
+            <AccountsPanel v-else-if="view === 'accounts'" />
+            <CustomVersionsPanel v-else-if="view === 'custom'" />
+            <SettingsPanel v-else />
+          </div>
+        </Transition>
       </main>
     </div>
   </div>
@@ -375,20 +387,41 @@ onMounted(() => {
   object-fit: cover; /* img 态：头像裁正方形铺满圆 */
   display: block;
 }
+/* 主区裁剪：入场过渡的 translateY(+22px) 会短暂超出下缘，若不裁剪会泄漏成
+   视口 scrollable overflow——切换瞬间闪出滚动条（浏览器实测：html 溢出 32px 随动衰减）。
+   位移是装饰性溢出，理应 clip 在主区内（BlockHelm WPF 容器同为 ClipToBounds）。 */
 .body {
   flex: 1;
   min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
-/* —— 实例/设置/账户内容区：max-width 居中（§3 栏宽公式） —— */
+/* —— 页面切换浮现（BlockHelm PageTransitionService 等效，用户指定）：仅入场过渡——
+   旧页即刻替换，新页淡入 + translateY(±22px→0)，240ms（--dur-page）ease-out；
+   位移方向由 --page-dy 注入（前进 +22 自下、后退 -22 自上）。只动 transform/opacity。 —— */
+.page-enter-active {
+  transition:
+    opacity var(--dur-page) var(--ease-out),
+    transform var(--dur-page) var(--ease-out);
+}
+.page-enter-from {
+  opacity: 0;
+  transform: translateY(var(--page-dy, 22px));
+}
+@media (prefers-reduced-motion: reduce) {
+  .page-enter-active {
+    transition: none;
+  }
+}
+/* —— 内容页容器（BlockHelm/图2 骨架，用户指定）：铺满主区，不整块居中——
+   整块居中会把左菜单从侧栏旁拽走（"还是居中"根因）。行级排版归各页组件：
+   左菜单贴左（SecondaryMenuFrame），详情列在剩余空间内浮中（DetailPageContentMaxWidth）。 —— */
 .content {
   flex: 1;
   min-height: 0;
   width: 100%;
-  max-width: var(--content-max);
-  margin: 0 auto;
   display: flex;
   flex-direction: column;
 }

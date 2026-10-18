@@ -190,6 +190,8 @@ const themes: ThemeMode[] = ['dark', 'light', 'system'];
   overflow-y: auto;
   padding: var(--space-5);
   max-width: 720px;
+  /* 组居中（用户指定）：单栏页同样水平居中，不留左侧贴边 */
+  margin-inline: auto;
 }
 .head {
   display: flex;

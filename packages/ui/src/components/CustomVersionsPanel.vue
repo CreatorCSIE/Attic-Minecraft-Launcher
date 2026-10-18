@@ -263,6 +263,8 @@ async function onSave(): Promise<void> {
 </template>
 
 <style scoped>
+/* BlockHelm 骨架（用户指定）：SecondaryMenuFrame 贴左不随居中移动，
+   详情内容在剩余空间内浮中（见 .editor 的 margin-inline）。 */
 .custom-page {
   display: flex;
   flex: 1;
@@ -270,9 +272,9 @@ async function onSave(): Promise<void> {
   min-height: 0;
   padding: var(--space-5);
 }
-/* —— 左栏：固定宽卡片（SecondaryMenuFrame 248px 等效） —— */
+/* —— 左栏：固定宽卡片（SecondaryMenuFrame 248px 等效，与账户页统一，用户指定） —— */
 .menu {
-  flex: 0 0 280px;
+  flex: 0 0 248px;
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
@@ -479,8 +481,10 @@ async function onSave(): Promise<void> {
   overflow-y: auto;
   padding: var(--space-6) var(--space-3);
 }
+/* DetailPageContentMaxWidth 等效：限宽列在剩余空间中水平浮中（BlockHelm 用户指定）。 */
 .editor {
   max-width: 620px;
+  margin-inline: auto;
   display: flex;
   flex-direction: column;
   gap: var(--space-4);

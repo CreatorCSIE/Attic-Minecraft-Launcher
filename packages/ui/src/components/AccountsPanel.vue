@@ -168,6 +168,7 @@ async function copyUuid(): Promise<void> {
 </template>
 
 <style scoped>
+/* BlockHelm 骨架（用户指定，镜像自定义版本页）：SecondaryMenuFrame 贴左，详情内容浮中见 .info。 */
 .accounts-page {
   display: flex;
   flex: 1;
@@ -301,7 +302,7 @@ async function copyUuid(): Promise<void> {
 .menu-add:hover {
   background-color: var(--surface-3);
 }
-/* —— 右栏：用户信息（内容限宽左对齐，DetailPageContentMaxWidth 等效） —— */
+/* —— 右栏：用户信息（BlockHelm 用户指定：限宽列在剩余空间中水平浮中） —— */
 .detail {
   flex: 1;
   min-width: 0;
@@ -311,6 +312,7 @@ async function copyUuid(): Promise<void> {
 }
 .info {
   max-width: 560px;
+  margin-inline: auto;
 }
 .name-row {
   display: flex;

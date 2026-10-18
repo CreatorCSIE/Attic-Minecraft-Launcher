@@ -31,12 +31,11 @@
   --radius-lg: 16px;
   --radius-pill: 999px;
 
-  /* —— 布局（§3 栏宽公式 / 左侧导航范式：图标+文字侧栏，BlockHelm 式） —— */
+  /* —— 布局（内容页铺满主区，行级限宽归各页组件） —— */
   --rail-width: 60px;
   --sidebar-width: 220px;
   --rail-item-size: 40px;
   --rail-icon-size: 20px;
-  --content-max: 1280px;
 
   /* —— 字体族（零新依赖：本地字体栈，无 webfont） —— */
   --font-sans: "Inter", "Geist", "MiSans", "HarmonyOS Sans SC", "Source Han Sans SC", "Noto Sans SC", system-ui, sans-serif;
@@ -46,6 +45,7 @@
   --dur-fast: 120ms;
   --dur-base: 200ms;
   --dur-slow: 320ms;
+  --dur-page: 240ms; /* 页面切换 = BlockHelm PageTransitionService.TransitionDuration（源码实测值） */
   --dur-grow: 380ms; /* 版本面板生长 = BlockHelm HomeLaunchMenuAnimationDurationMilliseconds（源码实测值） */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-grow: cubic-bezier(0.25, 0.95, 0.4, 1); /* ≈ BlockHelm PowerEase(Power 3.2, EaseOut)：起步快、长减速尾 */
