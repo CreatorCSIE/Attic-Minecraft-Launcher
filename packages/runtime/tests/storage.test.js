@@ -88,9 +88,10 @@ test('实例配置：保存/读回/列出（v1 键集）', (t) => {
 test('实例解耦（v1 语义）：gameDir=root/<实例名>，首启自动建 default instance，切版本目录不变', async (t) => {
   const root = tempRoot(t);
   ensureLayout(root);
-  fs.writeFileSync(path.join(jsonsDir(root), 'b1.7.3.info'), 'launch-method=beta\n');
-  fs.writeFileSync(path.join(jsonsDir(root), 'c2.0.info'), 'launch-method=beta\n');
-  fs.writeFileSync(path.join(jsonsDir(root), 'c0.0.15a.info'), 'launch-method=classic\n');
+  // 官方词表：b1.7.3/c2.0 的线上 .info 均为 launch-method=indev（2026-10 实测，见 info.test.js 夹具）
+  fs.writeFileSync(path.join(jsonsDir(root), 'b1.7.3.info'), 'launch-method=indev\n');
+  fs.writeFileSync(path.join(jsonsDir(root), 'c2.0.info'), 'launch-method=indev\n');
+  fs.writeFileSync(path.join(jsonsDir(root), 'c0.0.15a.info'), 'launch-method=Classic15aWithSaving\n');
   const rt = new AtticRuntime({ rootDir: root, fetchImpl: () => Promise.reject(new Error('offline')) });
   rt.addAccount('Tester'); // 无默认账户回落：启动前需显式建档
   const java = 'C:\\Java\\jdk1.8\\bin\\java.exe';
@@ -146,7 +147,7 @@ test('custom 语义（v1）：列表打标 + 裸 jar 检测合成 + Error 7 + 4k
   const root = tempRoot(t);
   ensureLayout(root);
   fs.writeFileSync(path.join(versionsDir(root), 'b1.7.3.jar'), buildJarBuffer([]));
-  fs.writeFileSync(path.join(jsonsDir(root), 'b1.7.3.info'), 'launch-method=beta\n');
+  fs.writeFileSync(path.join(jsonsDir(root), 'b1.7.3.info'), 'launch-method=indev\n');
   // 裸 jar（有 jar 无 .info，classic 形态类）= custom（v1 offlineVersionList 语义）
   fs.writeFileSync(
     path.join(versionsDir(root), 'myver.jar'),
@@ -155,19 +156,17 @@ test('custom 语义（v1）：列表打标 + 裸 jar 检测合成 + Error 7 + 4k
   // 无类可检测的裸 jar → Error 7 指引
   fs.writeFileSync(path.join(versionsDir(root), 'emptyver.jar'), buildJarBuffer(['com.example.Nothing']));
   // .info 显式声明 custom=true（无 jar：未安装但 custom）
-  fs.writeFileSync(path.join(jsonsDir(root), 'declared.info'), 'launch-method=beta\ncustom=true\n');
+  fs.writeFileSync(path.join(jsonsDir(root), 'declared.info'), 'launch-method=indev\ncustom=true\n');
   fs.writeFileSync(path.join(jsonsDir(root), '4k-021742.info'), 'launch-method=4k\n');
 
   const rt = new AtticRuntime({ rootDir: root, fetchImpl: () => Promise.reject(new Error('offline')) });
-  // 离线兜底：远端失败 → 读缓存清单
+  // 离线兜底：远端失败 → 读缓存清单。myver 不在官方清单（用户导入 jar 的真实形态）——
+  // 若在官方 id 内则裸 jar 不判 custom（inf-20100227-1433 修复语义，见 customVersions.test.js）
   fs.writeFileSync(
     versionListCacheFile(root),
     JSON.stringify({
       generatedAt: Date.now(),
-      versions: [
-        { id: 'b1.7.3', repository: 'betacraft', installed: false },
-        { id: 'myver', repository: 'betacraft', installed: false },
-      ],
+      versions: [{ id: 'b1.7.3', repository: 'betacraft', installed: false }],
     }),
   );
   const java = 'C:\\Java\\jdk1.8\\bin\\java.exe';

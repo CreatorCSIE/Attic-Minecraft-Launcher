@@ -33,9 +33,9 @@ test('真实 .info → VersionJson（字段集照 v1 ReleaseJson.java）', () =>
   assert.equal(json.mainClass, 'net.minecraft.client.Minecraft');
 });
 
-test('proxy-args 缺省 = v1 默认单参数', () => {
+test('proxy-args 缺省 = 默认代理参数（host + 端口 11702）', () => {
   const json = infoToVersionJson('c2.0', parseProperties('url:http://x/c2.0.jar'));
-  assert.deepEqual(json.betacraft.proxyArgs, ['-Dhttp.proxyHost=betacraft.uk']);
+  assert.deepEqual(json.betacraft.proxyArgs, ['-Dhttp.proxyHost=betacraft.uk', '-Dhttp.proxyPort=11702']);
 });
 
 test('main-class 显式字段优先于推导表', () => {

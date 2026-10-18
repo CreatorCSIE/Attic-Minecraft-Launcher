@@ -27,7 +27,7 @@
 ### 2.3 VersionJson（Mojang 兼容 + Betacraft 扩展）
 
 - Mojang 兼容段：`mainClass`、`minecraftArguments`（远古单行式）、`arguments`（现代结构化，解析器须容忍两者共存/缺失）、`libraries`、`assets`/`assetIndex`、`downloads.client`/顶层 `jar`、`javaVersion`、`inheritsFrom`。
-- Betacraft 扩展段 `betacraft`：字段集取自 v1 `ReleaseJson.java` 实测解析——`proxyArgs`（默认 `-Dhttp.proxyHost=betacraft.uk`）、`launchMethod`、`launchMethodLink`、`protocolVersion`、`baseVersion`、`custom`、`fileVer`，外加本契约新增的 `agentMount`。
+- Betacraft 扩展段 `betacraft`：字段集取自 v1 `ReleaseJson.java` 实测解析——`proxyArgs`（默认 `-Dhttp.proxyHost=betacraft.uk -Dhttp.proxyPort=11702`；v1 默认值缺端口为已知缺陷，custom 版未配置 proxy-args 时由本默认值兜底）、`launchMethod`、`launchMethodLink`、`protocolVersion`、`baseVersion`、`custom`、`fileVer`，外加本契约新增的 `agentMount`。
 - 除 `id` 外全部可选：远古 JSON 缺字段是常态，"缺什么补什么"是 Phase 2 解析器职责，契约只声明形状。
 
 ### 2.4 AgentMount（legacyfix 挂载决策表）
@@ -57,7 +57,7 @@
 5. `gameArgs[0]` 是用户名；
 6. `betacraft.proxyArgs` 全量进 `jvmArgs`。
 
-`jvmArgs` 固定组（顺序即拼装顺序）：`-Xmx`（+可选 `-Xms`）→ 实例 `launchArgs` 空白分隔逐 token 注入（v1 语义：重复 `-Xmx` JVM 取后者，实例覆盖全局）→ `-Djava.util.Arrays.useLegacyMergeSort=true` → `-Dhttp.nonProxyHosts=api.betacraft.uk|files.betacraft.uk|checkip.amazonaws.com` → LWJGL2 natives 两参（`org.lwjgl.librarypath`/`net.java.games.input.librarypath` = `<dataDir>/bin/natives`）→ `proxyArgs` → `-Dlf.proxy.levelServer=<AppSettings.levelServer>`（仅设置里有值时注入，覆盖 `gameDir/legacyfix/level-server.txt`）→ `javaagent` 展开 → 请求侧 `extraJvmArgs`。
+`jvmArgs` 固定组（顺序即拼装顺序）：`-Xmx`（+可选 `-Xms`）→ 实例 `launchArgs` 空白分隔逐 token 注入（v1 语义：重复 `-Xmx` JVM 取后者，实例覆盖全局）→ `-Djava.util.Arrays.useLegacyMergeSort=true` → `-Dhttp.nonProxyHosts=api.betacraft.uk|files.betacraft.uk|checkip.amazonaws.com|textures.minecraft.net` → LWJGL2 natives 两参（`org.lwjgl.librarypath`/`net.java.games.input.librarypath` = `<dataDir>/bin/natives`）→ `proxyArgs` → `-Dlf.proxy.levelServer=<AppSettings.levelServer>`（仅设置里有值时注入，覆盖 `gameDir/legacyfix/level-server.txt`）→ `javaagent` 展开 → 请求侧 `extraJvmArgs`。（曾有的 `-Dsun.java2d.dpiaware=false` 已证伪摘除——该 Oracle JDK8 扩展属性只影响 Java2D 渲染缩放，对 LWJGL 原生窗坐标无作用。）
 
 Applet 容器（主类 `AppletLauncher`）的 `gameArgs` 末尾追加 `--width <w> --height <h>`（实例值，v1 缺省 854×480；`AppletFrame.java` 读取，缺省兜底 640×480）。非 Applet 版本窗口由 LWJGL/DeAwt 自管，不注入。
 
@@ -97,6 +97,11 @@ Applet 容器（主类 `AppletLauncher`）的 `gameArgs` 末尾追加 `--width <
 | `attic:instances:save` | `InstanceView` | `IpcResult<InstanceView>` |
 | `attic:window:control` | `WindowAction`（`minimize` \| `toggle-maximize` \| `close`） | `IpcResult<void>`（无边距窗顶栏三键；`toggle-maximize` 由宿主在最大化/还原间切换） |
 | `attic:window:console` | — | `IpcResult<void>`（独立控制台窗口；v1 语义：MC 日志独立窗，与主页解耦。每次调用新建窗口并绑定当前会话 pid（`?window=console&pid=`），旧控制台不复用；ConsolePanel 按 pid 过滤本会话输出） |
+| `attic:custom:list` | — | `IpcResult<CustomVersionView[]>`（仅 custom 项：`.info` custom=true=已配置 / 裸 jar=未配置；Betacraft 官方版本不落入——**官方清单缓存 id 命中即官方，优先于本地 custom=true 残留声明**（inf-20100227-1433 实案，裸 jar 与已配置两分支同源排除），`importCustomJar` 同源拒绝官方 id） |
+| `attic:custom:info` | `id: string` | `IpcResult<CustomInfoView>`（官方清单 id 直接拒绝；已配置回 `.info` 原始 props；未配置裸 jar 附 `detectLaunchMethod` 建议——v1 检测名经 `canonicalLaunchMethod` 归一为官方值，必属 `launchMethods` 键集，表内无合法值（custom/1.6）不给建议；`launchMethods` 为合法键集，UI 下拉零硬编码） |
+| `attic:custom:info:save` | `id: string, props: Record<string,string>` | `IpcResult<CustomVersionView>`（官方清单 id 直接拒绝；`launch-method` 必填；其余字段选填，留空落盘为 `key=` 空值段；强制 `custom=true`；launch-method 不在主类表内时必须显式给 main-class，否则报错） |
+| `attic:custom:import-jar` | — | `IpcResult<CustomVersionView \| null>`（宿主弹原生文件对话框；取消=`null`；选中复制为 `versions/<id>.jar`，id=文件名去扩展名，同名报错不覆盖，落裸 jar=未配置态） |
+| `attic:custom:remove` | `id: string` | `IpcResult<void>`（jar 与 `.info` 一并移除；门禁=listCustomVersions 成员判定，官方版本/不存在显式报错；UI 删除须经确认弹窗，本通道不做二次确认） |
 
 统一 `IpcResult<T>` 封装：错误以 `{ ok:false, error }` 返回，不跨进程抛异常。未实现通道返回 `error: 'not-implemented'`（Phase 1 桥面占位即此值）。
 
@@ -107,6 +112,7 @@ Applet 容器（主类 `AppletLauncher`）的 `gameArgs` 末尾追加 `--width <
 | `attic:game:output` | `GameOutputEvent{stream,chunk,pid}` | stdout/stderr 流，UI 控制台面板消费 |
 | `attic:game:exit` | `GameExitEvent{code,signal,crash,stoppedByUser?,pid,versionId}` | 退出 + 崩溃分类摘要；`stoppedByUser:true` = 用户主动停止（点停止按钮/关游戏窗触发看门狗），`crash` 恒为 null，控制台以中性条显示最后一行日志；外部 taskkill/自身异常退出仍照常报崩溃条 |
 | `attic:download:progress` | `DownloadProgressEvent{item,id,phase,bytesDone,bytesTotal?,bytesPerSec?,error?}` | jar/资产/Java/legacyfix 统一形状；`phase`: `queued/transferring/verifying/done/failed` |
+| `attic:custom:info-changed` | `CustomInfoChangedEvent{id}` | 宿主监视 `versions/jsons/` 目录：外部编辑/新建/删除 `.info`，按 id 去抖 250ms 合并后发射；自定义版本配置页实时刷新（未编辑自动重载，有未保存编辑则提示不覆盖；本方保存/删除的回声由 UI selfWrite 窗口吸收） |
 
 ## 4. 契约测试夹具
 

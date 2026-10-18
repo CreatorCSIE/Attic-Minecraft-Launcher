@@ -10,9 +10,11 @@ import { ref } from 'vue';
 import { useI18n } from '../i18n';
 import { useAccounts } from '../composables/useAccounts';
 import { useBridge } from '../composables/useBridge';
+import type { AccountView } from '@attic/core-spec';
 import SkinAvatar from './SkinAvatar.vue';
 import AddAccountDialog from './AddAccountDialog.vue';
 import RenameAccountDialog from './RenameAccountDialog.vue';
+import ConfirmDialog from './ConfirmDialog.vue';
 
 const { t } = useI18n();
 const { accounts, current, loading, remove, select } = useAccounts();
@@ -22,6 +24,24 @@ const addOpen = ref(false);
 const renameOpen = ref(false);
 const copied = ref(false);
 let copiedTimer: ReturnType<typeof setTimeout> | undefined;
+
+// 删除确认（防误删，用户指定）：记录目标账户 + 弹窗开关 + 在途态
+const removeOpen = ref(false);
+const removeTarget = ref<AccountView | null>(null);
+const removing = ref(false);
+
+function askRemove(account: AccountView): void {
+  removeTarget.value = account;
+  removeOpen.value = true;
+}
+
+async function onConfirmRemove(): Promise<void> {
+  if (!removeTarget.value) return;
+  removing.value = true;
+  const ok = await remove(removeTarget.value.id);
+  removing.value = false;
+  if (ok) removeOpen.value = false;
+}
 
 async function copyUuid(): Promise<void> {
   if (!current.value) return;
@@ -59,7 +79,7 @@ async function copyUuid(): Promise<void> {
             type="button"
             :disabled="!hasBridge"
             :title="t('account.remove')"
-            @click.stop="remove(a.id)"
+            @click.stop="askRemove(a)"
           >
             <!-- lucide: trash-2 -->
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -136,6 +156,14 @@ async function copyUuid(): Promise<void> {
 
     <AddAccountDialog v-model:open="addOpen" />
     <RenameAccountDialog v-model:open="renameOpen" :account="current" />
+    <!-- 删除确认（防误删）：文案含账户名 -->
+    <ConfirmDialog
+      v-model:open="removeOpen"
+      :title="t('account.removeDialog.title')"
+      :message="t('account.removeDialog.message', { name: removeTarget?.name ?? '' })"
+      :busy="removing"
+      @confirm="onConfirmRemove"
+    />
   </section>
 </template>
 

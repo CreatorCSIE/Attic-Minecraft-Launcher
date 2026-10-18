@@ -147,6 +147,11 @@ export function assembleLaunchConfig(
     if (token) jvmArgs.push(token);
   }
   jvmArgs.push('-Djava.util.Arrays.useLegacyMergeSort=true');
+  // （历史注）曾注入 -Dsun.java2d.dpiaware=false 试图对症 applet 容器高 DPI 窗口右下偏移——
+  // 实机+对照实验双重证伪：该 Oracle JDK8 扩展属性只影响 Java2D 字体/渲染缩放，不影响 LWJGL
+  // 原生窗 SetWindowPos 坐标语义，对偏移无任何作用，已摘除。根因（legacyfix DeAwtPatch 不交接
+  // frame 位置 + LWJGL getWindowX/Y 混源居中公式）未修——组合代理修复路线实机引入双窗/挂起，
+  // 已回滚；后续修复需另寻方案（上游 PR 或宿主侧）。
   jvmArgs.push(`-Dhttp.nonProxyHosts=${NON_PROXY_HOSTS}`);
   const natives = `${dataDir}/bin/natives`;
   jvmArgs.push(`-Dorg.lwjgl.librarypath=${natives}`);

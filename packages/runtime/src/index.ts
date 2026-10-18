@@ -80,7 +80,7 @@ export {
   type AssembleOptions,
 } from './launch';
 export { classifyCrash, GameProcessManager, type GameProcessEvents } from './process';
-export { detectLaunchMethod, probeIndevEntry } from './wrapperDetector';
+export { canonicalLaunchMethod, detectLaunchMethod, probeIndevEntry } from './wrapperDetector';
 export { extractZipTo, listZipEntryNames } from './zip';
 export {
   resolveAssetIndexId,

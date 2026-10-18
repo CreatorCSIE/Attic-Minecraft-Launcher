@@ -21,7 +21,7 @@ import { useSelection } from '../composables/useSelection';
 import type { VersionEra, VersionRef } from '@attic/core-spec';
 
 const { t } = useI18n();
-const { search, groups, loading, error, total, load } = useVersions();
+const { search, groups, loading, error, total, load, refresh } = useVersions();
 const { selectedId, selected, select } = useSelection();
 
 // —— 状态：pinned（持久化偏好）+ hover（瞬时）+ dismissed（显式收起后的 hover 抑制） ——
@@ -121,6 +121,32 @@ watch([groups, search, loading, error], () => void nextTick(remeasure));
 // 选中版本变化 → peekbar 文案双行长度变化，高度可能微差 → 一并重测
 watch(selectedId, () => void nextTick(remeasure));
 
+// —— 每次展开：静默重扫磁盘（修 v1 "运行期丢 jar 不更新列表"缺陷，超越其重启才可见）
+// + 定位到已选中版本（无选中回顶部）。列表滚动容器 = .list。
+// 竞态戒律：refresh 是异步 IPC，resolve 时面板可能已被收起——必须用序号守卫放弃后续定位。
+// 曾因收起后仍执行 scrollIntoView，把祖先滚动容器（.window overflow:hidden）一并滚动，
+// peekbar 被位移到光标下 → 命中测试合成 mouseenter → 面板秒弹回（用户报"有时关不上"）。
+// 故定位只做 .list 容器内手动 scrollTop，绝不碰祖先。
+const listEl = ref<HTMLElement | null>(null);
+let expandSeq = 0;
+watch(expanded, async (open) => {
+  if (!open) return;
+  const seq = ++expandSeq;
+  await refresh();
+  await nextTick();
+  if (seq !== expandSeq || !expanded.value) return; // 期间已收起/又展开过：放弃
+  const el = listEl.value;
+  if (!el) return;
+  const active = el.querySelector<HTMLElement>('.row--active');
+  if (active) {
+    const host = el.getBoundingClientRect();
+    const rect = active.getBoundingClientRect();
+    el.scrollTop += rect.top - host.top - (host.height - rect.height) / 2;
+  } else {
+    el.scrollTop = 0;
+  }
+});
+
 function fmtDate(ts?: number): string {
   if (!ts) return '';
   const d = new Date(ts);
@@ -141,9 +167,19 @@ function titleOf(v: VersionRef): string {
   return v.id;
 }
 
-/** 行副标题 = 别名（仅当存在且不同于 id）；日期不再显示（用户指定：太占空间）。 */
+/** 别名（仅当存在且不同于 id）；日期不再显示（用户指定：太占空间）。 */
 function aliasOf(v: VersionRef): string {
   return v.displayName && v.displayName !== v.id ? v.displayName : '';
+}
+
+/** 行副标题 = 别名（仅当存在且不同于 id）+ Custom 标记。
+ * 用户指定：Custom 与别名同放第二行（加粗主位只留启动 id），不再挂行右侧徽标。 */
+function rowSubtitle(v: VersionRef): string {
+  const parts: string[] = [];
+  const alias = aliasOf(v);
+  if (alias) parts.push(alias);
+  if (v.custom) parts.push('Custom'); // v1 [Custom] 后缀语义（英文原样，与 era 标签同策略）
+  return parts.join(' · ');
 }
 
 function subtitleOf(v: VersionRef): string {
@@ -243,7 +279,7 @@ function subtitleOf(v: VersionRef): string {
           <p class="state-hint">{{ t('version.emptyHint') }}</p>
         </div>
 
-        <div v-else class="list">
+        <div v-else ref="listEl" class="list">
           <div v-for="g in groups" :key="g.era" class="group">
             <div class="group-head">
               <span class="chip" :data-era="g.era">{{ t(`era.${eraKey(g.era)}`) }}</span>
@@ -258,9 +294,8 @@ function subtitleOf(v: VersionRef): string {
             >
               <span class="lines">
                 <span class="name">{{ titleOf(v) }}</span>
-                <span v-if="aliasOf(v)" class="subtitle">{{ aliasOf(v) }}</span>
+                <span v-if="rowSubtitle(v)" class="subtitle">{{ rowSubtitle(v) }}</span>
               </span>
-              <span v-if="v.custom" class="badge badge--custom">Custom</span>
               <span v-if="v.installed" class="badge badge--ok">{{ t('version.installed') }}</span>
             </button>
           </div>
@@ -525,12 +560,6 @@ function subtitleOf(v: VersionRef): string {
 .badge--ok {
   color: var(--ok);
   background: var(--ok-soft);
-}
-/* Custom 徽标（v1 [Custom] 后缀语义）：中性描边形态，不与"已安装"状态色抢层级 */
-.badge--custom {
-  color: var(--text-muted);
-  border: 1px solid var(--card-border);
-  background: transparent;
 }
 .pfoot {
   display: flex;

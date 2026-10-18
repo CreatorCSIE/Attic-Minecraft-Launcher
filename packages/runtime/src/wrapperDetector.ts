@@ -78,3 +78,26 @@ export function detectLaunchMethod(jarFile: string): string {
   }
   return 'custom';
 }
+
+/**
+ * 检测名（v1 classRules 原名）→ 主类表（LAUNCH_METHOD_MAIN_CLASS）合法值的归一。
+ * v1 把检测名直接喂 wrapper 分支，而官方 .info 用的是另一套值名（实测 c0.0.15a→
+ * Classic15aWithSaving、c0.0.16a+→ClassicMpWithSaving、pc/rd 系→preclassic）；
+ * 不归一则裸 jar 检测合成撞表外键 → "无法确定主类"，配置页预填值也永远命不中下拉。
+ * `1.6`（net.minecraft.client.main.Main，1.9+ 形态）无合法目标名——BC 清单止步 1.5.2，
+ * 故意不归一，维持显式报错（数据缺口可见，戒律同 DL_ 处理）；'4k' 检测规则已剔除（见文件头）。
+ */
+export function canonicalLaunchMethod(detected: string): string {
+  switch (detected) {
+    case 'rd':
+    case 'mc':
+      return 'preclassic';
+    case 'classic15a':
+      return 'Classic15aWithSaving';
+    case 'classicmp':
+      return 'ClassicMpWithSaving';
+    default:
+      // classic12a / classic / indev 在表内即合法名，原样通过
+      return detected;
+  }
+}

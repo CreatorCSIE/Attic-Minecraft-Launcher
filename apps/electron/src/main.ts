@@ -1,10 +1,11 @@
 import path from 'node:path';
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 import {
   IPC_CHANNELS,
   IPC_EVENTS,
   type AppSettings,
   type AtticEventPayloads,
+  type CustomVersionView,
   type InstanceView,
   type IpcResult,
   type LaunchRequest,
@@ -47,7 +48,12 @@ function handle<I extends unknown[], T>(channel: string, fn: (...args: I) => T |
 
 /** 事件广播：runtime 事件面 → 全部窗口的 webContents（preload 的 on() 订阅侧）。 */
 function wireEvents(): void {
-  for (const event of [IPC_EVENTS.GAME_OUTPUT, IPC_EVENTS.GAME_EXIT, IPC_EVENTS.DOWNLOAD_PROGRESS] as const) {
+  for (const event of [
+    IPC_EVENTS.GAME_OUTPUT,
+    IPC_EVENTS.GAME_EXIT,
+    IPC_EVENTS.DOWNLOAD_PROGRESS,
+    IPC_EVENTS.CUSTOM_INFO_CHANGED,
+  ] as const) {
     runtime.on(event, (payload: AtticEventPayloads[typeof event]) => {
       console.log(`[attic-main] broadcast ${event} → ${BrowserWindow.getAllWindows().length} window(s)`);
       for (const win of BrowserWindow.getAllWindows()) {
@@ -156,6 +162,26 @@ app.whenReady().then(() => {
   handle(IPC_CHANNELS.SETTINGS_SET, (settings: AppSettings) => runtime.setSettings(settings));
   handle(IPC_CHANNELS.INSTANCES_LIST, () => runtime.listInstances());
   handle(IPC_CHANNELS.INSTANCES_SAVE, (instance: InstanceView) => runtime.saveInstance(instance));
+  // 自定义版本配置页通道（list/get/save/remove 直连 runtime；import 见下方对话框）。
+  handle(IPC_CHANNELS.CUSTOM_LIST, () => runtime.listCustomVersions());
+  handle(IPC_CHANNELS.CUSTOM_GET_INFO, (id: string) => runtime.getCustomVersionInfo(id));
+  handle(IPC_CHANNELS.CUSTOM_SAVE_INFO, (id: string, props: Record<string, string>) => runtime.saveCustomVersionInfo(id, props));
+  handle(IPC_CHANNELS.CUSTOM_REMOVE, (id: string) => runtime.removeCustomVersion(id));
+  // 导入 jar：主进程弹原生文件对话框（渲染侧无 fs 权限）；取消 = ok(null)，选中路径交 runtime 复制落位。
+  ipcMain.handle(IPC_CHANNELS.CUSTOM_IMPORT_JAR, async (): Promise<IpcResult<CustomVersionView | null>> => {
+    try {
+      const res = await dialog.showOpenDialog({
+        title: '导入自定义版本 jar',
+        properties: ['openFile'],
+        filters: [{ name: 'Minecraft jar', extensions: ['jar', 'zip'] }],
+      });
+      const file = res.filePaths[0];
+      if (res.canceled || !file) return { ok: true, value: null };
+      return { ok: true, value: runtime.importCustomJar(file) };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
   // 窗控制：动作合法性由契约类型保证；toggle-maximize 在最大化/还原间切换。
   // 按发送方窗口操作（非固定 mainWindow）——独立控制台窗的顶栏三键才能控自己的窗。
   ipcMain.handle(IPC_CHANNELS.WINDOW_CONTROL, async (event, action: WindowAction): Promise<IpcResult<void>> => {

@@ -11,6 +11,8 @@ import {
   IPC_EVENTS,
   type Account,
   type AccountView,
+  type CustomInfoView,
+  type CustomVersionView,
   type OfflineAccount,
   type AppSettings,
   type AtticEventPayloads,
@@ -30,7 +32,7 @@ import {
 import { applySettingsToProps, instanceViewFromConfig, settingsFromProps } from './appSettings';
 import { BetacraftClient, type FetchImpl } from './betacraft';
 import { endpointsFromOverrides, resolveEndpoints, type Endpoints } from './endpoints';
-import { infoToVersionJson } from './info';
+import { infoToVersionJson, LAUNCH_METHOD_MAIN_CLASS } from './info';
 import { detectJavaRuntime } from './java/detect';
 import { APPLET_LAUNCHER_CLASS, assembleLaunchConfig, type LaunchContext } from './launch';
 import { GameProcessManager } from './process';
@@ -41,6 +43,7 @@ import {
   clientJarFile,
   ensureLayout,
   infoFile,
+  jsonsDir,
   listInstances,
   loadAccounts,
   loadInstance,
@@ -59,9 +62,10 @@ import {
   scanInstalledVersions,
   type InstanceConfig,
   versionListCacheFile,
+  writePropertiesFile,
   zuluJavaDir,
 } from './storage';
-import { detectLaunchMethod, probeIndevEntry } from './wrapperDetector';
+import { canonicalLaunchMethod, detectLaunchMethod, probeIndevEntry } from './wrapperDetector';
 import { extractZipTo } from './zip';
 import { installZuluPackage, queryZuluPackages } from './zulu';
 
@@ -107,6 +111,19 @@ function toAccountView(account: Account): AccountView {
   return { id: account.id, name: account.name, type: 'offline' };
 }
 
+/** 版本 id → 文件名安全（CUSTOM_* 通道入参面：拒绝路径分隔/穿越/Windows 非法字符/控制符）。 */
+function assertSafeVersionId(id: string): void {
+  if (
+    id === '' ||
+    id === '.' ||
+    id === '..' ||
+    /[\\/:*?"<>|\x00-\x1f]/.test(id) ||
+    id.length > 128
+  ) {
+    throw new Error(`非法版本 id：${JSON.stringify(id)}`);
+  }
+}
+
 export class AtticRuntime {
   readonly root: string;
   readonly endpoints: Endpoints;
@@ -116,6 +133,9 @@ export class AtticRuntime {
   private readonly processes: GameProcessManager;
   private readonly listeners = new Map<string, Set<(payload: never) => void>>();
   private lastLaunchError: string | null = null;
+  private infoWatcher: fs.FSWatcher | null = null;
+  /** .info 监视去抖：id → 挂起定时器（编辑器保存常触发多事件）。 */
+  private readonly infoWatchTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   constructor(options: AtticRuntimeOptions = {}) {
     this.root = resolveDataRoot({
@@ -149,13 +169,60 @@ export class AtticRuntime {
     const set = this.listeners.get(event) ?? new Set();
     set.add(cb as (payload: never) => void);
     this.listeners.set(event, set);
-    return () => set.delete(cb as (payload: never) => void);
+    // jsons 监视器懒启停：无订阅者不开句柄（探针实测 Windows 下未 close 的 fs.watch 会钉住
+    // node --test 子进程退出，unref 不解除）；宿主 wireEvents 常驻订阅 → 等价全程监视。
+    if (event === IPC_EVENTS.CUSTOM_INFO_CHANGED) this.startInfoWatcher();
+    return () => {
+      set.delete(cb as (payload: never) => void);
+      if (event === IPC_EVENTS.CUSTOM_INFO_CHANGED && set.size === 0) this.stopInfoWatcher();
+    };
   }
 
   private emitEvent(event: string, payload: unknown): void {
     for (const cb of this.listeners.get(event) ?? []) {
       (cb as (p: unknown) => void)(payload);
     }
+  }
+
+  /**
+   * jsons 目录监视（外部编辑 .info 实时更新，用户指定）：只认 `*.info`，编辑器保存常伴随
+   * 多事件/temp+rename，按 id 去抖 250ms 合并后发 CUSTOM_INFO_CHANGED。
+   * 启动器自身保存的回声由 UI 侧 selfWrite 窗口吸收（配置页保存后已自刷新，不依赖本事件）。
+   * 由 on(CUSTOM_INFO_CHANGED) 首个订阅者懒启动（见上）；unref + 订阅清零时 close：
+   * 探针实测 Windows 未 close 的 fs.watch 句柄会钉住 node --test 子进程退出。
+   */
+  private startInfoWatcher(): void {
+    if (this.infoWatcher) return;
+    try {
+      this.infoWatcher = fs.watch(jsonsDir(this.root), (_event, filename) => {
+        if (!filename || !filename.endsWith('.info')) return;
+        const id = filename.slice(0, -'.info'.length);
+        const pending = this.infoWatchTimers.get(id);
+        if (pending) clearTimeout(pending);
+        this.infoWatchTimers.set(
+          id,
+          setTimeout(() => {
+            this.infoWatchTimers.delete(id);
+            this.emitEvent(IPC_EVENTS.CUSTOM_INFO_CHANGED, { id });
+          }, 250),
+        );
+      });
+      this.infoWatcher.unref();
+    } catch {
+      this.infoWatcher = null;
+    }
+  }
+
+  /** 末订阅者退订：关句柄 + 清去抖定时器（不得留悬垂事件源）。 */
+  private stopInfoWatcher(): void {
+    try {
+      this.infoWatcher?.close();
+    } catch {
+      /* 已失效句柄：忽略 */
+    }
+    this.infoWatcher = null;
+    for (const timer of this.infoWatchTimers.values()) clearTimeout(timer);
+    this.infoWatchTimers.clear();
   }
 
   // ---------- 请求面（RendererBridge 九通道） ----------
@@ -180,10 +247,14 @@ export class AtticRuntime {
     // "已安装"= jar 实存（用户指定）；jar∪info 并集仅用于离线兜底列出本地版本
     const jars = new Set(scanInstalledJars(this.root));
     const infos = new Set(scanInstalledInfos(this.root));
+    // 官方清单 id 集（网络/缓存 refs 同源）：**官方命中 > 本地声明**（inf-20100227-1433 实案——
+    // BC 版本地 .info 缺失或残留 custom=true 都不得判 custom；前者"未落元数据"，后者为陈旧误写）。
+    const official = new Set((refs ?? []).map((ref) => ref.id));
     const isCustom = (id: string): boolean =>
-      // v1 语义（offlineVersionList）：裸 jar（有 jar 无 .info）即 custom；.info 显式声明同判
-      (jars.has(id) && !infos.has(id)) ||
-      (infos.has(id) && readPropertiesFile(infoFile(this.root, id))['custom']?.toLowerCase() === 'true');
+      // v1 语义（offlineVersionList）：裸 jar（有 jar 无 .info）或 .info 显式声明，且不在官方清单
+      !official.has(id) &&
+      ((jars.has(id) && !infos.has(id)) ||
+        (infos.has(id) && readPropertiesFile(infoFile(this.root, id))['custom']?.toLowerCase() === 'true'));
     const local = scanInstalledVersions(this.root);
     const out: VersionRef[] = (refs ?? []).map((ref) => ({
       ...ref,
@@ -244,7 +315,9 @@ export class AtticRuntime {
     if (fs.existsSync(infoFile(this.root, versionId))) return null;
     const jar = clientJarFile(this.root, versionId);
     if (!fs.existsSync(jar)) return null;
-    const method = detectLaunchMethod(jar);
+    // 检测名归一为主类表合法值（rd/mc→preclassic 等，见 canonicalLaunchMethod），
+    // 否则合成 JSON 撞表外键 → "无法确定主类"（v1 两套餐名不同源的固有断层）。
+    const method = canonicalLaunchMethod(detectLaunchMethod(jar));
     if (method === 'custom') {
       throw new Error(
         `无法识别启动方式（v1 Error 7）：请编辑 ${infoFile(this.root, versionId)} 配置 launch-method`,
@@ -391,6 +464,157 @@ export class AtticRuntime {
     const renamed: OfflineAccount = { ...account, name: trimmed, id: offlineUuid(trimmed) };
     saveAccounts(this.root, stored.map((a) => (a.id === id ? renamed : a)));
     return toAccountView(renamed);
+  }
+
+  // ---------- 自定义版本配置页（CUSTOM_* 四通道） ----------
+
+  /**
+   * 自定义版本列表：仅 custom 项（与 listVersions 的 isCustom 判定同源）——
+   * `.info` custom=true = 已配置；裸 jar（有 jar 无 .info 且不在官方清单）= 未配置。
+   * Betacraft 官方版本不落入本页：含 .info 无 custom=true 的，也含 **官方清单 id 的裸 jar**
+   * （inf-20100227-1433 实案修复：BC 版本地 .info 缺失 ≠ 用户导入）。官方集取版本清单缓存
+   * （仅 fetchVersionList 成功时写入=纯 BC 列表；缓存缺席=还没联网拉过，维持 v1 裸 jar 语义）。
+   * 列表不跑 jar 检测（zip 开销留给按需 get）。
+   */
+  listCustomVersions(): CustomVersionView[] {
+    const jars = new Set(scanInstalledJars(this.root));
+    const infos = scanInstalledInfos(this.root);
+    const official = this.cachedOfficialVersionIds();
+    const out: CustomVersionView[] = [];
+    for (const id of infos) {
+      // 官方清单命中即官方（> 本地 custom=true 残留声明，inf-20100227-1433 实案）
+      if (official.has(id)) continue;
+      const props = readPropertiesFile(infoFile(this.root, id));
+      if (props['custom']?.toLowerCase() !== 'true') continue;
+      const launchMethod = props['launch-method'];
+      const mainClass = props['main-class'] ?? (launchMethod ? LAUNCH_METHOD_MAIN_CLASS[launchMethod] : undefined);
+      out.push({
+        id,
+        installed: jars.has(id),
+        configured: true,
+        ...(launchMethod ? { launchMethod } : {}),
+        ...(mainClass ? { mainClass } : {}),
+      });
+    }
+    const withInfo = new Set(infos);
+    for (const id of jars) {
+      if (withInfo.has(id) || official.has(id)) continue;
+      out.push({ id, installed: true, configured: false });
+    }
+    return out.sort((a, b) => a.id.localeCompare(b.id));
+  }
+
+  /** 版本清单缓存的 id 集（=Betacraft 官方全集；缓存缺席回空集）。 */
+  private cachedOfficialVersionIds(): Set<string> {
+    const cache = readJsonIfPresent<VersionManifest>(versionListCacheFile(this.root));
+    return new Set((cache?.versions ?? []).map((ref) => ref.id));
+  }
+
+  /** CUSTOM get/save 统一门禁：官方清单命中即官方（> 本地 custom=true 残留声明），显式拒绝。 */
+  private assertNotOfficialId(id: string): void {
+    if (this.cachedOfficialVersionIds().has(id)) {
+      throw new Error(`${id} 是 Betacraft 官方版本 id，不落入自定义版本配置（本地残留的 custom=true 声明已失效）`);
+    }
+  }
+
+  /** 读取单个自定义版本 .info：已配置回原始属性；未配置裸 jar 附 detectLaunchMethod 建议。 */
+  getCustomVersionInfo(id: string): CustomInfoView {
+    assertSafeVersionId(id);
+    this.assertNotOfficialId(id);
+    const jar = clientJarFile(this.root, id);
+    const info = infoFile(this.root, id);
+    const hasJar = fs.existsSync(jar);
+    const hasInfo = fs.existsSync(info);
+    if (!hasJar && !hasInfo) throw new Error(`自定义版本不存在：${id}`);
+    const launchMethods = Object.keys(LAUNCH_METHOD_MAIN_CLASS);
+    if (hasInfo) {
+      const props = readPropertiesFile(info);
+      if (props['custom']?.toLowerCase() !== 'true') {
+        throw new Error(`${id} 不是自定义版本（Betacraft 官方版本不落入本页）`);
+      }
+      return { id, configured: true, props, launchMethods };
+    }
+    // 预填建议：归一后仍不在主类表内的（'custom' 全不中、'1.6' 超 BC 清单范围）不给——
+    // 保证 UI 下拉必命中，不会预填一个存不进去的名字。
+    const detected = canonicalLaunchMethod(detectLaunchMethod(jar));
+    return {
+      id,
+      configured: false,
+      props: {},
+      ...(LAUNCH_METHOD_MAIN_CLASS[detected] ? { detectedMethod: detected } : {}),
+      launchMethods,
+    };
+  }
+
+  /**
+   * 保存自定义版本 .info：launch-method 必填；其余字段选填（留空落盘为 `key=` 空值段，不删键）；
+   * 强制 custom=true（归本启动器所有，豁免远端重写）；
+   * launch-method 不在主类数据表内时必须显式给 main-class（未映射=主类空，Error 7 语义显式报错）。
+   */
+  saveCustomVersionInfo(id: string, props: Record<string, string>): CustomVersionView {
+    assertSafeVersionId(id);
+    this.assertNotOfficialId(id);
+    const jar = clientJarFile(this.root, id);
+    const info = infoFile(this.root, id);
+    if (!fs.existsSync(jar) && !fs.existsSync(info)) throw new Error(`自定义版本不存在：${id}`);
+    const launchMethod = props['launch-method']?.trim();
+    const mainClass = props['main-class']?.trim();
+    if (!launchMethod) throw new Error('launch-method 为必填项');
+    if (!(launchMethod in LAUNCH_METHOD_MAIN_CLASS) && !mainClass) {
+      throw new Error(`未知 launch-method「${launchMethod}」（主类表无映射，且未显式提供 main-class）`);
+    }
+    const toWrite: Record<string, string> = {};
+    for (const [rawKey, rawValue] of Object.entries(props)) {
+      const key = rawKey.trim();
+      if (key === '' || key === 'custom') continue; // custom 由启动器强制写
+      toWrite[key] = rawValue == null ? '' : String(rawValue); // 选填留空=写 `key=`
+    }
+    toWrite['custom'] = 'true';
+    writePropertiesFile(info, toWrite);
+    return {
+      id,
+      installed: fs.existsSync(jar),
+      configured: true,
+      launchMethod,
+      ...(mainClass || LAUNCH_METHOD_MAIN_CLASS[launchMethod]
+        ? { mainClass: mainClass || LAUNCH_METHOD_MAIN_CLASS[launchMethod] }
+        : {}),
+    };
+  }
+
+  /** 导入自定义版本 jar：复制为 versions/<id>.jar（id=文件名去扩展名；同名报错不覆盖）；落裸 jar=未配置态。 */
+  importCustomJar(srcPath: string): CustomVersionView {
+    if (!fs.existsSync(srcPath)) throw new Error(`文件不存在：${srcPath}`);
+    const ext = path.extname(srcPath).toLowerCase();
+    if (ext !== '.jar' && ext !== '.zip') throw new Error('仅支持 .jar / .zip 客户端包');
+    const id = path.basename(srcPath, path.extname(srcPath));
+    assertSafeVersionId(id);
+    const target = clientJarFile(this.root, id);
+    if (fs.existsSync(target)) throw new Error(`已存在同名版本 jar：${id}`);
+    // 官方清单 id 拒绝导入（inf-20100227-1433 事故的源头封堵）：BC 版本走正常下载/启动链路，
+    // 导成裸 jar 只会得到无元数据的残缺本地版。
+    if (this.cachedOfficialVersionIds().has(id)) {
+      throw new Error(`${id} 是 Betacraft 官方版本 id，不能作为自定义版本导入（启动页直接选择该版本即可）`);
+    }
+    fs.copyFileSync(srcPath, target);
+    const info = infoFile(this.root, id);
+    const configured =
+      fs.existsSync(info) && readPropertiesFile(info)['custom']?.toLowerCase() === 'true';
+    return { id, installed: true, configured };
+  }
+
+  /**
+   * 删除自定义版本：versions/<id>.jar 与 versions/jsons/<id>.info 一并移除（缺哪个跳哪个）。
+   * 门禁 = listCustomVersions 成员判定（与列表页同源）：官方版本（.info 无 custom=true）拒绝，
+   * 从入口排除误删 BC 文件；不存在/非 custom 均显式报错。
+   */
+  removeCustomVersion(id: string): void {
+    assertSafeVersionId(id);
+    if (!this.listCustomVersions().some((v) => v.id === id)) {
+      throw new Error(`${id} 不是自定义版本（不存在，或为 Betacraft 官方版本不可删除）`);
+    }
+    fs.rmSync(clientJarFile(this.root, id), { force: true });
+    fs.rmSync(infoFile(this.root, id), { force: true });
   }
 
   getSettings(): AppSettings {

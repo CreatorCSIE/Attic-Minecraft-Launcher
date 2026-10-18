@@ -4,6 +4,7 @@
  */
 
 import type { AccountView } from './account';
+import type { CustomInfoView, CustomVersionView } from './custom';
 import type { GameExit, GameSession, GameStatus, LaunchConfig } from './launch';
 import type { JavaDetectionReport } from './java';
 import type { AppSettings, InstanceView } from './settings';
@@ -50,6 +51,16 @@ export const IPC_CHANNELS = {
   WINDOW_CONTROL: 'attic:window:control',
   /** 打开/聚焦独立控制台窗口（v1 语义：MC 日志独立窗，与主页解耦）。 */
   WINDOW_CONSOLE: 'attic:window:console',
+  /** 自定义版本列表（仅 custom 项：裸 jar=未配置 / .info custom=true=已配置；官方版本不落入）。 */
+  CUSTOM_LIST: 'attic:custom:list',
+  /** 读取单个自定义版本的 .info 原始属性（未配置裸 jar 附 detectLaunchMethod 建议）。 */
+  CUSTOM_GET_INFO: 'attic:custom:info',
+  /** 保存自定义版本 .info（强制 custom=true；空值删除；非法 launch-method 显式报错）。 */
+  CUSTOM_SAVE_INFO: 'attic:custom:info:save',
+  /** 导入自定义版本 jar（宿主弹原生文件对话框；取消=返回 null）。 */
+  CUSTOM_IMPORT_JAR: 'attic:custom:import-jar',
+  /** 删除自定义版本（jar 与 .info 一并移除；官方版本拒绝）。 */
+  CUSTOM_REMOVE: 'attic:custom:remove',
 } as const;
 
 /** 窗口控制动作：toggle-maximize 由宿主在最大化/还原间切换。 */
@@ -68,6 +79,8 @@ export const IPC_EVENTS = {
   GAME_EXIT: 'attic:game:exit',
   /** 下载进度（jar/资产/Java/legacyfix 统一形状）。 */
   DOWNLOAD_PROGRESS: 'attic:download:progress',
+  /** 自定义版本 .info 外部改动（宿主监视 jsons 目录、按 id 去抖后发射；配置页实时刷新消费）。 */
+  CUSTOM_INFO_CHANGED: 'attic:custom:info-changed',
 } as const;
 
 export type IpcEventName = (typeof IPC_EVENTS)[keyof typeof IPC_EVENTS];
@@ -81,6 +94,12 @@ export interface GameOutputEvent {
 export interface GameExitEvent extends GameExit {
   pid: number;
   versionId: string;
+}
+
+/** 自定义版本 .info 外部改动事件（jsons 目录监视 → 去抖 → 按 id 发射）。 */
+export interface CustomInfoChangedEvent {
+  /** 改动的 `jsons/<id>.info` 对应版本 id。 */
+  id: string;
 }
 
 /** 下载项类别。 */
@@ -114,6 +133,7 @@ export interface AtticEventPayloads {
   'attic:game:output': GameOutputEvent;
   'attic:game:exit': GameExitEvent;
   'attic:download:progress': DownloadProgressEvent;
+  'attic:custom:info-changed': CustomInfoChangedEvent;
 }
 
 export interface LaunchRequest {
@@ -156,6 +176,13 @@ export interface RendererBridge {
   saveInstance(instance: InstanceView): Promise<IpcResult<InstanceView>>;
   windowControl(action: WindowAction): Promise<IpcResult<void>>;
   openConsoleWindow(): Promise<IpcResult<void>>;
+  listCustomVersions(): Promise<IpcResult<CustomVersionView[]>>;
+  getCustomVersionInfo(id: string): Promise<IpcResult<CustomInfoView>>;
+  saveCustomVersionInfo(id: string, props: Record<string, string>): Promise<IpcResult<CustomVersionView>>;
+  /** 导入自定义版本 jar：宿主弹文件对话框，取消返回 ok(null)。 */
+  importCustomJar(): Promise<IpcResult<CustomVersionView | null>>;
+  /** 删除自定义版本（jar + .info 一并移除；官方版本/不存在报错）。 */
+  removeCustomVersion(id: string): Promise<IpcResult<void>>;
   /** 订阅事件，返回退订函数。 */
   on<E extends keyof AtticEventPayloads>(event: E, cb: (payload: AtticEventPayloads[E]) => void): () => void;
 }

@@ -62,14 +62,38 @@ const groups = computed<EraGroup[]>(() => {
 
 const total = computed(() => filtered.value.length);
 
+/** 在途请求共享：load/refresh 汇入同一次在途拉取。
+ * 关键时序（引入"上次版本缓存"后必现）：启动即恢复 selectedId，用户首帧悬停展开时
+ * 初始 load 尚未返回——refresh 若直接跳过，展开定位会打在未渲染的列表上（静默失准，
+ * 数据到达后也不补定位）。join 保证 refresh resolve 时数据必已就绪。 */
+let inflight: Promise<void> | null = null;
+
+function fetchVersions(): Promise<void> {
+  if (inflight) return inflight;
+  inflight = (async () => {
+    try {
+      const res = await bridge.listVersions();
+      if (res.ok) {
+        versions.value = res.value;
+        error.value = null;
+      } else error.value = res.error;
+    } finally {
+      inflight = null;
+    }
+  })();
+  return inflight;
+}
+
 async function load(): Promise<void> {
-  if (loading.value) return;
   loading.value = true;
-  error.value = null;
-  const res = await bridge.listVersions();
-  if (res.ok) versions.value = res.value;
-  else error.value = res.error;
+  await fetchVersions();
   loading.value = false;
+}
+
+/** 静默刷新：不翻动 loading 骨架，但汇入在途的初始 load（供面板每次展开重扫磁盘，
+ * 修 v1 "运行期不更新版本列表"缺陷）。 */
+async function refresh(): Promise<void> {
+  await fetchVersions();
 }
 
 /** 首次访问时拉取，幂等。 */
@@ -88,10 +112,11 @@ export interface VersionsStore {
   groups: ComputedRef<EraGroup[]>;
   total: ComputedRef<number>;
   load: () => Promise<void>;
+  refresh: () => Promise<void>;
   ensureLoaded: () => void;
 }
 
 export function useVersions(): VersionsStore {
   ensureLoaded();
-  return { versions, loading, error, search, filtered, groups, total, load, ensureLoaded };
+  return { versions, loading, error, search, filtered, groups, total, load, refresh, ensureLoaded };
 }

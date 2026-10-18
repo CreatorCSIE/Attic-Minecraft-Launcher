@@ -17,6 +17,7 @@ import LaunchPanel from './components/LaunchPanel.vue';
 import ConsolePanel from './components/ConsolePanel.vue';
 import InstanceList from './components/InstanceList.vue';
 import AccountsPanel from './components/AccountsPanel.vue';
+import CustomVersionsPanel from './components/CustomVersionsPanel.vue';
 import SettingsPanel from './components/SettingsPanel.vue';
 
 /** 独立控制台窗模式：主进程以 ?window=console 加载同一 UI，只渲染控制台。 */
@@ -24,7 +25,7 @@ const isConsoleWindow =
   typeof window !== 'undefined' &&
   new URLSearchParams(window.location.search).get('window') === 'console';
 
-type View = 'launch' | 'instances' | 'accounts' | 'settings';
+type View = 'launch' | 'instances' | 'accounts' | 'custom' | 'settings';
 const view = ref<View>('launch');
 const { t } = useI18n();
 const { hasBridge } = useBridge();
@@ -191,6 +192,32 @@ onMounted(() => {
 
         <button
           class="nav-item"
+          :class="{ 'nav-item--active': view === 'custom' }"
+          :aria-current="view === 'custom' ? 'page' : undefined"
+          :title="t('nav.custom')"
+          @click="view = 'custom'"
+        >
+          <!-- lucide: package -->
+          <svg
+            class="nav-icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z" />
+            <path d="M12 22V12" />
+            <path d="m3.3 7 8.7 5 8.7-5" />
+            <path d="M7.5 4.27 16.5 9.5" />
+          </svg>
+          <span class="nav-label">{{ t('nav.custom') }}</span>
+        </button>
+
+        <button
+          class="nav-item"
           :class="{ 'nav-item--active': view === 'settings' }"
           :aria-current="view === 'settings' ? 'page' : undefined"
           :title="t('nav.settings')"
@@ -238,6 +265,7 @@ onMounted(() => {
         <div v-else class="content">
           <InstanceList v-if="view === 'instances'" />
           <AccountsPanel v-else-if="view === 'accounts'" />
+          <CustomVersionsPanel v-else-if="view === 'custom'" />
           <SettingsPanel v-else />
         </div>
       </main>

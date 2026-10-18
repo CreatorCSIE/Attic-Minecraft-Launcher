@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const { detectLaunchMethod, probeIndevEntry, listZipEntryNames } = require('../dist/index.js');
+const { canonicalLaunchMethod, detectLaunchMethod, probeIndevEntry, listZipEntryNames } = require('../dist/index.js');
 const { buildZip, buildJarBuffer } = require('./zipFixture.js');
 
 function tempJar(t, classNames) {
@@ -62,6 +62,17 @@ test('probeIndevEntry：indev 混代探测（仅 Applet → applet；含 Minecra
   );
   assert.equal(probeIndevEntry(tempJar(t, ['com.example.Nothing'])), null);
   assert.equal(probeIndevEntry(path.join(os.tmpdir(), 'attic-nope-', 'missing.jar')), null);
+});
+
+test('canonicalLaunchMethod：v1 检测名 → 官方 .info 合法值归一', () => {
+  assert.equal(canonicalLaunchMethod('rd'), 'preclassic');
+  assert.equal(canonicalLaunchMethod('mc'), 'preclassic');
+  assert.equal(canonicalLaunchMethod('classic15a'), 'Classic15aWithSaving');
+  assert.equal(canonicalLaunchMethod('classicmp'), 'ClassicMpWithSaving');
+  // 表内即合法名原样通过；1.6（超 BC 清单）无目标名不归一——显式报错可见
+  for (const pass of ['classic12a', 'classic', 'indev', 'custom', '1.6']) {
+    assert.equal(canonicalLaunchMethod(pass), pass);
+  }
 });
 
 test('detectLaunchMethod：jar 不可读回落 custom（v1 catch Throwable 同语义）', (t) => {

@@ -8,6 +8,8 @@ import { computed, type ComputedRef } from 'vue';
 import type {
   AccountView,
   AppSettings,
+  CustomInfoView,
+  CustomVersionView,
   GameExit,
   GameSession,
   GameStatus,
@@ -58,6 +60,11 @@ const mockBridge: RendererBridge = {
   saveInstance: async (i) => ok(i),
   windowControl: async () => ok<void>(undefined), // 浏览器无窗可控：no-op
   openConsoleWindow: async () => err<void>(NO_BRIDGE),
+  listCustomVersions: async () => ok<CustomVersionView[]>([]),
+  getCustomVersionInfo: async () => err<CustomInfoView>(NO_BRIDGE),
+  saveCustomVersionInfo: async () => err<CustomVersionView>(NO_BRIDGE),
+  importCustomJar: async () => err<CustomVersionView | null>(NO_BRIDGE),
+  removeCustomVersion: async () => err<void>(NO_BRIDGE),
   on: () => () => {},
 };
 

@@ -142,6 +142,7 @@
   --ok: #6e9463;
   --warn: #b08d57;
   --danger: #b85c4a;
+  --danger-ink: #fdf9f0; /* danger 实心按钮上的文字（暖白，两主题通用） */
 
   --ok-soft: rgba(110, 148, 99, 0.16);
   --warn-soft: rgba(176, 141, 87, 0.16);
@@ -199,6 +200,7 @@
   --ok: #4f7245;
   --warn: #8a6a2e;
   --danger: #9a4436;
+  --danger-ink: #fdf9f0; /* danger 实心按钮上的文字（暖白，两主题通用） */
 
   --ok-soft: rgba(79, 114, 69, 0.14);
   --warn-soft: rgba(138, 106, 46, 0.14);

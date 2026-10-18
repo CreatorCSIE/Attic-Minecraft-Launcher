@@ -1,8 +1,13 @@
 <script setup lang="ts">
 /**
- * 皮肤头头像 —— 走 minotar.net 在线头像（对齐 BlockHelm：LauncherAccount.cs L26 / HomePageViewModel.cs L158
- * `https://minotar.net/avatar/{name}/{size}.png`，未知用户名由 minotar 自动回落 Steve 脸）。
- * 图片加载失败时回落到本地 canvas 绘制的 Steve 脸（断网兜底，不阻塞布局）。
+ * 皮肤头头像 —— 走 minotar.net 在线头像（对齐 BlockHelm：LauncherAccount.cs L26 / HomePageViewModel.cs L158），
+ * 未知用户名由 minotar 自动回落 Steve 脸。图片加载失败时回落到本地 canvas 绘制的 Steve 脸（断网兜底，不阻塞布局）。
+ *
+ * 尺寸策略（用户拍板修复像素拉伸）：**恒请求 8px 原始脸**，放大交给 CSS `image-rendering: pixelated`（最近邻）。
+ * 根因：`/avatar/{name}/{size}.png` 是 minotar 服务端缩放，非整数倍（如 28/8=3.5）产出双线性糊图——
+ * 糊在源图上，浏览器端 pixelated 救不回；整数倍（64/8=8）才清晰。8px 源 + 本地最近邻 = 任意槽位都锐利。
+ * 缓存共享：同用户名全站唯一 URL → 启动页 AccountHero(56)/账户列表(28)/详情(64) 三实例经浏览器
+ * HTTP 缓存只取一次（防多次获取）。
  */
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 
@@ -15,7 +20,7 @@ const failed = ref(false);
 const canvas = ref<HTMLCanvasElement | null>(null);
 
 const src = computed(
-  () => `https://minotar.net/avatar/${encodeURIComponent(props.username || 'Steve')}/${props.size}.png`,
+  () => `https://minotar.net/avatar/${encodeURIComponent(props.username || 'Steve')}/8.png`,
 );
 
 // —— 断网回落：8×8 Steve 脸 canvas 放大（与 minotar 像素风一致） ——
