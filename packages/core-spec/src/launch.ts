@@ -48,6 +48,8 @@ export interface GameExit {
   signal: string | null;
   /** 非正常退出时由崩溃分类器填充；正常退出为 null。 */
   crash: CrashSummary | null;
+  /** 用户主动停止（点停止按钮 / 关闭游戏窗口触发看门狗）：控制台以中性态显示最后一行日志，不报崩溃。 */
+  stoppedByUser?: boolean;
 }
 
 export interface GameSession {

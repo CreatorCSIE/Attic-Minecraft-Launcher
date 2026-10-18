@@ -30,8 +30,19 @@ const running = computed(() => status.value.running);
 /* 聚合进度区可见性（BlockHelm 配方）：启动中展示；下载失败则常驻红态直到下次启动。 */
 const showProgress = computed(() => active.value && (busy.value || failed.value !== null));
 const canPlay = computed(() => hasBridge.value && !!selected.value && !!current.value && !running.value && !busy.value);
-/* 启动/停止合为一体（用户指定）：同一按钮按状态切换动作——空闲=启动，运行=停止 */
-const canToggle = computed(() => hasBridge.value && !busy.value && (running.value || !!selected.value));
+/* 启动/停止合为一体（用户指定）：同一按钮按状态切换动作——空闲=启动，运行=停止。
+ * 空闲态真正可用的前置 = 有效账户 + 已选版本（用户指定：UI 侧硬门禁，不靠宿主兜底报错）。 */
+const canToggle = computed(
+  () => hasBridge.value && !busy.value && (running.value || (!!selected.value && !!current.value)),
+);
+/* 禁用原因提示（hover 标题）：缺哪个说哪个。 */
+const playHint = computed(() => {
+  if (running.value || busy.value || !hasBridge.value) return '';
+  if (!current.value && !selected.value) return t('launch.hintNeedBoth');
+  if (!current.value) return t('launch.hintNeedAccount');
+  if (!selected.value) return t('launch.hintNeedVersion');
+  return '';
+});
 
 // —— 「| ≡」菜单：点外部收起 ——
 const menuOpen = ref(false);
@@ -110,6 +121,7 @@ function mb(bytes: number): string {
         class="play"
         :class="{ 'play--stop': running }"
         :disabled="!canToggle"
+        :title="playHint || undefined"
         @click="onToggle"
       >
         <span v-if="running" class="sq" aria-hidden="true"></span>

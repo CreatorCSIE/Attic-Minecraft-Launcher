@@ -82,6 +82,8 @@ export class GameProcessManager {
   private watchdog: ChildProcess | null = null;
   private session: GameSession | null = null;
   private lastExit: GameExit | null = null;
+  /** 用户主动停止标记（点停止按钮/看门狗关窗）：置真后 SIGTERM 导致的非零退出码不报崩溃，exit 消费即复位。 */
+  private stopRequested = false;
   private lastError: string | null = null;
   private outputTail = '';
   private closedResolve: (() => void) | null = null;
@@ -107,6 +109,7 @@ export class GameProcessManager {
     const child = spawn(config.javaPath, args, { cwd: config.gameDir, stdio: ['ignore', 'pipe', 'pipe'] });
     this.outputTail = '';
     this.lastError = null;
+    this.stopRequested = false;
 
     const pid = child.pid ?? -1;
     this.session = { pid, versionId, startedAt: Date.now() };
@@ -136,8 +139,11 @@ export class GameProcessManager {
       console.log(`[attic-runtime] game close pid=${pid} code=${code} signal=${signal}`);
       this.watchdog?.kill();
       this.watchdog = null;
-      const crash = classifyCrash(this.outputTail, code);
-      const exit: GameExit = { code, signal, crash };
+      // 用户主动停止（点停止按钮 / 看门狗关窗）：不报崩溃，控制台以中性态显示最后一行日志。
+      const stoppedByUser = this.stopRequested;
+      this.stopRequested = false;
+      const crash = stoppedByUser ? null : classifyCrash(this.outputTail, code);
+      const exit: GameExit = { code, signal, crash, ...(stoppedByUser ? { stoppedByUser: true } : {}) };
       this.lastExit = exit;
       this.child = null;
       const session = this.session;
@@ -167,6 +173,7 @@ export class GameProcessManager {
       if (!data.includes('CLOSED') || this.child !== child) return;
       this.appendOutput('[attic-runtime] 游戏窗口已关闭，终止进程\n');
       this.events.onOutput({ stream: 'stdout', chunk: '[attic-runtime] 游戏窗口已关闭，终止进程\n', pid });
+      this.stopRequested = true;
       child.kill('SIGTERM');
     });
     ps.on('close', () => {
@@ -182,6 +189,7 @@ export class GameProcessManager {
     const closed = new Promise<void>((resolve) => {
       this.closedResolve = resolve;
     });
+    this.stopRequested = true;
     this.child.kill('SIGTERM');
     await closed;
     return this.lastExit ?? { code: null, signal: null, crash: null };

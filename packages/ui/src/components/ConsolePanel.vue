@@ -15,6 +15,15 @@ const autoscroll = ref(true);
 const scroller = ref<HTMLElement | null>(null);
 
 const crash = computed(() => lastExit.value?.crash ?? null);
+/* 用户主动停止（点停止按钮/关游戏窗）：不显示崩溃红条，改中性条 + 最后一行日志。 */
+const stopped = computed(() => !!lastExit.value?.stoppedByUser);
+const lastLine = computed(() => {
+  for (let i = lines.value.length - 1; i >= 0; i -= 1) {
+    const text = lines.value[i]?.text.trim();
+    if (text) return text;
+  }
+  return '';
+});
 
 watch(
   () => lines.value.length,
@@ -40,7 +49,11 @@ watch(
       </div>
     </div>
 
-    <div v-if="crash" class="crash">
+    <div v-if="stopped" class="stopped">
+      <span class="stopped-cat">{{ t('console.stopped') }}</span>
+      <span class="stopped-head mono">{{ lastLine }}</span>
+    </div>
+    <div v-else-if="crash" class="crash">
       <span class="crash-cat">{{ t(`crash.${crash.category}`) }}</span>
       <span class="crash-head mono">{{ crash.headline }}</span>
     </div>
@@ -115,6 +128,29 @@ watch(
   background: var(--danger-soft);
   border: 1px solid var(--danger);
   border-radius: var(--radius-md);
+}
+/* 用户停止中性条：与崩溃条同构但走次级语义色，不带告警感。 */
+.stopped {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+.stopped-cat {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+.stopped-head {
+  font-size: var(--fs-xs);
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .crash-cat {
   font-size: var(--fs-xs);

@@ -105,7 +105,7 @@ Applet 容器（主类 `AppletLauncher`）的 `gameArgs` 末尾追加 `--width <
 | 事件 | payload | 说明 |
 | --- | --- | --- |
 | `attic:game:output` | `GameOutputEvent{stream,chunk,pid}` | stdout/stderr 流，UI 控制台面板消费 |
-| `attic:game:exit` | `GameExitEvent{code,signal,crash,pid,versionId}` | 退出 + 崩溃分类摘要 |
+| `attic:game:exit` | `GameExitEvent{code,signal,crash,stoppedByUser?,pid,versionId}` | 退出 + 崩溃分类摘要；`stoppedByUser:true` = 用户主动停止（点停止按钮/关游戏窗触发看门狗），`crash` 恒为 null，控制台以中性条显示最后一行日志；外部 taskkill/自身异常退出仍照常报崩溃条 |
 | `attic:download:progress` | `DownloadProgressEvent{item,id,phase,bytesDone,bytesTotal?,bytesPerSec?,error?}` | jar/资产/Java/legacyfix 统一形状；`phase`: `queued/transferring/verifying/done/failed` |
 
 ## 4. 契约测试夹具
