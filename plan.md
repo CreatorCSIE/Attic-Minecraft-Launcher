@@ -118,6 +118,13 @@
 
 ## 7. Phase 6 — 后置（不承诺时间）
 
+- [ ] **Infdev 地图预览器（legacyfix VisualizerPatch，方案已调研定稿，用户决策：暂不实现）**：
+  - 上游依据：`6ed9e82`（2026-10-13，v3 HEAD）新增 `VisualizerPatch`——opt-in 补丁，`-Dlf.visualizer` 存在即生效（`Patch.shouldApply` 走 Agent SETTINGS 的 `lf.*` 通道，与 `-Dlf.assetsDir` 等同源），把启动主类 `main()` 替换为反射调用 `VisualizerLauncher.launchPreviewApplet("net.minecraft.isom.IsomPreviewApplet")`；`VisualizerLauncher` 自建 AWT 窗口「Minecraft Infinite Map Visualizer」854×480，关窗 `System.exit(0)` 进程自退（**无需窗口看门狗**）。`reference/legacyfix` 已同步至 `6ed9e82`（顺带含 c0.0.15a 非 5565 端口补丁、LWJGL 3.1.3 方法补丁、ProxyPatch 增强 + version_data.json 新行）。
+  - jar 供给：**免自编译**——CI nightly 构件 `https://nightly.link/betacraftuk/legacyfix/workflows/gradle/v3`（最新 `legacyfix-nightly-<run_id>.zip`，内含 shadow 胖 jar，version=`nightly-<run_id>`）；Release 26.8（2026-08-23）不含 visualizer，走 nightly 才有。落地通道二选一：① 端点/设置增 legacyfix 渠道（release/nightly），nightly 先经 GitHub API `actions/workflows/gradle.yml/runs?branch=v3&status=success` 解析最新 run → 构件名拼 `nightly.link/.../<name>.zip`（构件名含 run 号、每次 push 变化，索引页 `workflows/gradle/v3` 亦可解析）；② 手动把 nightly jar 覆盖数据根 `launcher/legacyfix-*.jar`（`ensureLegacyfix` 见文件已存在即跳过，零代码改动，先验证用）。
+  - 版本门控（数据驱动，戒律 #1）：本地 jar 含 `net/minecraft/isom/IsomPreviewApplet.class` 才暴露入口——复用 `listZipEntryNames`，同 `probeIndevEntry` 配方。官方 docs 范围：inf-20100616 引入、a1.2.0 移除、b1.3 起损坏（本次 reimplementation 即修复）；class 实际残存至 b1.7.3 jar（实测本地已装 jar 仅 b1.7.3 含该类）。
+  - 启动链路：`LaunchContext` 增 `visualizer?: boolean` → jvmArgs 注入 `-Dlf.visualizer`（固定组位置建议 levelServer/assetsDir/assetIndex 之后、javaagent 之前，进 contract.md §2.6 钉序）；UI 入口 = 主页「| ≡」菜单「以地图预览器启动」；契约基线夹具不变，`launch.test.js` 补注入/不注入两条断言。
+  - 验收路径：先跑 b1.7.3（已装且含类）看俯视图渲染存档；注意其主类为 launchwrapper `Launch`，补丁 hook 的是 `sun.java.command` 首 token（=Launch），实机为准；代理/皮肤/资产链路不变。
+- [ ] **nightly.link 免登录下载 Actions artifacts（通用构件通道，visualizer jar 供给的前置能力）**：GitHub 官方 artifact 下载需登录（`/suites/.../artifacts/<id>` 直链 403，API `download-artifact` 需 token），而 nightly.link 把同一构件代理为**公开免登录直链**——`https://nightly.link/<owner>/<repo>/workflows/<workflow>/<branch>/<artifact-name>.zip`（已实测：legacyfix v3 最新构件可匿名取回，zip 内即 `build/libs` 原样内容）。要点：① 索引页 `workflows/<wf>/<branch>` 列出最新构件名（构件名含 run 号、每次 push 变化），程序化取回=先抓索引页或 GitHub API runs 列表解析构件名，再拼 zip URL；② nightly.link 页内的 Azure blob "ephemeral direct link" <1 分钟过期，**不可缓存**，稳定入口只有 nightly.link zip URL（302 现签）；③ 属第三方代理服务（开源 roidelity/nightly.link），有可用性/时效风险（仅保留近期 run），作 fallback 通道而非唯一供给面，与 Release 渠道并存（风险 #1 同族：端点全配置化）。适用面：legacyfix nightly jar、后续任何"上游只发 CI 构件、不发 Release"的依赖供给。
 - [ ] Android 第三壳调研：共享数据层（版本表/端点），独立 Kotlin 执行壳；参考 FCL 与 Quanta-Craft-Launcher 的 JVM 管线（libjpe/Redcore 路线）——"通道复用"而非"前端复用"
 - [ ] 能力探测并入：字节码判定 `resizable`/`supportsFullscreen` 自动填充版本表（MCANextGen 资产，可反哺上游）
 - [ ] 与 Betacraft 的协作界面评估（我们做壳、他们做数据/修复的分工是否可正式化）
