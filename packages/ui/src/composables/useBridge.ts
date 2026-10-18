@@ -2,6 +2,9 @@
  * useBridge —— 封装 window.attic 桥面。
  * 浏览器直开（无 Electron preload）时返回降级 mock：列表类返回空、动作类返回 no-bridge 错误，
  * 保证 UI 不崩且走"空状态"分支（缺桥横幅由 App.vue 依 hasBridge 展示）。
+ * dev 演示模式（?demo=1，见 dev/demo.ts 自述承诺）：无真桥且 isDemo() 时以假数据覆写
+ * 列表/设置/Java 探测，支撑"无宿主在场直接在浏览器排版出真稿"的工作流；
+ * 动作类仍走 mock 的 no-bridge 错误（不伪装可启动）。
  */
 
 import { computed, type ComputedRef } from 'vue';
@@ -19,6 +22,7 @@ import type {
   RendererBridge,
   VersionJson,
 } from '@attic/core-spec';
+import { demoInstances, demoJavaReport, demoSettings, demoVersions, isDemo } from '../dev/demo';
 
 const NO_BRIDGE = 'no-bridge';
 
@@ -73,9 +77,20 @@ export interface BridgeHandle {
   hasBridge: ComputedRef<boolean>;
 }
 
+/** 演示覆写：只改"读"侧数据源，写/动作/窗控沿用 mock（假数据不伪装成真宿主行为）。 */
+function demoBridge(): RendererBridge {
+  return {
+    ...mockBridge,
+    listVersions: async () => ok(demoVersions),
+    listInstances: async () => ok(demoInstances),
+    getSettings: async () => ok<AppSettings>(demoSettings),
+    detectJava: async () => ok<JavaDetectionReport>(demoJavaReport),
+  };
+}
+
 export function useBridge(): BridgeHandle {
   const real = typeof window !== 'undefined' ? window.attic : undefined;
-  const bridge = real ?? mockBridge;
+  const bridge = real ?? (isDemo() ? demoBridge() : mockBridge);
   return {
     bridge,
     hasBridge: computed(() => real !== undefined),

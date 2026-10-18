@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const { canonicalLaunchMethod, detectLaunchMethod, probeIndevEntry, listZipEntryNames } = require('../dist/index.js');
+const { canonicalLaunchMethod, detectLaunchMethod, probeIndevEntry, probePreclassicEntry, listZipEntryNames } = require('../dist/index.js');
 const { buildZip, buildJarBuffer } = require('./zipFixture.js');
 
 function tempJar(t, classNames) {
@@ -62,6 +62,22 @@ test('probeIndevEntry：indev 混代探测（仅 Applet → applet；含 Minecra
   );
   assert.equal(probeIndevEntry(tempJar(t, ['com.example.Nothing'])), null);
   assert.equal(probeIndevEntry(path.join(os.tmpdir(), 'attic-nope-', 'missing.jar')), null);
+});
+
+test('probePreclassicEntry：rd 代 jar 的 RubyDung 入口探测（缺失/不可读 = null）', (t) => {
+  // rd-132211 实测形态（pc-132011 jar）：仅 com.mojang.rubydung.RubyDung，无任何 MinecraftApplet
+  assert.equal(probePreclassicEntry(tempJar(t, ['com.mojang.rubydung.RubyDung'])), 'com.mojang.rubydung.RubyDung');
+  // 后续 rd-1322xx 形态：com.mojang.minecraft.RubyDung（MinecraftApplet 是 0 字段空壳，v3 明确弃用）
+  assert.equal(probePreclassicEntry(tempJar(t, ['com.mojang.minecraft.RubyDung', APPLET])), 'com.mojang.minecraft.RubyDung');
+  // 两类皆在（理论序）：rubydung 系优先
+  assert.equal(
+    probePreclassicEntry(tempJar(t, ['com.mojang.minecraft.RubyDung', 'com.mojang.rubydung.RubyDung'])),
+    'com.mojang.rubydung.RubyDung',
+  );
+  // classic 系 jar（只有空壳 Applet）不属本通道 → null 不注入
+  assert.equal(probePreclassicEntry(tempJar(t, [APPLET])), null);
+  assert.equal(probePreclassicEntry(tempJar(t, ['com.example.Nothing'])), null);
+  assert.equal(probePreclassicEntry(path.join(os.tmpdir(), 'attic-nope-', 'missing.jar')), null);
 });
 
 test('canonicalLaunchMethod：v1 检测名 → 官方 .info 合法值归一', () => {

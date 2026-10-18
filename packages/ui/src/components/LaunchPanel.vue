@@ -15,6 +15,8 @@ import { useSettings } from '../composables/useSettings';
 import { useAccounts } from '../composables/useAccounts';
 import { useBridge } from '../composables/useBridge';
 import { useDownloads } from '../composables/useDownloads';
+import { useInstances } from '../composables/useInstances';
+import InstanceDock from './InstanceDock.vue';
 
 const emit = defineEmits<{ (e: 'open-instances'): void }>();
 
@@ -25,6 +27,7 @@ const { settings } = useSettings();
 const { current } = useAccounts();
 const { bridge, hasBridge } = useBridge();
 const { percent, rateBps, stage, active, failed, reset: resetDownloads } = useDownloads();
+const { activeName } = useInstances();
 
 const running = computed(() => status.value.running);
 /* 聚合进度区可见性（BlockHelm 配方）：启动中展示；下载失败则常驻红态直到下次启动。 */
@@ -67,6 +70,8 @@ async function doLaunch(test: boolean): Promise<void> {
   resetDownloads();
   const ok = await launch({
     versionId: v.id,
+    // 激活实例（Play 左侧实例 dock 选择；未初始化时留空 = 宿主按契约回落 default instance）
+    instanceId: activeName.value || undefined,
     accountId: current.value?.id,
     javaPath: settings.value.javaPath,
     maxMemoryMb: settings.value.maxMemoryMb,
@@ -115,8 +120,10 @@ function mb(bytes: number): string {
       <p v-if="failed" class="progress-err">{{ failed.id }}：{{ failed.error }}</p>
     </div>
 
-    <!-- 动作行：Play+菜单沉底靠右（空闲/运行状态灯已移除——合一体按钮文案即状态） -->
+    <!-- 动作行：Play+菜单沉底靠右；实例 dock（用户指定）置于 Play 左侧，
+         与左下版本 dock 同款交互，展开向上浮出、不吃布局空间 -->
     <div class="actions">
+      <InstanceDock />
       <button
         class="play"
         :class="{ 'play--stop': running }"

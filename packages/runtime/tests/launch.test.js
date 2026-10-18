@@ -93,6 +93,26 @@ test('Applet 容器主类：javaagent jar 同时进 classpath；剔 launchwrappe
   assert.ok(!config.jvmArgs.some((a) => a.includes('deawt')));
 });
 
+test('Applet 容器 appletClass：context 注入值优先；无注入回落方法表；皆无则不传（可见失败）', () => {
+  const appletJson = (method) => ({
+    id: 'pc-132011',
+    mainClass: APPLET_LAUNCHER_CLASS,
+    betacraft: { launchMethod: method },
+  });
+  // rd 代 pre-Classic：宿主按 jar 探测注入 RubyDung（26.8 候选表无此类名，不注入 = code=0 秒退）
+  const injected = assembleLaunchConfig(appletJson('preclassic'), {
+    ...baseContext(),
+    appletClass: 'com.mojang.rubydung.RubyDung',
+  });
+  assert.deepEqual(injected.gameArgs.slice(-2), ['--appletClass', 'com.mojang.rubydung.RubyDung']);
+  // 无注入值 + 表命中（4k → M）：维持方法数据表通道
+  const viaTable = assembleLaunchConfig(appletJson('4k'), baseContext());
+  assert.deepEqual(viaTable.gameArgs.slice(-2), ['--appletClass', 'M']);
+  // 无注入值 + 表无值（preclassic 不在表）：不传参数，legacyfix 原行为（失败可见不静默）
+  const none = assembleLaunchConfig(appletJson('preclassic'), baseContext());
+  assert.ok(!none.gameArgs.includes('--appletClass'));
+});
+
 test('非 Applet 容器：保留 launchwrapper、不加 deawt 开关', () => {
   const versionJson = { id: 'b1.7.3', mainClass: 'net.minecraft.launchwrapper.Launch' };
   const context = { ...baseContext(), binPool: ['/data/bin/launchwrapper-1.5.jar'] };

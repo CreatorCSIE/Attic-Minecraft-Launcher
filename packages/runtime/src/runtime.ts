@@ -65,7 +65,7 @@ import {
   writePropertiesFile,
   zuluJavaDir,
 } from './storage';
-import { canonicalLaunchMethod, detectLaunchMethod, probeIndevEntry } from './wrapperDetector';
+import { canonicalLaunchMethod, detectLaunchMethod, probeIndevEntry, probePreclassicEntry } from './wrapperDetector';
 import { extractZipTo } from './zip';
 import { installZuluPackage, queryZuluPackages } from './zulu';
 
@@ -340,6 +340,18 @@ export class AtticRuntime {
     return json;
   }
 
+  /**
+   * pre-Classic（launch-method=preclassic，rd 代 jar）的 --appletClass 显式注入：
+   * rd 系 jar 仅含 RubyDung 入口，26.8 AppletLauncher 候选表两个 MinecraftApplet 名
+   * 皆不存在 → main 返回、进程 code=0 静默秒退（pc-132011 实测定格；level.dat 缺失
+   * 只是开局噪音，注入后窗口与游戏循环正常）。探测失败 = 不注入（维持可见失败，
+   * probeIndevEntry 同纪律）。
+   */
+  private resolvePreclassicAppletClass(json: VersionJson): string | undefined {
+    if (json.betacraft?.launchMethod !== 'preclassic') return undefined;
+    return probePreclassicEntry(clientJarFile(this.root, json.id)) ?? undefined;
+  }
+
   /** 真实 betacraft .info 不含 agentMount——并入 Attic 自带决策表（数据，非代码）。 */
   private withAgentMounts(json: VersionJson): VersionJson {
     if (json.betacraft?.agentMount) return json;
@@ -349,6 +361,7 @@ export class AtticRuntime {
   async dryRunLaunch(request: LaunchRequest): Promise<LaunchConfig> {
     const json = this.resolveIndevMainClass(await this.getVersionJson(request.versionId));
     const context = await this.buildContext(request);
+    context.appletClass = this.resolvePreclassicAppletClass(json);
     return assembleLaunchConfig(json, context, {
       extraJvmArgs: request.extraJvmArgs,
       gameParams: request.gameParams,
@@ -378,6 +391,7 @@ export class AtticRuntime {
       if (assetIndexId) await this.client.downloadAssetObjects(this.root, assetIndexId);
 
       const context = await this.buildContext(request);
+      context.appletClass = this.resolvePreclassicAppletClass(json);
       const config = assembleLaunchConfig(json, context, {
         extraJvmArgs: request.extraJvmArgs,
         gameParams: request.gameParams,

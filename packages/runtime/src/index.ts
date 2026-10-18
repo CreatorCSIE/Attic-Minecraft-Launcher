@@ -80,7 +80,7 @@ export {
   type AssembleOptions,
 } from './launch';
 export { classifyCrash, GameProcessManager, type GameProcessEvents } from './process';
-export { canonicalLaunchMethod, detectLaunchMethod, probeIndevEntry } from './wrapperDetector';
+export { canonicalLaunchMethod, detectLaunchMethod, probeIndevEntry, probePreclassicEntry } from './wrapperDetector';
 export { extractZipTo, listZipEntryNames, readZipEntries, writeZipEntries, type ZipEntry } from './zip';
 export {
   applyLegacyfixDeawtPatch,

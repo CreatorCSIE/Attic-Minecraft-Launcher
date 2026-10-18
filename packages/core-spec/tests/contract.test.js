@@ -96,7 +96,8 @@ for (const { file, fixture } of fixtures) {
 test('IPC 通道与事件名唯一且非空', () => {
   const channels = Object.values(IPC_CHANNELS);
   const events = Object.values(IPC_EVENTS);
-  assert.ok(channels.length >= 9 && events.length === 3);
+  // 事件数钉死 = 漂移绊线（GAME_OUTPUT/GAME_EXIT/DOWNLOAD_PROGRESS/CUSTOM_INFO_CHANGED）
+  assert.ok(channels.length >= 9 && events.length === 4);
   for (const c of [...channels, ...events]) {
     assert.match(c, /^attic:[a-z0-9:\-]+$/);
   }

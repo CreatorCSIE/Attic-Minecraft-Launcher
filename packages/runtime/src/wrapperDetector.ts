@@ -60,6 +60,27 @@ export function probeIndevEntry(jarFile: string): 'main' | 'applet' | null {
   return null;
 }
 
+/**
+ * pre-Classic（rd 代）入口类探测：rd 系 jar 仅含 RubyDung 入口——rd-132211 形态只有
+ * com.mojang.rubydung.RubyDung，后续 rd-1322xx 形态为 com.mojang.minecraft.RubyDung
+ * （其 MinecraftApplet 是 0 字段空壳类，v3 GameClasses 以字段数过滤明确弃用）。
+ * 26.8 AppletLauncher 候选表只认两个 MinecraftApplet 名，全部加载失败 = main 返回、
+ * 进程 code=0 即退（pc-132011 实测定格：静默秒退）；--appletClass 是唯一可用显式通道
+ * （实测注入后窗口起来、游戏循环正常）。返回全限定类名；jar 不可读/皆无 = null（不注入）。
+ */
+export function probePreclassicEntry(jarFile: string): string | null {
+  let entries: Set<string>;
+  try {
+    entries = new Set(listZipEntryNames(jarFile));
+  } catch {
+    return null;
+  }
+  for (const candidate of ['com.mojang.rubydung.RubyDung', 'com.mojang.minecraft.RubyDung']) {
+    if (entries.has(`${candidate.replace(/\./g, '/')}.class`)) return candidate;
+  }
+  return null;
+}
+
 /** 检测 jar 的启动方法；不可读或全规则不中 = 'custom'。 */
 export function detectLaunchMethod(jarFile: string): string {
   let entries: Set<string>;

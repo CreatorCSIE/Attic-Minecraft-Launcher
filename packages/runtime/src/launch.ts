@@ -29,6 +29,11 @@ export interface LaunchContext {
   /** 窗口尺寸（Applet 容器 `--width/--height` 游戏参数；v1 缺省 854x480）。 */
   width?: number;
   height?: number;
+  /**
+   * Applet 容器 `--appletClass` 显式注入（宿主按本地 jar 探测的结果；rd 代 pre-Classic
+   * 仅此通道可起——候选表两个 MinecraftApplet 名在 jar 中皆不存在）；优先于方法数据表。
+   */
+  appletClass?: string;
 }
 
 export interface AssembleOptions {
@@ -210,12 +215,13 @@ export function assembleLaunchConfig(
   if (isAppletContainer && context.width && context.height) {
     gameArgs.push('--width', String(context.width), '--height', String(context.height));
   }
-  // Applet 子类型指定（4k-* → --appletClass M）：deawt 保持缺省开启（4k 纯 AWT 渲染是否需
-  // -Dlf.deawt.disable 以实机窗口测试为准，见 launch 实测记录）。
+  // Applet 子类型指定（4k-* → --appletClass M；pre-Classic → 宿主按 jar 探测注入 RubyDung）。
+  // 注入值优先于方法表：rd 系 launch-method 同键（preclassic）但 jar 形态跨两代类名，表无法表达。
+  // deawt 保持缺省开启（4k 纯 AWT 渲染是否需 -Dlf.deawt.disable 以实机窗口测试为准，见 launch 实测记录）。
   if (isAppletContainer) {
-    const appletClass = versionJson.betacraft?.launchMethod
-      ? APPLET_CLASS_BY_METHOD[versionJson.betacraft.launchMethod]
-      : undefined;
+    const appletClass =
+      context.appletClass ??
+      (versionJson.betacraft?.launchMethod ? APPLET_CLASS_BY_METHOD[versionJson.betacraft.launchMethod] : undefined);
     if (appletClass) gameArgs.push('--appletClass', appletClass);
   }
 
