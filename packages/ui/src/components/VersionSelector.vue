@@ -104,9 +104,17 @@ const panelEl = ref<HTMLElement | null>(null);
 const peekbarEl = ref<HTMLElement | null>(null);
 const panelH = ref(0);
 const peekH = ref(0);
+// 首帧保护：重挂载（切页返回启动页）时变量从 0px→实测值，若 transition 在场
+// 会被渲染成一次"收缩动画"。实测值不仅要写进 DOM，还必须**被浏览器绘制过一帧**
+// （transition:none 状态下），之后才能恢复过渡——nextTick 只等 patch 不等 paint，
+// 中间态会被合并进同一次样式变更而照常触发动画，故用双 rAF 锚定真实绘制帧。
+const ready = ref(false);
 function remeasure(): void {
   if (panelEl.value) panelH.value = panelEl.value.scrollHeight;
   if (peekbarEl.value) peekH.value = peekbarEl.value.offsetHeight;
+  if (!ready.value) {
+    requestAnimationFrame(() => requestAnimationFrame(() => (ready.value = true)));
+  }
 }
 onMounted(remeasure);
 watch([groups, search, loading, error], () => void nextTick(remeasure));
@@ -150,6 +158,7 @@ function subtitleOf(v: VersionRef): string {
 <template>
   <div
     class="dock"
+    :class="{ 'is-ready': ready }"
     :style="{
       '--panel-h': panelH ? `${panelH}px` : '0px',
       '--peek-h': peekH ? `${peekH}px` : '0px',
@@ -350,6 +359,11 @@ function subtitleOf(v: VersionRef): string {
 }
 .peekbar:hover {
   background: var(--surface-3);
+}
+/* 实测高度落进 DOM 前禁用平移/淡出过渡：防重挂载首帧 0px→实测值被当成收缩动画播一遍 */
+.dock:not(.is-ready) .panel,
+.dock:not(.is-ready) .peekbar {
+  transition: none;
 }
 .peek-chevron {
   margin-left: auto;
