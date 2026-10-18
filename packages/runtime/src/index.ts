@@ -81,7 +81,13 @@ export {
 } from './launch';
 export { classifyCrash, GameProcessManager, type GameProcessEvents } from './process';
 export { canonicalLaunchMethod, detectLaunchMethod, probeIndevEntry } from './wrapperDetector';
-export { extractZipTo, listZipEntryNames } from './zip';
+export { extractZipTo, listZipEntryNames, readZipEntries, writeZipEntries, type ZipEntry } from './zip';
+export {
+  applyLegacyfixDeawtPatch,
+  patchDeawtClassBytes,
+  reportLegacyfixDeawtPatch,
+  type LfPatchOutcome,
+} from './legacyfixPatch';
 export {
   resolveAssetIndexId,
   resolveLaunchAssetIndexId,

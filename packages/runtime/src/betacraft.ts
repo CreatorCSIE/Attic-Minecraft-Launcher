@@ -13,6 +13,7 @@ import path from 'node:path';
 import type { DownloadItem, DownloadProgressEvent, LibraryInfo, VersionEra, VersionJson, VersionRef } from '@attic/core-spec';
 
 import { resolveEndpoints, type Endpoints } from './endpoints';
+import { applyLegacyfixDeawtPatch, reportLegacyfixDeawtPatch } from './legacyfixPatch';
 import { ASSET_INDEXES, planAssetObjects, resolveLaunchAssetIndexId } from './legacyAssets';
 import { assetIndexFile, assetsDir, binDir, clientJarFile, infoFile } from './storage';
 
@@ -317,7 +318,11 @@ export class BetacraftClient {
   /** legacyfix Release 最新构件下载 → <root>/<relPath>（relPath 来自 agentMount.path）。 */
   async ensureLegacyfix(root: string, relPath: string): Promise<string> {
     const dest = path.join(root, relPath);
-    if (fs.existsSync(dest)) return dest;
+    if (fs.existsSync(dest)) {
+      // DeAwtPatch 窗口位置补丁幂等维持（钉版不匹配/锚点异常自动跳过，不阻断启动）。
+      reportLegacyfixDeawtPatch(dest, applyLegacyfixDeawtPatch(dest));
+      return dest;
+    }
     const res = await this.get(this.endpoints.legacyfixRelease);
     const release = (await res.json()) as { assets?: { name?: string; browser_download_url?: string }[] };
     const wanted = path.basename(relPath).toLowerCase();
@@ -326,6 +331,7 @@ export class BetacraftClient {
       release.assets?.find((a) => a.name?.toLowerCase().startsWith('legacyfix') && a.name.toLowerCase().endsWith('.jar'));
     if (!asset?.browser_download_url) throw new Error('legacyfix Release 中未找到可用 jar 构件');
     await this.download(asset.browser_download_url, dest, 'legacyfix', asset.name ?? relPath);
+    reportLegacyfixDeawtPatch(dest, applyLegacyfixDeawtPatch(dest));
     return dest;
   }
 }

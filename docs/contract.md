@@ -61,6 +61,8 @@
 
 Applet 容器（主类 `AppletLauncher`）的 `gameArgs` 末尾追加 `--width <w> --height <h>`（实例值，v1 缺省 854×480；`AppletFrame.java` 读取，缺省兜底 640×480）。非 Applet 版本窗口由 LWJGL/DeAwt 自管，不注入。
 
+legacyfix jar 原位补丁（窗口偏右下最小修复，不属启动命令行）：`ensureLegacyfix` 落位后对 `<root>/legacyfix/*.jar` 幂等应用 DeAwtPatch 常量池补丁——把 DeAwtPatch.class 折叠 javassist 源串（Display.setParent 替换体）中的 `setDisplayMode(new DisplayMode(w, h));` 改写为追加 `Display.setLocation(frame.getX(), frame.getY());`（本机 LWJGL 2.9.0 jar javap 实锤：`setLocation` 无条件写静态 x/y，`getWindowX/Y` 仅在 x==−1 才走 `(initial_mode − current_mode)/2` 混源居中；DeAWT 替换体从不设 parent Canvas，故建窗时坐标取我们写入的值）。安全门：DeAwtPatch.class 明文 SHA256 必须在钉版表内、锚点全文唯一，否则原 jar 保留不动（applet 容器维持原偏移）；补丁失败永不阻断启动，仅 `[attic-runtime]` 诊断。jar 必须无签名（实测 legacyfix Release 构件无 .SF 条目）。
+
 `CrashCategory`（v0 分类器枚举）：`none/java-missing/out-of-memory/gl-init/lwjgl-native/unsatisfied-link/unknown`。
 
 `LaunchRequest.testLaunch`（≡ 菜单"测试启动"）：宿主在 `attic:launch` 成功后把启动前后日志逐行落盘 `<root>/launcher/logs/test-launch-<ISO>.log`（启动器侧头行：时间戳/版本/java/gameDir/完整命令行；随后游戏 stdout/stderr 全量；进程退出追加退出行并退订）。日志落盘归 runtime（不触窗）；独立控制台窗由 UI 侧随后调用 `attic:window:console` 唤起。普通启动不写此文件。
