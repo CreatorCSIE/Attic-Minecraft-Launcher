@@ -1,319 +1,367 @@
 <script setup lang="ts">
 /**
- * 账户面板 —— 离线账户完整落实（添加/移除/设为当前，校验与落盘归 runtime）；
- * 微软账户为占位（登录流程未实现，按钮禁用 + 即将推出标注）。
- * 头像走 minotar 皮肤脸（SkinAvatar），对齐 BlockHelm 账户展示。
+ * 账户页 —— BlockHelm AccountPageView 双栏形态（源码实测）：
+ * 左 = SecondaryMenu 列（标题「账户」+ 账户项[头像/名/hover 删除] + 底部「添加账户」），
+ * 右 = AccountDetailsView 用户信息（64px 头像 + 名称[离线可重命名] + 类型标签 + UUID 节[只读字段+复制]）。
+ * 皮肤/披风节按用户指示不实现（仅留 UUID 部分）；添加账户为弹出子窗口（AddAccountDialog），非页内组件。
+ * 选中列表项即设为当前账户（BlockHelm SelectAccountCommand 同款语义）。
  */
-import { computed, ref } from 'vue';
+import { ref } from 'vue';
 import { useI18n } from '../i18n';
 import { useAccounts } from '../composables/useAccounts';
 import { useBridge } from '../composables/useBridge';
 import SkinAvatar from './SkinAvatar.vue';
+import AddAccountDialog from './AddAccountDialog.vue';
+import RenameAccountDialog from './RenameAccountDialog.vue';
 
 const { t } = useI18n();
-const { accounts, current, loading, error, add, remove, select } = useAccounts();
+const { accounts, current, loading, remove, select } = useAccounts();
 const { hasBridge } = useBridge();
 
-const name = ref('');
-const adding = ref(false);
-const formError = ref<string | null>(null);
+const addOpen = ref(false);
+const renameOpen = ref(false);
+const copied = ref(false);
+let copiedTimer: ReturnType<typeof setTimeout> | undefined;
 
-const canAdd = computed(() => hasBridge.value && !adding.value && name.value.trim() !== '');
-
-async function onAdd(): Promise<void> {
-  if (!canAdd.value) return;
-  adding.value = true;
-  formError.value = null;
-  const ok = await add(name.value);
-  if (ok) name.value = '';
-  else formError.value = error.value;
-  adding.value = false;
+async function copyUuid(): Promise<void> {
+  if (!current.value) return;
+  try {
+    await navigator.clipboard.writeText(current.value.id);
+    copied.value = true;
+    clearTimeout(copiedTimer);
+    copiedTimer = setTimeout(() => (copied.value = false), 1500);
+  } catch {
+    /* 剪贴板不可用（无焦点/权限）：静默，不打断布局 */
+  }
 }
 </script>
 
 <template>
-  <section class="accounts">
-    <div class="head">
-      <span class="label">{{ t('account.title') }}</span>
-      <span class="count tabular">{{ accounts.length }}</span>
-    </div>
+  <section class="accounts-page">
+    <!-- 左栏：账户列表菜单（SecondaryMenuFrame 等效） -->
+    <aside class="menu">
+      <h2 class="menu-title">{{ t('account.title') }}</h2>
 
-    <form class="create" @submit.prevent="onAdd">
-      <div class="field">
-        <label class="label" for="acct-name">{{ t('account.add') }}</label>
-        <input
-          id="acct-name"
-          v-model="name"
-          class="input"
-          type="text"
-          maxlength="16"
-          autocomplete="off"
-          :placeholder="t('account.namePlaceholder')"
-        />
-      </div>
-      <button class="primary" type="submit" :disabled="!canAdd">{{ t('account.create') }}</button>
-      <p v-if="formError" class="form-err">{{ formError }}</p>
-    </form>
-
-    <div class="ms-card">
-      <span class="ms-text">
-        <span class="ms-title">{{ t('account.microsoft') }}</span>
-        <span class="ms-note">{{ t('account.microsoftSoon') }}</span>
-      </span>
-      <button class="primary" type="button" disabled>{{ t('account.microsoft') }}</button>
-    </div>
-
-    <div v-if="loading" class="state">{{ t('common.loading') }}</div>
-    <div v-else-if="accounts.length === 0" class="state empty">
-      <p class="state-msg">{{ t('account.none') }}</p>
-      <p class="state-hint">{{ t('account.hint') }}</p>
-    </div>
-
-    <ul v-else class="list">
-      <li
-        v-for="a in accounts"
-        :key="a.id"
-        class="card"
-        :class="{ 'card--current': current?.id === a.id }"
-      >
-        <SkinAvatar :username="a.name" :size="40" />
-        <span class="card-main">
-          <span class="card-name">{{ a.name }}</span>
-          <span class="card-meta">
-            <span class="chip" :data-type="a.type">
-              {{ a.type === 'microsoft' ? 'Microsoft' : t('account.offline') }}
-            </span>
-            <span v-if="current?.id === a.id" class="chip chip--current">{{ t('account.current') }}</span>
-          </span>
-        </span>
-        <span class="card-actions">
+      <div v-if="loading" class="menu-state">{{ t('common.loading') }}</div>
+      <ul v-else class="menu-list">
+        <li v-for="a in accounts" :key="a.id" class="menu-row">
           <button
-            v-if="current?.id !== a.id"
-            class="ghost"
+            class="menu-item"
+            :class="{ 'menu-item--selected': current?.id === a.id }"
             type="button"
             @click="select(a.id)"
           >
-            {{ t('account.use') }}
+            <SkinAvatar :username="a.name" :size="28" />
+            <span class="mi-name">{{ a.name }}</span>
           </button>
-          <button class="ghost ghost--danger" type="button" :disabled="!hasBridge" @click="remove(a.id)">
-            {{ t('account.remove') }}
+          <button
+            class="mi-del"
+            type="button"
+            :disabled="!hasBridge"
+            :title="t('account.remove')"
+            @click.stop="remove(a.id)"
+          >
+            <!-- lucide: trash-2 -->
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 6h18" />
+              <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+              <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+              <line x1="10" x2="10" y1="11" y2="17" />
+              <line x1="14" x2="14" y1="11" y2="17" />
+            </svg>
           </button>
-        </span>
-      </li>
-    </ul>
+        </li>
+      </ul>
+
+      <button class="menu-add" type="button" @click="addOpen = true">
+        <!-- lucide: user-plus -->
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+          <circle cx="9" cy="7" r="4" />
+          <line x1="19" x2="19" y1="8" y2="14" />
+          <line x1="22" x2="16" y1="11" y2="11" />
+        </svg>
+        <span>{{ t('account.add') }}</span>
+      </button>
+    </aside>
+
+    <!-- 右栏：用户信息（离线形态：头像 + 名称[重命名] + 类型 + UUID；皮肤节不实现） -->
+    <div class="detail">
+      <div v-if="current" class="info">
+        <SkinAvatar :username="current.name" :size="64" rounded="var(--radius-md)" />
+
+        <div class="name-row">
+          <h3 class="name">{{ current.name }}</h3>
+          <button
+            v-if="current.type === 'offline' && hasBridge"
+            class="icon-btn"
+            type="button"
+            :title="t('account.rename')"
+            @click="renameOpen = true"
+          >
+            <!-- lucide: pencil -->
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+              <path d="m15 5 4 4" />
+            </svg>
+          </button>
+        </div>
+        <p class="kind">
+          {{ current.type === 'microsoft' ? t('account.typeMicrosoft') : t('account.typeOffline') }}
+        </p>
+
+        <section class="uuid-sec">
+          <h4 class="sec-title">{{ t('account.uuid') }}</h4>
+          <div class="uuid-field">
+            <code class="uuid-val">{{ current.id }}</code>
+            <button class="icon-btn" type="button" :title="t('account.copy')" @click="copyUuid">
+              <!-- lucide: copy / check（已复制反馈） -->
+              <svg v-if="!copied" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+                <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+              </svg>
+              <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 6 9 17l-5-5" />
+              </svg>
+            </button>
+          </div>
+        </section>
+      </div>
+
+      <!-- 空态：BlockHelm 同款——无卡片容器，仅一行居中文案 -->
+      <div v-else class="empty">
+        <p class="state-hint">{{ t('account.hint') }}</p>
+      </div>
+    </div>
+
+    <AddAccountDialog v-model:open="addOpen" />
+    <RenameAccountDialog v-model:open="renameOpen" :account="current" />
   </section>
 </template>
 
 <style scoped>
-.accounts {
+.accounts-page {
+  display: flex;
+  flex: 1;
+  gap: var(--space-5);
+  min-height: 0;
+  padding: var(--space-5);
+}
+/* —— 左栏：账户菜单（固定宽卡片，BlockHelm SecondaryMenuFrame 248px 等效） —— */
+.menu {
+  flex: 0 0 248px;
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  height: 100%;
-  min-height: 0;
-  overflow-y: auto;
-  padding: var(--space-5);
-}
-.head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-}
-.head .label {
-  font-size: var(--fs-lg);
-  font-weight: 600;
-  color: var(--text-primary);
-}
-.count {
-  font-size: var(--fs-xs);
-  color: var(--text-muted);
-}
-/* base-card 配方：添加离线账户表单 */
-.create {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: var(--space-4);
-  padding: var(--space-5);
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
+  padding: var(--space-5) var(--space-4);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-card);
+  overflow-y: auto;
 }
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  flex: 1 1 240px;
-}
-.label {
-  font-size: var(--fs-xs);
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-.input {
-  padding: var(--space-3) var(--space-4);
-  background: var(--surface-3);
-  border: none;
-  border-radius: var(--radius-md);
-  color: var(--text-primary);
-  box-shadow: var(--input-inset);
-  transition:
-    background-color var(--dur-fast) var(--ease-out),
-    box-shadow var(--dur-fast) var(--ease-out);
-}
-.input:hover {
-  background: var(--surface-4);
-}
-.input:focus-visible {
-  outline: none;
-  box-shadow: var(--input-focus-shadow);
-}
-.primary {
-  padding: var(--space-2) var(--space-5);
-  background: var(--accent);
-  color: var(--accent-ink);
-  border: none;
-  border-radius: var(--radius-md);
-  font-weight: 600;
-  transition:
-    background var(--dur-fast) var(--ease-out),
-    transform var(--dur-fast) var(--ease-out);
-}
-.primary:hover:not(:disabled) {
-  background: var(--accent-hover);
-}
-.primary:active:not(:disabled) {
-  transform: scale(0.97);
-}
-.primary:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-.form-err {
-  flex: 1 1 100%;
-  margin: 0;
-  font-size: var(--fs-xs);
-  color: var(--danger);
-}
-/* 微软账户占位卡 */
-.ms-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
-  padding: var(--space-4) var(--space-5);
-  background: var(--card-bg);
-  border: 1px dashed var(--card-border);
-  border-radius: var(--radius-lg);
-}
-.ms-text {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.ms-title {
-  font-weight: 600;
+.menu-title {
+  margin: 0 0 0 var(--space-2);
+  font-size: var(--fs-xl);
+  font-weight: 700;
   color: var(--text-primary);
 }
-.ms-note {
-  font-size: var(--fs-xs);
+.menu-state {
+  font-size: var(--fs-sm);
   color: var(--text-muted);
+  padding: var(--space-2);
 }
-.list {
+.menu-list {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--space-1);
 }
-.card {
+.menu-row {
+  position: relative;
+}
+/* 列表项：头像 + 名；选中 = surface-3 底高亮（SecondaryMenuOptionButton 配方） */
+.menu-item {
   display: flex;
   align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-4) var(--space-5);
-  background: var(--card-bg);
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  padding-right: 40px; /* 给 hover 删除钮让位 */
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: var(--fs-md);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+.menu-item:hover {
+  background-color: var(--surface-3);
+}
+.menu-item--selected {
+  background-color: var(--surface-3);
+  box-shadow: inset 0 0 0 1px var(--surface-4);
+}
+.mi-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 删除钮：hover 行时浮现（BlockHelm Opacity 0→1 触发器等效） */
+.mi-del {
+  position: absolute;
+  top: 50%;
+  right: var(--space-2);
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--danger);
+  opacity: 0;
+  pointer-events: none;
+  cursor: pointer;
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    background var(--dur-fast) var(--ease-out);
+}
+.mi-del svg {
+  width: 16px;
+  height: 16px;
+}
+.menu-row:hover .mi-del {
+  opacity: 1;
+  pointer-events: auto;
+}
+.mi-del:hover {
+  background: var(--danger-soft);
+}
+.mi-del:disabled {
+  display: none;
+}
+/* 添加账户：菜单底部行（SecondaryMenuOptionButton 等效） */
+.menu-add {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: var(--fs-md);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+.menu-add svg {
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+}
+.menu-add:hover {
+  background-color: var(--surface-3);
+}
+/* —— 右栏：用户信息（内容限宽左对齐，DetailPageContentMaxWidth 等效） —— */
+.detail {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-6) var(--space-3);
+}
+.info {
+  max-width: 560px;
+}
+.name-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+.name {
+  margin: 0;
+  font-size: var(--fs-xl);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.kind {
+  margin: var(--space-2) 0 0;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+.uuid-sec {
+  margin-top: var(--space-6);
+}
+.sec-title {
+  margin: 0 0 var(--space-3);
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+/* UUID 只读字段（ReadOnlyFieldSurface 配方：控件底 + inset + 右缘复制钮） */
+.uuid-field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-3);
   border: 1px solid var(--card-border);
   border-radius: var(--radius-md);
-  box-shadow: var(--shadow-card);
-  transition: border-color var(--dur-fast) var(--ease-out);
+  box-shadow: var(--input-inset);
 }
-.card--current {
-  border-color: var(--accent);
-}
-.card-main {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  min-width: 0;
+.uuid-val {
   flex: 1;
-}
-.card-name {
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
   color: var(--text-primary);
-  font-weight: 600;
+  overflow-wrap: anywhere;
 }
-.card-meta {
-  display: flex;
+.icon-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
-}
-.chip {
-  font-size: var(--fs-xs);
-  letter-spacing: var(--tracking-label);
-  padding: 1px var(--space-2);
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: none;
   border-radius: var(--radius-sm);
   color: var(--text-secondary);
-  background: var(--surface-1);
-}
-.chip--current {
-  color: var(--accent);
-  background: var(--accent-soft);
-}
-.card-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-.ghost {
-  padding: var(--space-1) var(--space-3);
-  background: transparent;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-md);
-  color: var(--text-primary);
-  font-size: var(--fs-sm);
-  box-shadow: var(--inset-bottom);
   cursor: pointer;
-  transition: background var(--dur-fast) var(--ease-out);
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
 }
-.ghost:hover:not(:disabled) {
+.icon-btn svg {
+  width: 16px;
+  height: 16px;
+}
+.icon-btn:hover {
   background: var(--surface-4);
-}
-.ghost:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-.ghost--danger:hover:not(:disabled) {
-  background: var(--danger-soft);
-  color: var(--danger);
-}
-.state {
-  padding: var(--space-6) var(--space-5);
-  text-align: center;
-  color: var(--text-secondary);
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-card);
+  color: var(--text-primary);
 }
 .empty {
+  height: 100%;
   display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
+  align-items: center;
+  justify-content: center;
 }
 .state-hint {
-  font-size: var(--fs-sm);
-  color: var(--text-muted);
+  margin: 0;
+  font-size: var(--fs-md);
+  color: var(--text-secondary);
 }
 </style>

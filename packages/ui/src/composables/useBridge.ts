@@ -51,6 +51,7 @@ const mockBridge: RendererBridge = {
   listAccounts: async () => ok([]),
   addAccount: async () => err<AccountView>(NO_BRIDGE),
   removeAccount: async () => err<void>(NO_BRIDGE),
+  renameAccount: async () => err<AccountView>(NO_BRIDGE),
   getSettings: async () => ok<AppSettings>({}),
   setSettings: async (s) => ok(s),
   listInstances: async () => ok([]),

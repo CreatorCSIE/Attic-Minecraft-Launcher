@@ -39,7 +39,6 @@ import { DEFAULT_AGENT_MOUNTS } from './quirks';
 import {
   binDir,
   clientJarFile,
-  defaultOfflineAccount,
   ensureLayout,
   infoFile,
   listInstances,
@@ -368,9 +367,30 @@ export class AtticRuntime {
     return toAccountView(account);
   }
 
-  /** 移除账户（按 id）；移除至空时 currentAccounts 自动回落默认离线 Player。 */
+  /** 移除账户（按 id）；可移除至空，无默认账户回落。 */
   removeAccount(id: string): void {
     saveAccounts(this.root, loadAccounts(this.root).filter((a) => a.id !== id));
+  }
+
+  /**
+   * 重命名离线账户（BlockHelm RenameAccount 对话框同款语义）：MC 用户名规则校验；
+   * 与他名冲突报错、同名幂等；离线 UUID 随用户名重生成（id 即新 UUID，与 addAccount 派生一致）。
+   * 微软账户名由档案决定，不支持重命名。
+   */
+  renameAccount(id: string, name: string): AccountView {
+    const trimmed = name.trim();
+    if (!/^[A-Za-z0-9_]{3,16}$/.test(trimmed)) {
+      throw new Error(`无效用户名（需 3-16 位字母/数字/下划线）：${name}`);
+    }
+    const stored = loadAccounts(this.root);
+    const account = stored.find((a) => a.id === id);
+    if (!account) throw new Error(`账户不存在：${id}`);
+    if (account.type !== 'offline') throw new Error('仅离线账户支持重命名');
+    if (account.name === trimmed) return toAccountView(account);
+    if (stored.some((a) => a.name === trimmed)) throw new Error(`用户名已存在：${trimmed}`);
+    const renamed: OfflineAccount = { ...account, name: trimmed, id: offlineUuid(trimmed) };
+    saveAccounts(this.root, stored.map((a) => (a.id === id ? renamed : a)));
+    return toAccountView(renamed);
   }
 
   getSettings(): AppSettings {
@@ -466,10 +486,8 @@ export class AtticRuntime {
   }
 
   private currentAccounts(): Account[] {
-    const accounts = loadAccounts(this.root);
-    if (accounts.length > 0) return accounts;
-    const settings = loadSettings(this.root);
-    return [defaultOfflineAccount(settings['username'] ?? 'Player')];
+    // 无默认账户回落：首启/移除至空后恒为空列表，启动由 UI 侧禁用（需先手动添加账户）。
+    return loadAccounts(this.root);
   }
 
   private manualJavaPaths(settings: Record<string, string>): string[] {
@@ -498,7 +516,7 @@ export class AtticRuntime {
     const settings = loadSettings(this.root);
     const accounts = this.currentAccounts();
     const account = request.accountId ? accounts.find((a) => a.id === request.accountId) : accounts[0];
-    if (!account) throw new Error('无可用账户');
+    if (!account) throw new Error('无可用账户，请先在账户页添加账户');
 
     const javaPath = request.javaPath ?? settings['javaPath'] ?? (await this.ensureJavaPath(settings));
     const memory = request.maxMemoryMb ?? Number(settings['maxMemoryMb']);

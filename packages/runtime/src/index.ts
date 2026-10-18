@@ -45,7 +45,6 @@ export {
   loadAccounts,
   saveAccounts,
   offlineUuid,
-  defaultOfflineAccount,
   type ResolveDataRootOptions,
   type InstanceConfig,
 } from './storage';

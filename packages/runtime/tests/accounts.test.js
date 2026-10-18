@@ -34,23 +34,42 @@ test('addAccount：同名幂等返回既有（不重复建档）', async (t) => 
   assert.equal(accounts.filter((x) => x.name === 'Notch').length, 1);
 });
 
-test('addAccount：首个真实账户落盘后不再回落默认 Player', async (t) => {
+test('首启无 accounts.json：账户列表恒为空（无默认 Player 回落）；添加后仅含该账户', async (t) => {
   const rt = tempRuntime(t);
-  // 空 accounts.json：回落默认 Player。
-  const before = await rt.listAccounts();
-  assert.equal(before.length, 1);
-  assert.equal(before[0].name, 'Player');
-  // 加一个真实账户：只存该账户，Player 隐式默认不再持久化。
+  assert.deepEqual(await rt.listAccounts(), []);
   rt.addAccount('Alice');
   const after = await rt.listAccounts();
-  assert.deepEqual(after.map((x) => x.name).sort(), ['Alice']);
+  assert.deepEqual(after.map((x) => x.name), ['Alice']);
 });
 
-test('removeAccount：按 id 移除；移除至空回落默认 Player', async (t) => {
+test('removeAccount：按 id 移除；可移除至空（无默认账户回落）', async (t) => {
   const rt = tempRuntime(t);
   const a = rt.addAccount('Bob');
   rt.removeAccount(a.id);
-  const after = await rt.listAccounts();
-  assert.equal(after.length, 1);
-  assert.equal(after[0].name, 'Player');
+  assert.deepEqual(await rt.listAccounts(), []);
+});
+
+test('renameAccount：改名成功且 UUID 随新名重生成（id=offlineUuid(name)）', (t) => {
+  const rt = tempRuntime(t);
+  const { offlineUuid } = require('../dist/index.js');
+  const a = rt.addAccount('Carl');
+  const b = rt.renameAccount(a.id, 'Charlie');
+  assert.equal(b.name, 'Charlie');
+  assert.equal(b.id, offlineUuid('Charlie'));
+  assert.notEqual(b.id, a.id);
+});
+
+test('renameAccount：同名幂等；与他名冲突报错；非法名拒绝；不存在报错', (t) => {
+  const rt = tempRuntime(t);
+  const a = rt.addAccount('Dave');
+  rt.addAccount('Eve');
+  // 同名（含首尾空白）幂等返回既有
+  const same = rt.renameAccount(a.id, ' Dave ');
+  assert.equal(same.id, a.id);
+  // 与其他账户重名
+  assert.throws(() => rt.renameAccount(a.id, 'Eve'), /用户名已存在/);
+  // 非法用户名
+  assert.throws(() => rt.renameAccount(a.id, 'd!'), /无效用户名/);
+  // 账户不存在
+  assert.throws(() => rt.renameAccount('no-such-id', 'Frank'), /账户不存在/);
 });

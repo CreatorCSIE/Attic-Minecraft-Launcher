@@ -73,6 +73,19 @@ async function remove(id: string): Promise<boolean> {
   return true;
 }
 
+/** 重命名离线账户；被改账户为当前选中时把持久化选中重映射到新 id（离线 UUID 随名重生成）。 */
+async function rename(id: string, name: string): Promise<boolean> {
+  error.value = null;
+  const res = await bridge.renameAccount(id, name);
+  if (!res.ok) {
+    error.value = res.error;
+    return false;
+  }
+  if (currentId.value === id) select(res.value.id);
+  await load();
+  return true;
+}
+
 function select(id: string): void {
   currentId.value = id;
   try {
@@ -90,5 +103,5 @@ function ensureLoaded(): void {
 
 export function useAccounts() {
   ensureLoaded();
-  return { accounts, current, loading, error, load, add, remove, select };
+  return { accounts, current, loading, error, load, add, remove, rename, select };
 }

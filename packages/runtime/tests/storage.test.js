@@ -92,6 +92,7 @@ test('实例解耦（v1 语义）：gameDir=root/<实例名>，首启自动建 d
   fs.writeFileSync(path.join(jsonsDir(root), 'c2.0.info'), 'launch-method=beta\n');
   fs.writeFileSync(path.join(jsonsDir(root), 'c0.0.15a.info'), 'launch-method=classic\n');
   const rt = new AtticRuntime({ rootDir: root, fetchImpl: () => Promise.reject(new Error('offline')) });
+  rt.addAccount('Tester'); // 无默认账户回落：启动前需显式建档
   const java = 'C:\\Java\\jdk1.8\\bin\\java.exe';
 
   const cfg = await rt.dryRunLaunch({ versionId: 'b1.7.3', javaPath: java });
@@ -170,6 +171,7 @@ test('custom 语义（v1）：列表打标 + 裸 jar 检测合成 + Error 7 + 4k
     }),
   );
   const java = 'C:\\Java\\jdk1.8\\bin\\java.exe';
+  rt.addAccount('Tester'); // 无默认账户回落：启动前需显式建档
 
   const list = await rt.listVersions();
   const byId = Object.fromEntries(list.map((v) => [v.id, v]));
@@ -203,6 +205,7 @@ test('indev 混代（用户报障修复）：按本地 jar 探测选主类——
   fs.writeFileSync(path.join(versionsDir(root), 'b-mix.jar'), buildJarBuffer([INDEV_MAIN, INDEV_APPLET]));
 
   const rt = new AtticRuntime({ rootDir: root, fetchImpl: () => Promise.reject(new Error('offline')) });
+  rt.addAccount('Tester'); // 无默认账户回落：启动前需显式建档
   const java = 'C:\\Java\\jdk1.8\\bin\\java.exe';
 
   const cfgApplet = await rt.dryRunLaunch({ versionId: 'in-20100223', javaPath: java });

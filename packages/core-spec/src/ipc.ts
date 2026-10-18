@@ -30,12 +30,14 @@ export const IPC_CHANNELS = {
   STATUS: 'attic:status',
   /** Java 探测全量报告。 */
   JAVA_DETECT: 'attic:java:detect',
-  /** 账户列表（脱敏视图）。 */
+  /** 账户列表（脱敏视图；可为空——空列表时启动按钮禁用）。 */
   ACCOUNTS_LIST: 'attic:accounts:list',
   /** 添加离线账户（name 按 MC 规则 3-16 位字母数字下划线校验；同名幂等返回既有）。 */
   ACCOUNTS_ADD: 'attic:accounts:add',
-  /** 移除账户（按 id；当前无账户时回落默认离线 Player）。 */
+  /** 移除账户（按 id；可移除至空，无默认账户回落）。 */
   ACCOUNTS_REMOVE: 'attic:accounts:remove',
+  /** 重命名离线账户（同名校验；离线 UUID 随用户名重生成，id 即新 UUID）。 */
+  ACCOUNTS_RENAME: 'attic:accounts:rename',
   /** 读取全局设置（launcher.settings 的渲染侧视图）。 */
   SETTINGS_GET: 'attic:settings:get',
   /** 写入全局设置（合并落盘，返回保存后的视图）。 */
@@ -147,6 +149,7 @@ export interface RendererBridge {
   listAccounts(): Promise<IpcResult<AccountView[]>>;
   addAccount(name: string): Promise<IpcResult<AccountView>>;
   removeAccount(id: string): Promise<IpcResult<void>>;
+  renameAccount(id: string, name: string): Promise<IpcResult<AccountView>>;
   getSettings(): Promise<IpcResult<AppSettings>>;
   setSettings(settings: AppSettings): Promise<IpcResult<AppSettings>>;
   listInstances(): Promise<IpcResult<InstanceView[]>>;

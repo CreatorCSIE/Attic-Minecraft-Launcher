@@ -25,6 +25,7 @@ const bridge: RendererBridge = {
   listAccounts: () => invoke(IPC_CHANNELS.ACCOUNTS_LIST),
   addAccount: (name) => invoke(IPC_CHANNELS.ACCOUNTS_ADD, name),
   removeAccount: (id) => invoke(IPC_CHANNELS.ACCOUNTS_REMOVE, id),
+  renameAccount: (id, name) => invoke(IPC_CHANNELS.ACCOUNTS_RENAME, id, name),
   getSettings: () => invoke(IPC_CHANNELS.SETTINGS_GET),
   setSettings: (settings) => invoke(IPC_CHANNELS.SETTINGS_SET, settings),
   listInstances: () => invoke(IPC_CHANNELS.INSTANCES_LIST),

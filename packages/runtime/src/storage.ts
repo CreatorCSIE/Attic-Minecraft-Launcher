@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import type { Account, OfflineAccount } from '@attic/core-spec';
+import type { Account } from '@attic/core-spec';
 
 import { parseProperties, serializeProperties } from './properties';
 
@@ -284,9 +284,4 @@ export function offlineUuid(name: string): string {
   digest[8] = (digest[8]! & 0x3f) | 0x80;
   const hex = Buffer.from(digest).toString('hex');
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-}
-
-/** 无 accounts.json 时的默认离线账户（v0 起步）。 */
-export function defaultOfflineAccount(name = 'Player'): OfflineAccount {
-  return { id: offlineUuid(name), name, type: 'offline' };
 }

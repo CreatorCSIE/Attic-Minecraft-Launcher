@@ -29,7 +29,7 @@ const { percent, rateBps, stage, active, failed, reset: resetDownloads } = useDo
 const running = computed(() => status.value.running);
 /* 聚合进度区可见性（BlockHelm 配方）：启动中展示；下载失败则常驻红态直到下次启动。 */
 const showProgress = computed(() => active.value && (busy.value || failed.value !== null));
-const canPlay = computed(() => hasBridge.value && !!selected.value && !running.value && !busy.value);
+const canPlay = computed(() => hasBridge.value && !!selected.value && !!current.value && !running.value && !busy.value);
 /* 启动/停止合为一体（用户指定）：同一按钮按状态切换动作——空闲=启动，运行=停止 */
 const canToggle = computed(() => hasBridge.value && !busy.value && (running.value || !!selected.value));
 

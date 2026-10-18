@@ -151,6 +151,7 @@ app.whenReady().then(() => {
   handle(IPC_CHANNELS.ACCOUNTS_LIST, () => runtime.listAccounts());
   handle(IPC_CHANNELS.ACCOUNTS_ADD, (name: string) => runtime.addAccount(name));
   handle(IPC_CHANNELS.ACCOUNTS_REMOVE, (id: string) => runtime.removeAccount(id));
+  handle(IPC_CHANNELS.ACCOUNTS_RENAME, (id: string, name: string) => runtime.renameAccount(id, name));
   handle(IPC_CHANNELS.SETTINGS_GET, () => runtime.getSettings());
   handle(IPC_CHANNELS.SETTINGS_SET, (settings: AppSettings) => runtime.setSettings(settings));
   handle(IPC_CHANNELS.INSTANCES_LIST, () => runtime.listInstances());

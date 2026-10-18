@@ -87,9 +87,10 @@ Applet 容器（主类 `AppletLauncher`）的 `gameArgs` 末尾追加 `--width <
 | `attic:kill` | — | `IpcResult<GameExit>` |
 | `attic:status` | — | `IpcResult<GameStatus>` |
 | `attic:java:detect` | — | `IpcResult<JavaDetectionReport>` |
-| `attic:accounts:list` | — | `IpcResult<AccountView[]>` |
+| `attic:accounts:list` | — | `IpcResult<AccountView[]>`（可为空：无默认账户回落，空列表时 UI 禁用启动） |
 | `attic:accounts:add` | `name: string` | `IpcResult<AccountView>`（离线账户；MC 规则 3-16 位字母/数字/下划线校验，同名幂等返回既有。微软账户无此通道=占位） |
-| `attic:accounts:remove` | `id: string` | `IpcResult<void>`（移除至空时 `listAccounts` 回落默认离线 Player） |
+| `attic:accounts:remove` | `id: string` | `IpcResult<void>`（可移除至空，无默认账户回落） |
+| `attic:accounts:rename` | `id: string, name: string` | `IpcResult<AccountView>`（仅离线账户；MC 规则校验，同名幂等、与他名冲突报错；离线 UUID 随新名重生成，返回视图含新 id） |
 | `attic:settings:get` | — | `IpcResult<AppSettings>` |
 | `attic:settings:set` | `AppSettings` | `IpcResult<AppSettings>`（保存后的视图） |
 | `attic:instances:list` | — | `IpcResult<InstanceView[]>` |
