@@ -1,210 +1,791 @@
 <script setup lang="ts">
 /**
- * 实例列表 —— 对齐 v1 Instance Settings 可编辑集（名字/版本/目录/JVM 参数/窗口尺寸）。
- * 全字段走契约（InstanceView），UI 不碰文件（戒律 #1）；gameDir 留空 = 宿主派生 root/<实例名>。
+ * 实例页 —— BlockHelm 双栏骨架（镜像账户页配方，用户指定）：
+ * 左 = SecondaryMenu 列（248px：实例行[名/版本子行/激活标记/hover 删除] + 底部「新建实例」），
+ * 右 = 详情编辑列（目录/JVM 参数/Java 路径/窗口尺寸），限宽浮中。
+ * 版本不在本页编辑（用户拍板）：档案版本 = 上次启动版本（宿主回写），编辑态只读展示；
+ * 新建实例默认取启动页当前选中版本（useSelection，与激活实例联动）。
+ * 激活实例（启动页 dock 共享同一状态）与浏览选中分离：点行 = 浏览，「设为启动实例」= 激活。
+ * 名字为档案主键（v1 语义）：编辑态经铅笔内联改名（只迁档案、gameDir 不动）；
+ * 删除走 ConfirmDialog（默认只删档案，勾选才连目录）。
  */
-import { computed, ref } from 'vue';
-import type { InstanceView } from '@attic/core-spec';
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import { DEFAULT_ADDONS, INSTANCE_ADDONS, type InstanceView } from '@attic/core-spec';
 import { useI18n } from '../i18n';
 import { useInstances } from '../composables/useInstances';
-import { useVersions } from '../composables/useVersions';
+import { useSelection } from '../composables/useSelection';
 import { useBridge } from '../composables/useBridge';
+import ConfirmDialog from './ConfirmDialog.vue';
 
 const { t } = useI18n();
-const { instances, loading, error, save } = useInstances();
-const { versions } = useVersions();
+const { instances, loading, error, save, remove, rename, openDir, activeName, setActive } = useInstances();
+const { selectedId } = useSelection();
 const { hasBridge } = useBridge();
 
-const name = ref('');
-const version = ref('');
+// —— 浏览选中（本地态；creating = 新建模式，与选中互斥） ——
+const selectedName = ref<string | null>(null);
+const creating = ref(false);
+const selected = computed(() => instances.value.find((i) => i.name === selectedName.value) ?? null);
+
+// —— 编辑表单 ——
 const gameDir = ref('');
 const launchArgs = ref('');
+const javaPath = ref('');
 const width = ref<number | ''>(854);
 const height = ref<number | ''>(480);
-const editingName = ref<string | null>(null);
-const created = ref(false);
+const newName = ref('');
 const saving = ref(false);
+const savedFlash = ref(false);
+let savedTimer: ReturnType<typeof setTimeout> | undefined;
+const dirError = ref<string | null>(null);
 
-/** 已安装优先，其次按 id 升序，供版本下拉。 */
-const options = computed(() =>
-  [...versions.value].sort((a, b) => {
-    if (a.installed !== b.installed) return a.installed ? -1 : 1;
-    return a.id.localeCompare(b.id);
-  }),
-);
+// —— Addons（目录驱动：INSTANCE_ADDONS ↔ legacyfix -Dlf.* 开关；占位项禁用） ——
+const addonDefs = INSTANCE_ADDONS;
+const addonsSel = ref<string[]>([...DEFAULT_ADDONS]);
 
-const canSave = computed(
-  () => hasBridge.value && !saving.value && name.value.trim() !== '' && version.value !== '',
-);
-
-function resetForm(): void {
-  name.value = '';
-  version.value = '';
-  gameDir.value = '';
-  launchArgs.value = '';
-  width.value = 854;
-  height.value = 480;
-  editingName.value = null;
+function toggleAddon(id: string): void {
+  const i = addonsSel.value.indexOf(id);
+  if (i >= 0) addonsSel.value.splice(i, 1);
+  else addonsSel.value.push(id);
 }
 
-/** 卡片点击 → 载入表单编辑（v1 Instance Settings 语义；名字为档案主键，编辑期锁定）。 */
-function onEdit(inst: InstanceView): void {
-  editingName.value = inst.name;
-  name.value = inst.name;
-  version.value = inst.version;
+/** 重名校验（仅新建态；编辑态名字锁定不会撞）。 */
+const existsError = computed(
+  () => creating.value && newName.value.trim() !== ''
+    && instances.value.some((i) => i.name === newName.value.trim()),
+);
+const canSave = computed(() =>
+  hasBridge.value &&
+  !saving.value &&
+  !existsError.value &&
+  // 新建态版本 = 启动页当前选中版本（无选中则不可创建，去启动页选版本即可）
+  (creating.value ? newName.value.trim() !== '' && !!selectedId.value : !!selected.value),
+);
+
+function loadForm(inst: InstanceView): void {
   gameDir.value = inst.gameDir ?? '';
   launchArgs.value = inst.launchArgs ?? '';
+  javaPath.value = inst.javaPath ?? '';
   width.value = inst.width ?? 854;
   height.value = inst.height ?? 480;
-  created.value = false;
+  // 无 addons 键的老档案：展示按默认开集（与 legacyfix 缺省行为一致，保存时显式落键）
+  addonsSel.value = inst.addons ? [...inst.addons] : [...DEFAULT_ADDONS];
+  dirError.value = null;
+  flashSaved(false);
 }
 
-function onCancelEdit(): void {
-  resetForm();
-  created.value = false;
+// —— 改名（v1 语义：档案迁移、gameDir 不动）：内联编辑态 + 在途 + 宿主错误内联 ——
+// 必须声明在 watch(immediate) 之前：其回调同步走 onSelect → cancelRename（const 无提升）
+const renaming = ref(false);
+const renameValue = ref('');
+const renameBusy = ref(false);
+const renameHostError = ref<string | null>(null);
+const renameInput = ref<HTMLInputElement | null>(null);
+
+/** 重名本地校验：非空、不同于原名、清单已占。 */
+const renameDup = computed(() => {
+  const next = renameValue.value.trim();
+  return (
+    renaming.value &&
+    next !== '' &&
+    next !== (selectedName.value ?? '') &&
+    instances.value.some((i) => i.name === next)
+  );
+});
+const canRename = computed(
+  () =>
+    hasBridge.value &&
+    !renameBusy.value &&
+    !renameDup.value &&
+    renameValue.value.trim() !== '' &&
+    renameValue.value.trim() !== (selectedName.value ?? ''),
+);
+
+function askRename(): void {
+  if (!selectedName.value) return;
+  renaming.value = true;
+  renameValue.value = selectedName.value;
+  renameHostError.value = null;
+  // 全选原文本：直接输入即整体替换（IDE 改名惯例）
+  void nextTick(() => renameInput.value?.select());
+}
+
+function cancelRename(): void {
+  renaming.value = false;
+  renameValue.value = '';
+  renameHostError.value = null;
+}
+
+// 点击改名区域外 = 取消编辑（IDE 惯例）。mousedown capture 先于一切 click：
+// 点行/点保存时改名先被丢弃，后续动作按旧名走，不产生半改状态。
+const renameZone = ref<HTMLElement | null>(null);
+function onDocMouseDown(e: MouseEvent): void {
+  const zone = renameZone.value;
+  if (zone && !zone.contains(e.target as Node)) cancelRename();
+}
+watch(renaming, (on) => {
+  if (on) document.addEventListener('mousedown', onDocMouseDown, true);
+  else document.removeEventListener('mousedown', onDocMouseDown, true);
+});
+onBeforeUnmount(() => document.removeEventListener('mousedown', onDocMouseDown, true));
+
+async function confirmRename(): Promise<void> {
+  const old = selectedName.value;
+  const next = renameValue.value.trim();
+  if (!old || !canRename.value) return;
+  renameBusy.value = true;
+  const err = await rename(old, next);
+  renameBusy.value = false;
+  if (err === null) {
+    selectedName.value = next;
+    cancelRename();
+    flashSaved(true);
+  } else {
+    renameHostError.value = err;
+  }
+}
+
+function onSelect(inst: InstanceView): void {
+  creating.value = false;
+  selectedName.value = inst.name;
+  newName.value = '';
+  cancelRename();
+  loadForm(inst);
+}
+
+function onNew(): void {
+  selectedName.value = null;
+  creating.value = true;
+  cancelRename();
+  newName.value = '';
+  gameDir.value = '';
+  launchArgs.value = '';
+  javaPath.value = '';
+  width.value = 854;
+  height.value = 480;
+  addonsSel.value = [...DEFAULT_ADDONS];
+  dirError.value = null;
+  flashSaved(false);
+}
+
+// 清单加载/变动后维持浏览选中：无选中 → 激活实例优先，其次首个；选中项被删 → 清空。
+watch(
+  instances,
+  (list) => {
+    if (creating.value) return;
+    if (selectedName.value && list.some((i) => i.name === selectedName.value)) return;
+    const fallback = list.find((i) => i.name === activeName.value) ?? list[0] ?? null;
+    if (fallback) onSelect(fallback);
+    else {
+      selectedName.value = null;
+      dirError.value = null;
+    }
+  },
+  { immediate: true },
+);
+
+function flashSaved(on: boolean): void {
+  savedFlash.value = on;
+  clearTimeout(savedTimer);
+  if (on) savedTimer = setTimeout(() => (savedFlash.value = false), 1500);
 }
 
 async function onSave(): Promise<void> {
   if (!canSave.value) return;
   saving.value = true;
-  created.value = false;
-  const inst: InstanceView = { name: name.value.trim(), version: version.value };
+  const inst: InstanceView = {
+    name: creating.value ? newName.value.trim() : (selectedName.value as string),
+    // 新建 = 启动页当前选中版本；编辑 = 档案版本不动（调整走启动页）
+    version: creating.value ? (selectedId.value as string) : (selected.value as InstanceView).version,
+    // addons 恒发送当前勾选集（保存即显式落键；老档案首保语义不变——默认开集=legacyfix 缺省）
+    addons: [...addonsSel.value],
+  };
   if (gameDir.value.trim()) inst.gameDir = gameDir.value.trim();
   if (launchArgs.value.trim()) inst.launchArgs = launchArgs.value.trim();
+  if (javaPath.value.trim()) inst.javaPath = javaPath.value.trim();
   const w = Number(width.value);
   const h = Number(height.value);
   if (Number.isFinite(w) && w > 0) inst.width = w;
   if (Number.isFinite(h) && h > 0) inst.height = h;
   const ok = await save(inst);
-  if (ok) {
-    resetForm();
-    created.value = true;
-  }
   saving.value = false;
+  if (ok) {
+    creating.value = false;
+    selectedName.value = inst.name;
+    newName.value = '';
+    flashSaved(true);
+  }
+}
+
+function onActivate(): void {
+  if (selectedName.value) setActive(selectedName.value);
+}
+
+async function onOpenDir(): Promise<void> {
+  if (!selectedName.value) return;
+  dirError.value = await openDir(selectedName.value);
+}
+
+// —— 删除确认（防误删，账户页同款）：目标 + 开关 + 在途态 + 可选连删目录 ——
+const delOpen = ref(false);
+const delTarget = ref<InstanceView | null>(null);
+const deleting = ref(false);
+// 默认不勾（保守语义 = 只删档案）；每次开弹窗复位，防上次选择串台
+const delWithFiles = ref(false);
+
+function askRemove(inst: InstanceView): void {
+  delTarget.value = inst;
+  delWithFiles.value = false;
+  delOpen.value = true;
+}
+
+async function onConfirmRemove(): Promise<void> {
+  if (!delTarget.value) return;
+  deleting.value = true;
+  const name = delTarget.value.name;
+  const ok = await remove(name, delWithFiles.value);
+  deleting.value = false;
+  if (ok) {
+    delOpen.value = false;
+    if (selectedName.value === name) {
+      selectedName.value = null;
+      dirError.value = null;
+    }
+  }
 }
 </script>
 
 <template>
-  <section class="instances">
-    <div class="head">
-      <span class="label">{{ t('nav.instances') }}</span>
-      <span class="count tabular">{{ instances.length }}</span>
-    </div>
+  <section class="instances-page">
+    <!-- 左栏：实例菜单（SecondaryMenuFrame 248px 等效） -->
+    <aside class="menu">
+      <h2 class="menu-title">{{ t('nav.instances') }}</h2>
 
-    <form class="create" @submit.prevent="onSave">
-      <p v-if="editingName" class="editing-hint">
-        {{ t('instance.editing', { name: editingName }) }}
-        <button class="link" type="button" @click="onCancelEdit">{{ t('instance.cancelEdit') }}</button>
-      </p>
-      <div class="field">
-        <label class="label" for="inst-name">{{ t('instance.name') }}</label>
-        <input
-          id="inst-name"
-          v-model="name"
-          class="input"
-          type="text"
-          :disabled="!!editingName"
-          :placeholder="t('instance.namePlaceholder')"
-        />
-      </div>
-      <div class="field">
-        <label class="label" for="inst-ver">{{ t('instance.version') }}</label>
-        <select id="inst-ver" v-model="version" class="input">
-          <option value="" disabled>{{ t('instance.selectVersion') }}</option>
-          <option v-for="o in options" :key="o.id" :value="o.id">
-            {{ o.id }}{{ o.installed ? ' · ✓' : '' }}
-          </option>
-        </select>
-      </div>
-      <div class="field field--wide">
-        <label class="label" for="inst-dir">{{ t('instance.gameDir') }}</label>
-        <input id="inst-dir" v-model="gameDir" class="input" type="text" :placeholder="t('instance.gameDirPlaceholder')" />
-      </div>
-      <div class="field field--wide">
-        <label class="label" for="inst-jvm">{{ t('instance.launchArgs') }}</label>
-        <input id="inst-jvm" v-model="launchArgs" class="input" type="text" :placeholder="t('instance.launchArgsPlaceholder')" />
-      </div>
-      <div class="field field--num">
-        <label class="label" for="inst-w">{{ t('instance.width') }}</label>
-        <input id="inst-w" v-model.number="width" class="input" type="number" min="1" step="1" />
-      </div>
-      <div class="field field--num">
-        <label class="label" for="inst-h">{{ t('instance.height') }}</label>
-        <input id="inst-h" v-model.number="height" class="input" type="number" min="1" step="1" />
-      </div>
-      <button class="primary" type="submit" :disabled="!canSave">
-        {{ editingName ? t('instance.saveChanges') : t('instance.create') }}
+      <div v-if="loading" class="menu-state">{{ t('common.loading') }}</div>
+      <div v-else-if="error" class="menu-state menu-state--err">{{ t('common.error') }}</div>
+      <ul v-else class="menu-list">
+        <li v-for="inst in instances" :key="inst.name" class="menu-row">
+          <button
+            class="menu-item"
+            :class="{ 'menu-item--selected': !creating && selectedName === inst.name }"
+            type="button"
+            :title="inst.name"
+            @click="onSelect(inst)"
+          >
+            <span class="mi-body">
+              <!-- 名字让位、徽标免疫收缩（对齐自定义版本页 flex 形态，防 ellipsis 截徽标） -->
+              <span class="mi-name">
+                <span class="mi-text">{{ inst.name }}</span>
+                <span v-if="activeName === inst.name" class="mi-active">{{ t('instance.active') }}</span>
+              </span>
+              <span class="mi-sub mono" :title="inst.version">{{ inst.version }}</span>
+            </span>
+          </button>
+          <button
+            class="mi-del"
+            type="button"
+            :disabled="!hasBridge"
+            :title="t('instance.delete')"
+            @click.stop="askRemove(inst)"
+          >
+            <!-- lucide: trash-2 -->
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 6h18" />
+              <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+              <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+              <line x1="10" x2="10" y1="11" y2="17" />
+              <line x1="14" x2="14" y1="11" y2="17" />
+            </svg>
+          </button>
+        </li>
+      </ul>
+
+      <button class="menu-add" type="button" @click="onNew">
+        <!-- lucide: plus -->
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M5 12h14" />
+          <path d="M12 5v14" />
+        </svg>
+        <span>{{ t('instance.new') }}</span>
       </button>
-      <p v-if="created" class="saved">{{ t('instance.created') }}</p>
-    </form>
+    </aside>
 
-    <div v-if="loading" class="state">{{ t('common.loading') }}</div>
-    <div v-else-if="error" class="state state--err">{{ t('common.error') }}：{{ error }}</div>
-    <div v-else-if="instances.length === 0" class="state empty">
-      <p class="state-msg">{{ t('instance.empty') }}</p>
-      <p class="state-hint">{{ t('instance.emptyHint') }}</p>
+    <!-- 右栏：详情编辑（限宽列在剩余空间浮中；无选中 = 一行居中文案） -->
+    <div class="detail">
+      <div v-if="creating || selected" class="info">
+        <div class="head-row">
+          <!-- 改名态：内联输入 + 确认/取消（Enter/Esc 同效；点击区域外 = 取消），名字是唯一可改的主键 -->
+          <template v-if="renaming">
+            <span ref="renameZone" class="rename-zone">
+              <input
+                ref="renameInput"
+                v-model="renameValue"
+                class="input rename-input"
+                type="text"
+                :disabled="renameBusy"
+                @keyup.enter="confirmRename"
+                @keyup.esc="cancelRename"
+              />
+              <button class="icon-btn" type="button" :disabled="!canRename" :title="t('common.confirm')" @click="confirmRename">
+                <!-- lucide: check -->
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M20 6 9 17l-5-5" />
+                </svg>
+              </button>
+              <button class="icon-btn" type="button" :title="t('common.cancel')" @click="cancelRename">
+                <!-- lucide: x -->
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M18 6 6 18" />
+                  <path d="m6 6 12 12" />
+                </svg>
+              </button>
+            </span>
+          </template>
+          <template v-else>
+            <h3 class="name">{{ creating ? t('instance.new') : selectedName }}</h3>
+            <button
+              v-if="!creating && selected"
+              class="icon-btn"
+              type="button"
+              :disabled="!hasBridge"
+              :title="t('instance.rename')"
+              @click="askRename"
+            >
+              <!-- lucide: pencil -->
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" />
+                <path d="m15 5 4 4" />
+              </svg>
+            </button>
+          </template>
+          <template v-if="!creating && selected && !renaming">
+            <span v-if="activeName === selectedName" class="badge">{{ t('instance.active') }}</span>
+            <span class="head-spacer" />
+            <button
+              v-if="activeName !== selectedName"
+              class="ghost-btn"
+              type="button"
+              :title="t('instance.activateHint')"
+              @click="onActivate"
+            >
+              <!-- lucide: play -->
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="6 3 20 12 6 21 6 3" />
+              </svg>
+              <span>{{ t('instance.activate') }}</span>
+            </button>
+            <button
+              class="icon-btn"
+              type="button"
+              :disabled="!hasBridge"
+              :title="t('instance.openDir')"
+              @click="onOpenDir"
+            >
+              <!-- lucide: folder-open -->
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="m6 14 1.45-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.55 6a2 2 0 0 1-1.94 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2" />
+              </svg>
+            </button>
+            <button
+              class="icon-btn icon-btn--danger"
+              type="button"
+              :disabled="!hasBridge"
+              :title="t('instance.delete')"
+              @click="askRemove(selected)"
+            >
+              <!-- lucide: trash-2 -->
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 6h18" />
+                <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                <line x1="10" x2="10" y1="11" y2="17" />
+                <line x1="14" x2="14" y1="11" y2="17" />
+              </svg>
+            </button>
+          </template>
+        </div>
+
+        <!-- 改名错误：本地重名优先，其次宿主显式失败（非法名/竞态重名等） -->
+        <p v-if="renaming && renameDup" class="field-err">{{ t('instance.exists') }}</p>
+        <p v-else-if="renaming && renameHostError" class="field-err">{{ renameHostError }}</p>
+
+        <p v-if="!creating && selected" class="kind mono">
+          {{ selected.version }}
+          <template v-if="selected.width && selected.height"> · {{ selected.width }}×{{ selected.height }}</template>
+        </p>
+
+        <form class="form card" @submit.prevent="onSave">
+          <h4 class="card-title">{{ t('instance.basic') }}</h4>
+          <div v-if="creating" class="field field--wide">
+            <label class="label" for="inst-name">{{ t('instance.name') }}</label>
+            <input
+              id="inst-name"
+              v-model="newName"
+              class="input"
+              type="text"
+              :placeholder="t('instance.namePlaceholder')"
+            />
+            <p v-if="existsError" class="field-err">{{ t('instance.exists') }}</p>
+          </div>
+          <!-- 版本不在本页展示（用户拍板）：新建静默取启动页当前选中版本，编辑态在标题下 kind 行 -->
+          <!-- 目录路径长（数据根/<实例名>），独占整行避免截断；JVM 参数顺延第二行 -->
+          <div class="field field--full">
+            <label class="label" for="inst-dir">{{ t('instance.gameDir') }}</label>
+            <input id="inst-dir" v-model="gameDir" class="input" type="text" :placeholder="t('instance.gameDirPlaceholder')" />
+          </div>
+          <div class="field field--wide">
+            <label class="label" for="inst-jvm">{{ t('instance.launchArgs') }}</label>
+            <input id="inst-jvm" v-model="launchArgs" class="input" type="text" :placeholder="t('instance.launchArgsPlaceholder')" />
+          </div>
+          <div class="field field--wide">
+            <label class="label" for="inst-java">{{ t('instance.javaPath') }}</label>
+            <input id="inst-java" v-model="javaPath" class="input" type="text" :placeholder="t('instance.javaPathPlaceholder')" />
+          </div>
+          <div class="field field--num">
+            <label class="label" for="inst-w">{{ t('instance.width') }}</label>
+            <input id="inst-w" v-model.number="width" class="input" type="number" min="1" step="1" />
+          </div>
+          <div class="field field--num">
+            <label class="label" for="inst-h">{{ t('instance.height') }}</label>
+            <input id="inst-h" v-model.number="height" class="input" type="number" min="1" step="1" />
+          </div>
+          <div class="actions">
+            <button class="primary" type="submit" :disabled="!canSave">
+              {{ creating ? t('instance.create') : t('instance.saveChanges') }}
+            </button>
+            <span v-if="savedFlash" class="saved">{{ t('instance.saved') }}</span>
+          </div>
+          <p v-if="dirError" class="field-err">{{ dirError }}</p>
+        </form>
+
+        <!-- Addons 栏：目录驱动（INSTANCE_ADDONS）；已接入项开关映射 legacyfix -Dlf.*，占位项禁用 -->
+        <section class="card addons">
+          <h4 class="card-title">{{ t('instance.addons') }}</h4>
+          <div v-for="def in addonDefs" :key="def.id" class="addon-row">
+            <div class="addon-info">
+              <span class="addon-name">
+                {{ t(`instance.addonList.${def.id}.name`) }}
+                <span v-if="def.placeholder" class="addon-soon">{{ t('instance.addonSoon') }}</span>
+              </span>
+              <p class="addon-desc">{{ t(`instance.addonList.${def.id}.desc`) }}</p>
+            </div>
+            <label class="switch">
+              <input
+                type="checkbox"
+                :checked="addonsSel.includes(def.id)"
+                :disabled="def.placeholder || !hasBridge"
+                @change="toggleAddon(def.id)"
+              />
+              <span class="track" />
+            </label>
+          </div>
+        </section>
+      </div>
+
+      <!-- 空态：BlockHelm 同款——无卡片容器，仅一行居中文案 -->
+      <div v-else class="empty">
+        <p class="state-hint">{{ instances.length === 0 ? t('instance.emptyHint') : t('instance.hint') }}</p>
+      </div>
     </div>
 
-    <ul v-else class="list">
-      <li
-        v-for="inst in instances"
-        :key="inst.name"
-        class="card"
-        role="button"
-        tabindex="0"
-        @click="onEdit(inst)"
-        @keydown.enter="onEdit(inst)"
-      >
-        <span class="card-main">
-          <span class="card-name">{{ inst.name }}</span>
-          <span class="card-meta mono">
-            {{ inst.version }}
-            <template v-if="inst.width && inst.height"> · {{ inst.width }}×{{ inst.height }}</template>
-            <template v-if="inst.launchArgs"> · {{ inst.launchArgs }}</template>
-          </span>
-        </span>
-        <span class="card-ver mono">{{ inst.version }}</span>
-      </li>
-    </ul>
+    <!-- 删除确认（防误删）：默认只删档案；勾选才连实例目录一并删（护栏在宿主） -->
+    <ConfirmDialog
+      v-model:open="delOpen"
+      :title="t('instance.deleteDialog.title')"
+      :message="t('instance.deleteDialog.message', { name: delTarget?.name ?? '' })"
+      :busy="deleting"
+      @confirm="onConfirmRemove"
+    >
+      <label class="del-files">
+        <input v-model="delWithFiles" type="checkbox" :disabled="deleting" />
+        <span>{{ t('instance.deleteDialog.withFiles') }}</span>
+      </label>
+    </ConfirmDialog>
   </section>
 </template>
 
 <style scoped>
-.instances {
+/* BlockHelm 骨架（镜像账户页）：SecondaryMenuFrame 贴左 248px，详情列在剩余空间浮中。 */
+.instances-page {
+  display: flex;
+  flex: 1;
+  gap: var(--space-5);
+  min-height: 0;
+  padding: var(--space-5);
+}
+.menu {
+  flex: 0 0 248px;
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  height: 100%;
-  min-height: 0;
+  padding: var(--space-5) var(--space-4);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
   overflow-y: auto;
-  padding: var(--space-5);
 }
-.head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-}
-.head .label {
-  font-size: var(--fs-lg);
-  font-weight: 600;
+.menu-title {
+  margin: 0 0 0 var(--space-2);
+  font-size: var(--fs-xl);
+  font-weight: 700;
   color: var(--text-primary);
-  letter-spacing: 0;
-  text-transform: none;
 }
-.count {
+.menu-state {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  padding: var(--space-2);
+}
+.menu-state--err {
+  color: var(--danger);
+}
+.menu-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.menu-row {
+  position: relative;
+}
+/* 列表项：名 + 版本子行；选中 = surface-3 底高亮（SecondaryMenuOptionButton 配方） */
+.menu-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  padding-right: 40px; /* 给 hover 删除钮让位 */
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: var(--fs-md);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+.menu-item:hover {
+  background-color: var(--surface-3);
+}
+.menu-item--selected {
+  background-color: var(--surface-3);
+  box-shadow: inset 0 0 0 1px var(--surface-4);
+}
+.mi-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.mi-name {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+/* ellipsis 只落在名字文本上（可让位内容），徽标不陪葬 */
+.mi-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mi-sub {
   font-size: var(--fs-xs);
   color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.create {
+/* 激活标记：行内小徽（与 dock 的激活语义同源；启动实例 = activeName 命中的行） */
+.mi-active {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: var(--radius-pill);
+}
+/* 删除钮：hover 行时浮现（BlockHelm Opacity 0→1 触发器等效） */
+.mi-del {
+  position: absolute;
+  top: 50%;
+  right: var(--space-2);
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--danger);
+  opacity: 0;
+  pointer-events: none;
+  cursor: pointer;
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    background var(--dur-fast) var(--ease-out);
+}
+.mi-del svg {
+  width: 16px;
+  height: 16px;
+}
+.menu-row:hover .mi-del {
+  opacity: 1;
+  pointer-events: auto;
+}
+.mi-del:hover {
+  background: var(--danger-soft);
+}
+.mi-del:disabled {
+  display: none;
+}
+.menu-add {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: var(--fs-md);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+.menu-add svg {
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+}
+.menu-add:hover {
+  background-color: var(--surface-3);
+}
+/* —— 右栏：详情编辑列（限宽浮中，账户页同款） —— */
+.detail {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-6) var(--space-3);
+}
+.info {
+  max-width: 560px;
+  margin-inline: auto;
+}
+.head-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.name {
+  margin: 0;
+  min-width: 0;
+  font-size: var(--fs-xl);
+  font-weight: 700;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 改名输入区（input+确认/取消）：click-outside 命中测试的边界；吃 .input 质感 */
+.rename-zone {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex: 1;
+  min-width: 0;
+}
+.rename-input {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-xl);
+  font-weight: 700;
+}
+.head-spacer {
+  flex: 1;
+}
+.badge {
+  padding: 2px 8px;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: var(--radius-pill);
+}
+.ghost-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
+}
+.ghost-btn svg {
+  width: 14px;
+  height: 14px;
+}
+.ghost-btn:hover {
+  background: var(--surface-3);
+  border-color: var(--accent);
+}
+.icon-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+.icon-btn svg {
+  width: 16px;
+  height: 16px;
+}
+.icon-btn:hover {
+  background: var(--surface-4);
+  color: var(--text-primary);
+}
+.icon-btn:disabled {
+  display: none;
+}
+.icon-btn--danger:hover {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+.kind {
+  margin: var(--space-2) 0 0;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+.form {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
   gap: var(--space-4);
-  padding: var(--space-5);
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-card);
+  margin-top: var(--space-5);
 }
 .field {
   display: flex;
@@ -215,30 +796,17 @@ async function onSave(): Promise<void> {
 .field--wide {
   flex: 1 1 260px;
 }
+.field--full {
+  flex: 1 1 100%;
+}
 .field--num {
   min-width: 96px;
 }
-.editing-hint {
-  flex: 1 1 100%;
-  margin: 0;
+.label {
   font-size: var(--fs-xs);
   color: var(--text-muted);
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
 }
-.link {
-  background: none;
-  border: none;
-  padding: 0;
-  color: var(--accent);
-  cursor: pointer;
-  font-size: var(--fs-xs);
-}
-.link:hover {
-  text-decoration: underline;
-}
-/* 输入控件 inset 质感：第3级底 + 底缘内阴影 + 无边框，focus accent 投影环 */
+/* 输入控件 inset 质感（全局配方）：第3级底 + 底缘内阴影 + focus accent 环 */
 .input {
   padding: var(--space-3) var(--space-4);
   background: var(--surface-3);
@@ -246,7 +814,9 @@ async function onSave(): Promise<void> {
   border-radius: var(--radius-md);
   color: var(--text-primary);
   box-shadow: var(--input-inset);
-  transition: background-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
 }
 .input:hover {
   background: var(--surface-4);
@@ -255,8 +825,11 @@ async function onSave(): Promise<void> {
   outline: none;
   box-shadow: var(--input-focus-shadow);
 }
-select.input {
-  cursor: pointer;
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex: 1 1 100%;
 }
 .primary {
   padding: var(--space-2) var(--space-5);
@@ -265,7 +838,10 @@ select.input {
   border: none;
   border-radius: var(--radius-md);
   font-weight: 600;
-  transition: background var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+  cursor: pointer;
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
 }
 .primary:hover:not(:disabled) {
   background: var(--accent-hover);
@@ -280,71 +856,147 @@ select.input {
 .saved {
   font-size: var(--fs-xs);
   color: var(--ok);
-  align-self: center;
 }
-.list {
-  list-style: none;
+.field-err {
+  flex: 1 1 100%;
   margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-.card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-4) var(--space-5);
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-card);
-  cursor: pointer;
-  transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
-}
-.card:hover {
-  background: var(--surface-3);
-  border-color: var(--accent);
-}
-.card-main {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  min-width: 0;
-}
-.card-meta {
   font-size: var(--fs-xs);
-  color: var(--text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  color: var(--danger);
 }
-.card-name {
-  color: var(--text-primary);
+.mono {
+  font-family: var(--font-mono);
 }
-.card-ver {
-  font-size: var(--fs-sm);
-  color: var(--text-secondary);
-}
-.state {
-  padding: var(--space-6) var(--space-5);
-  text-align: center;
-  color: var(--text-secondary);
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
+/* 设置分组 card（基本设置/addons 共用外观，同 .menu 质感） */
+.card {
+  padding: var(--space-5);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-card);
 }
-.state--err {
-  color: var(--danger);
+.card-title {
+  margin: 0 0 var(--space-4);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+.addons {
+  margin-top: var(--space-5);
+}
+.addon-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--border);
+}
+.addon-row:first-of-type {
+  padding-top: 0;
+}
+.addon-row:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+.addon-info {
+  min-width: 0;
+}
+.addon-name {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.addon-soon {
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+}
+.addon-desc {
+  margin: 2px 0 0;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+/* iOS 式开关：checkbox 透明覆盖，track/thumb 纯 CSS */
+.switch {
+  position: relative;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.switch input {
+  position: absolute;
+  inset: 0;
+  width: 36px;
+  height: 20px;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.switch input:disabled {
+  cursor: default;
+}
+.track {
+  position: relative;
+  display: block;
+  width: 36px;
+  height: 20px;
+  background: var(--border);
+  border-radius: var(--radius-pill);
+  transition: background 0.15s ease;
+  pointer-events: none;
+}
+.track::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background: var(--surface-1);
+  border-radius: 50%;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 25%);
+  transition: transform 0.15s ease;
+}
+.switch input:checked + .track {
+  background: var(--accent);
+}
+.switch input:checked + .track::after {
+  transform: translateX(16px);
+}
+.switch input:disabled + .track {
+  opacity: 0.45;
+}
+/* 删除弹窗附加选项：连删目录复选框（danger 色调强调不可逆） */
+.del-files {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+.del-files input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--danger);
+  cursor: pointer;
 }
 .empty {
+  height: 100%;
   display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
+  align-items: center;
+  justify-content: center;
 }
 .state-hint {
-  font-size: var(--fs-sm);
-  color: var(--text-muted);
+  margin: 0;
+  font-size: var(--fs-md);
+  color: var(--text-secondary);
 }
 </style>

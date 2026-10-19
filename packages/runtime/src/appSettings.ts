@@ -75,6 +75,7 @@ export function instanceViewFromConfig(config: {
   width?: number;
   height?: number;
   javaPath?: string;
+  addons?: string;
 }): InstanceView {
   const view: InstanceView = { name: config.name, version: config.version };
   if (config.gameDir) view.gameDir = config.gameDir;
@@ -82,5 +83,9 @@ export function instanceViewFromConfig(config: {
   if (config.width !== undefined) view.width = config.width;
   if (config.height !== undefined) view.height = config.height;
   if (config.javaPath) view.javaPath = config.javaPath;
+  // v1 `addons` 档案键 = 逗号分隔；空串 = 显式全关（与"无键 = legacyfix 缺省"区分，不可丢弃）
+  if (config.addons !== undefined) {
+    view.addons = config.addons.split(',').map((s) => s.trim()).filter(Boolean);
+  }
   return view;
 }

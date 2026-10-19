@@ -28,6 +28,8 @@ function close(): void {
     <header class="head">
       <h2 class="title">{{ props.title }}</h2>
       <p class="message">{{ props.message }}</p>
+      <!-- 可选附加选项（如实例删除的"同时删除目录"复选框），由宿主页面注入 -->
+      <slot />
     </header>
 
     <footer class="foot">

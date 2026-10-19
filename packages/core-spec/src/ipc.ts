@@ -47,6 +47,12 @@ export const IPC_CHANNELS = {
   INSTANCES_LIST: 'attic:instances:list',
   /** 保存实例（新建/覆盖，返回保存后的视图）。 */
   INSTANCES_SAVE: 'attic:instances:save',
+  /** 删除实例档案；withFiles=true 时连 gameDir 一并递归删（护栏在宿主），否则存档数据不动。 */
+  INSTANCES_DELETE: 'attic:instances:delete',
+  /** 改实例名（v1 语义：档案迁移，gameDir 原样带走——改名不动目录）。 */
+  INSTANCES_RENAME: 'attic:instances:rename',
+  /** 在系统文件管理器打开实例 gameDir（宿主 shell.openPath；目录不存在则先创建）。 */
+  INSTANCES_OPEN_DIR: 'attic:instances:open-dir',
   /** 无边距窗控制（顶栏三键；动作见 WindowAction）。 */
   WINDOW_CONTROL: 'attic:window:control',
   /** 打开/聚焦独立控制台窗口（v1 语义：MC 日志独立窗，与主页解耦）。 */
@@ -174,6 +180,13 @@ export interface RendererBridge {
   setSettings(settings: AppSettings): Promise<IpcResult<AppSettings>>;
   listInstances(): Promise<IpcResult<InstanceView[]>>;
   saveInstance(instance: InstanceView): Promise<IpcResult<InstanceView>>;
+  /** 删除实例档案（档案不存在 = 显式报错，可见失败）；
+   * withFiles=true 时宿主连实例目录（gameDir）一并递归删除。 */
+  deleteInstance(name: string, withFiles: boolean): Promise<IpcResult<void>>;
+  /** 改实例名：成功返回改名后的权威视图；重名/非法名/不存在 = 宿主显式报错。 */
+  renameInstance(name: string, newName: string): Promise<IpcResult<InstanceView>>;
+  /** 打开实例 gameDir（系统文件管理器；宿主保证目录存在后 openPath）。 */
+  openInstanceDir(name: string): Promise<IpcResult<void>>;
   windowControl(action: WindowAction): Promise<IpcResult<void>>;
   openConsoleWindow(): Promise<IpcResult<void>>;
   listCustomVersions(): Promise<IpcResult<CustomVersionView[]>>;

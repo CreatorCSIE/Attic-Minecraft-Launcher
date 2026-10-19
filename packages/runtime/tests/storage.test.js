@@ -12,6 +12,8 @@ const {
   saveInstance,
   loadInstance,
   listInstances,
+  deleteInstance,
+  renameInstance,
   scanBinPool,
   scanInstalledInfos,
   scanInstalledJars,
@@ -23,6 +25,7 @@ const {
   nativesDir,
   instancesDir,
   versionListCacheFile,
+  instanceViewFromConfig,
   AtticRuntime,
 } = require('../dist/index.js');
 const { buildJarBuffer } = require('./zipFixture.js');
@@ -83,6 +86,89 @@ test('实例配置：保存/读回/列出（v1 键集）', (t) => {
   assert.deepEqual(listInstances(root), ['b1.7.3']);
   assert.deepEqual(loadInstance(root, 'b1.7.3'), config);
   assert.equal(loadInstance(root, '不存在'), null);
+});
+
+test('addons 档案回环：逗号串原样保存/读回；空串=显式全关、不写=无键', (t) => {
+  const root = tempRoot(t);
+  ensureLayout(root);
+  saveInstance(root, { name: 'a', version: 'b1.7.3', gameDir: path.join(root, 'a'), addons: 'vsync,skins' });
+  assert.equal(loadInstance(root, 'a').addons, 'vsync,skins');
+  // 空串必须活过序列化（= 显式全关），不能被当成"没填"丢掉
+  saveInstance(root, { name: 'b', version: 'b1.7.3', gameDir: path.join(root, 'b'), addons: '' });
+  assert.equal(loadInstance(root, 'b').addons, '');
+  saveInstance(root, { name: 'c', version: 'b1.7.3', gameDir: path.join(root, 'c') });
+  assert.equal(loadInstance(root, 'c').addons, undefined);
+});
+
+test('instanceViewFromConfig：addons 三态（无键 undefined / 空串 [] / trim 切分）', () => {
+  const base = { name: 'x', version: 'b1.7.3', gameDir: '/g' };
+  assert.equal(instanceViewFromConfig(base).addons, undefined);
+  assert.deepEqual(instanceViewFromConfig({ ...base, addons: '' }).addons, []);
+  assert.deepEqual(instanceViewFromConfig({ ...base, addons: 'vsync, skins ,bad id' }).addons, ['vsync', 'skins', 'bad id']);
+});
+
+test('deleteInstance：默认只删档案；withFiles 连目录；护栏（数据根/共享目录）显式报错', (t) => {
+  const root = tempRoot(t);
+  ensureLayout(root);
+  const mk = (name, gameDir) => {
+    saveInstance(root, { name, version: 'b1.7.3', gameDir, launchArgs: '-Xmx1G', width: 854, height: 480 });
+    fs.mkdirSync(gameDir, { recursive: true });
+    fs.writeFileSync(path.join(gameDir, 'level.dat'), 'x');
+  };
+
+  // 不勾（保守缺省）：档案删除、目录数据不动；再删 = false（档案不存在）
+  mk('solo', path.join(root, 'solo'));
+  assert.equal(deleteInstance(root, 'solo'), true);
+  assert.equal(loadInstance(root, 'solo'), null);
+  assert.ok(fs.existsSync(path.join(root, 'solo', 'level.dat')));
+  assert.equal(deleteInstance(root, 'solo'), false);
+
+  // 勾选：档案与目录一并删除
+  mk('gone', path.join(root, 'gone'));
+  assert.equal(deleteInstance(root, 'gone', true), true);
+  assert.equal(fs.existsSync(path.join(root, 'gone')), false);
+
+  // 护栏 A：gameDir = 数据根本身 → 显式报错，档案保留（报错先于任何删除）
+  mk('rooted', root);
+  assert.throws(() => deleteInstance(root, 'rooted', true), /数据根/);
+  assert.ok(loadInstance(root, 'rooted'));
+
+  // 护栏 B：gameDir 与其他实例共享 → 显式报错，目录与双方档案都不动
+  const shared = path.join(root, 'shared-dir');
+  mk('a1', shared);
+  mk('a2', shared);
+  assert.throws(() => deleteInstance(root, 'a1', true), /共享/);
+  assert.ok(fs.existsSync(path.join(shared, 'level.dat')));
+  assert.ok(loadInstance(root, 'a1') && loadInstance(root, 'a2'));
+});
+
+test('renameInstance：v1 语义只迁档案，gameDir 原样带走（改名不动目录）', (t) => {
+  const root = tempRoot(t);
+  ensureLayout(root);
+  const dir = path.join(root, 'my-game');
+  saveInstance(root, { name: 'old', version: 'b1.7.3', gameDir: dir, launchArgs: '-Xmx2G', width: 1280, height: 720 });
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'level.dat'), 'x');
+
+  const renamed = renameInstance(root, 'old', 'new');
+  // 新档案全字段继承，仅 name 变；旧档案消失；目录数据零改动
+  assert.equal(renamed.name, 'new');
+  assert.equal(renamed.gameDir, dir);
+  assert.equal(renamed.version, 'b1.7.3');
+  assert.equal(renamed.launchArgs, '-Xmx2G');
+  assert.deepEqual(loadInstance(root, 'new'), renamed);
+  assert.equal(loadInstance(root, 'old'), null);
+  assert.ok(fs.existsSync(path.join(dir, 'level.dat')));
+
+  // 同名 = no-op 返回原档案
+  assert.deepEqual(renameInstance(root, 'new', 'new'), renamed);
+
+  // 三类拒绝均显式报错且原档案不动
+  saveInstance(root, { name: 'dup', version: 'c0.30', gameDir: path.join(root, 'dup'), launchArgs: '', width: 854, height: 480 });
+  assert.throws(() => renameInstance(root, 'new', 'dup'), /已存在/); // 重名
+  assert.throws(() => renameInstance(root, 'new', 'a/b'), /不合法/); // 路径分隔符
+  assert.throws(() => renameInstance(root, '不存在', 'x'), /不存在/);
+  assert.ok(loadInstance(root, 'new'));
 });
 
 test('实例解耦（v1 语义）：gameDir=root/<实例名>，首启自动建 default instance，切版本目录不变', async (t) => {

@@ -98,11 +98,60 @@
 >   - **Attic 对应方案**：现"当前账户"选中在渲染侧 localStorage（`attic:account:current`），落实时迁宿主侧——`accounts.json` 结构从裸数组升级为 `{accounts[], current}`（v1 同款语义，双壳共享、Electron/Tauri 一致）；`launcher.settings` 增 `lastInstance` 键（走既有 SETTINGS_GET/SET 通道，AppSettings 视图加字段）；版本继续随实例（`InstanceConfig.version` 已有，与 v1 语义天然一致）。启动/主页恢复序 = lastInstance → 该实例 version → 选中账户；`useSelection` 与实例切换联动。改动面：storage.ts 读写结构 + core-spec AppSettings/账户存储类型 + contract.md + 双壳镜像 + UI 接线 + runtime 测试（current 回落首个、lastInstance 缺失建 default instance 两条语义进夹具）。
 > - **自定义版本配置页（已落实 2026-10-18）**：编辑 custom 版本 `.info` 元数据的双栏页（排版镜像账户页；Betacraft 官方版本不落入）。左栏 = 搜索框 + 「导入 jar」按钮 + custom 版本列表（裸 jar=未配置徽标 / `.info` custom=true=已配置徽标）；右栏 = info 编辑表单（launch-method 下拉——合法键集由契约随数据下发 `launchMethods[]`，UI 零硬编码；main-class / minecraft-arguments / assets / type / url / sha1 / proxy-args 等字段文本输入）。契约新增四通道：`CUSTOM_LIST` / `CUSTOM_GET_INFO` / `CUSTOM_SAVE_INFO` / `CUSTOM_IMPORT_JAR`（导入=主进程原生文件对话框，复制为 `versions/<id>.jar`，同名 jar 报错不覆盖，落裸 jar=未配置态）；保存强制写 `custom=true`、`launch-method` 必填（其余字段选填，留空落盘为 `key=` 空值段）、非法 launch-method（主类表无映射且未显式给 main-class）显式报错；未配置裸 jar 的 get 返回 `detectLaunchMethod` 建议值供预填。
 > - **全局设置升级 + 实例继承开关（BlockHelm Global Settings 参考，设计已定案待落实）**：现有设置页升级为完整全局参数组（内存/GC/并行度/额外 JVM 参数 + 全局默认窗口尺寸 + 全局默认 Java + 多账号默认项）。冲突解法=**组级继承**：实例增 `inheritsGlobal` 布尔（UI 为"实例独立设置"复选框，默认勾选=跟随全局）；未开独立则实例的 launchArgs/width/height/javaPath **整组不生效**（替换现有字段级回落），开则整组生效。注意：v1 实例永远全独立（全局仅作建档默认），此开关是超越 v1 的可用性增强，落实前需用户确认；属契约级改动——buildContext 覆盖序从字段级改组级，contract.md §2.6 组序重写，四处同步 + 测试。
-> - **关于页 + 语言（必落实，BlockHelm/MCDArchive 双源核对）**：
+> - **关于页 + 语言（必落实，BlockHelm/MCDArchive 双源核对）**〔2026-10-19：并入下方「设置页重写」正式待办，本条调研作为输入〕：
 >   - 关于页结构取 MCDArchive（项目名/版本标识/版权/GPL-3.0/主页/反馈链接，MainWindow.axaml L154-220）+ 环境信息取 MCANextGen 前身模式（构建注入 `__HOST_VERSION__` + `HOST_GET_INFO` 返回 hostVersion/platform/arch/Electron/Node/Chrome）；检查更新按钮取 BlockHelm（InfoSettingsView.xaml L50-68 + `CheckForUpdatesAsync(版本, 更新频道)`，即 Phase 5 既定的 GitHub Releases 轮询，可前置到本页先做"检测+提示"，下载自更新留 Phase 5）。契约需新增 HOST_INFO / CHECK_UPDATE 通道（四处同步）。
 >   - 语言：Attic i18n 骨架已具备（zh-CN/en 深合并 + localStorage + 即时生效），**只差设置页语言下拉**；扩展路线采 MCDArchive 的 `lang/*.json` 外置自动发现（扫目录读 `_LanguageName` 构造选项，缺失回落内置 en）而非 BlockHelm 的编译期 resx+重启生效（MCDArchive 即时切换体验优于重启提示）；社区翻译即"丢一个 JSON 进 lang/"。
 > - **设置页其它候选控件**（BlockHelm 分组 General/Download/Language/LaunchMemory/Java/Theme/Info/Feedback 中筛）：主题页"跟随系统开关+强调色下拉"（ThemeSettingsView.xaml L38-73，与 token 体系契合，并入 accent 色候选）；打开/导出日志、重置窗口大小类小控件（低成本高价值）；快捷键页（全局热键）与下载通道页暂缓——前者非 v1 语义、后者端点设置已有。
 > - **不适用项**（明示排除）：BackdropBlur 刷新协调器违反保守 CSS 基线（风险 #4 规避无降级 backdrop-filter）；SkinCarousel3DControl（3D 皮肤轮播）依赖 WebGL，进 Phase 6 愿望池；游戏分辨率/全屏/缩放（a1.0.4+ 主类自管，Applet 容器无此能力）；模组/存档/服务器管理等页面（非目标清单）。
+
+### 设置页重写（BlockHelm 逐分区调研定稿 2026-10-19，待落实）
+
+> 调研输入：`reference/BlockHelm-Launcher` 设置页全量源码核对（分区框架/通用/语言/启动内存/Java/主题/关于/反馈）+ Attic 现状盘点。用户拍板的移植范围已在各节标注（必须/部分/占位）。落实前须先清掉文末 4 个待决策点。
+
+**框架**
+- [ ] 单页流（SettingsPanel.vue 一滚到底）→ **左栏分区导航 + 右侧内容区**（分区：通用 / 语言 / 启动与内存 / Java / 主题 / 关于 / 建议与反馈；末项点击弹对话框、不切页，同 BlockHelm Feedback 语义）
+- [ ] **即改即存**：去掉底部「保存设置」按钮，改动防抖落盘（参考 BlockHelm SettingsPersistenceCoordinator：350ms 防抖 + 增量回放到磁盘最新副本；走既有 SETTINGS_SET 全量语义在 UI 侧合并即可）
+- [ ] bool 项统一胶囊 toggle（复用 addons 栏 `.switch` 配方）；分区图标可取 BlockHelm setting_page 系（earth/info/theme/message/bug/new_feature，IconPark Apache-2.0）
+
+**通用栏**（BlockHelm 两大项均可搬）
+- [ ] 数据根：当前路径展示 + 打开目录 + 更换根；**有下载/启动任务进行中禁止切换**（护栏照搬）。多目录列表 vs 单根简化 → 待决策 #2
+- [ ] 启动器日志：日志目录只读展示 + 打开目录 + 清理日志（确认弹窗）+ 诊断日志开关（实时生效，对应 runtime 日志面）
+
+**语言栏**（必须完整复制；游戏语言 GroupBox 按用户决策排除）
+- [ ] 启动器语言下拉 + 持久化进契约（AppSettings 新键 `language`；现状语言存 localStorage 且零 UI 入口、setLocale 无人调用——一并收编）
+- [ ] 清单先给实际有的（zh-CN/en）；zh-Hant/ja-JP 待翻译，i18n 深合并机制加文件即得（外置自动发现路线见旧候选 MCDArchive 注记）
+- [ ] 热切换 vs 重启生效+双语提示 → 待决策 #1（推荐热切换：BlockHelm 重启语义是 WPF culture 约束，Vue 侧无此限制）
+
+**启动和内存栏**（部分复制，逐项判定过）
+- [ ] 搬 5 个开关：启动前检查文件完整性 / 缺失自动补全（前者关则后者禁用+联动同步）/ 启动后最小化启动器（electron 主窗 IPC）/ 全屏启动（老版本 `${fullscreen}` token，装配链现成）/ 启动后自动加入服务器（legacyfix `-Dlf.server=<地址>`；顺带收编契约悬空键 `levelServer`——至今无任何 UI 消费）
+- [ ] 内存：自动/手动模式下拉 + 最大内存滑杆（滑杆上限 = `min(总-2GB, 75%总)` 公式照抄 + 系统总/可用内存实时摘要，1s 轮询宿主 `os.totalmem`/`freemem`）；"自动分配"估算按老版本场景简化（BlockHelm 的 mod 增量表不适用，缺省 1024 更合理）
+- [ ] 全局 JVM 参数（现仅实例级 launchArgs，无全局层）——与旧候选「全局设置升级 + 实例继承开关（inheritsGlobal）」同题，落实时合并设计
+- [ ] 不搬：pre/post 执行命令、全局游戏参数（老版本场景价值低）；下载分区（源/线程/限速）Attic 对应物是 endpoints → 去向见待决策 #3
+
+**Java 栏**（必须完整复制：自动探测 + 候选自主选择 + 自动选择）
+- [ ] 形态照搬 BlockHelm：自动/手动下拉 + 状态消息行（扫描中/为空）+ 刷新/导入按钮 + 候选列表（每行 = `Java {major}` + 完整版本串 + x64/x86 + 全路径省略号；**自动模式下列表禁点选**，`IsHitTestVisible` 语义）
+- [ ] 数据源复用现成 `detectJava()` 报告的 `installs[]`（版本/架构/路径字段齐）；契约键增量：`javaSelectionMode: 'auto'|'manual'` + `selectedJavaPath`（即现有 `javaPath`，语义不变）
+- [ ] 「导入」需新增 electron 原生文件对话框选 java.exe 的 IPC 通道（现 dialog 仅自定义版本 jar 导入一处）
+- [ ] Attic 独有资产别丢：auto 模式探测失败 → Zulu 8 自动下载兜底保留；现有"探测报告面板"（失败候选/诊断）降级为栏内可折叠详情
+
+**主题栏**（后期实现，目前占位）
+- [ ] 分区先建：深/浅/跟随系统继续即时生效（tokens.css 体系已完备）；强调色/背景效果 = 「即将推出」灰条目（addon-soon 徽标配方照搬）；强调色正交分层方案（`[data-accent]` 只覆写三变量）见旧候选注记，日后落实
+
+**关于栏**（必须参考 BlockHelm 格式搭建）
+- [ ] 头区：logo + 启动器名 + `v{版本号}`（当前全仓 0.0.0 无注入——构建期注入版本）+ 「查看 GitHub 仓库」+「检查更新」按钮（先做检测+提示，下载自更新留 Phase 5 GitHub Releases 轮询）
+- [ ] 启动器更新 GroupBox：更新通道下拉（正式版/测试版）占位——未来启动器更新系统的挂载点（BlockHelm 蓝本：manifest 双源 gitee/github + versionCode 整数比较 + 更新确认弹窗）
+- [ ] 版权及法律声明 GroupBox 三行「标题+说明+查看」：版权声明→仓库主页 / 开源协议→GPL-3.0 LICENSE / 用户协议→条款文档（条款文本需另拟）
+- [ ] 引用的项目 GroupBox：嵌入 `ReferenceProjects.json` 数据驱动（名称+版权行+许可证+查看外链），Attic 清单：Betacraft v1 / legacyfix / MCANextGen / BlockHelm-Launcher / Vue / Electron / lucide 图标等
+- [ ] **侧栏左下角头像点击 → 跳转本分区**（现状：作者 GitHub 头像纯装饰无 click；GitHub 外链收进关于页）
+
+**建议和反馈栏**（必须完整移植）
+- [ ] 分区列表末项，点击弹对话框不切页：「新功能建议」→ GitHub Discussions 分类 /「Bug 反馈」→ GitHub Issues / 底部取消——纯外链大按钮行（图标+标题），零表单零 API；链接目标待决策 #4（仓库是否开 Discussions）
+
+**待决策（落实前由用户拍板）**
+1. 语言：热切换（推荐）vs 忠实复制重启生效+双语提示
+2. 数据根：多目录列表（BlockHelm 原样）vs 单根+更换/打开（v1 语义简化，推荐）
+3. endpoints 端点覆盖与 username 两现有项去向：塞通用栏底部 / 独立「高级」栏 / 移除
+4. 反馈链接：Attic 仓库是否已开 Discussions
 
 ## 5. Phase 4 — Tauri 壳（Rust core 第二实现）
 

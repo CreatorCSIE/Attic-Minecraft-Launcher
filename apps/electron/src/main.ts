@@ -1,5 +1,6 @@
+import fs from 'node:fs';
 import path from 'node:path';
-import { app, BrowserWindow, dialog, ipcMain } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import {
   IPC_CHANNELS,
   IPC_EVENTS,
@@ -162,6 +163,16 @@ app.whenReady().then(() => {
   handle(IPC_CHANNELS.SETTINGS_SET, (settings: AppSettings) => runtime.setSettings(settings));
   handle(IPC_CHANNELS.INSTANCES_LIST, () => runtime.listInstances());
   handle(IPC_CHANNELS.INSTANCES_SAVE, (instance: InstanceView) => runtime.saveInstance(instance));
+  handle(IPC_CHANNELS.INSTANCES_DELETE, (name: string, withFiles: boolean) => runtime.deleteInstance(name, withFiles));
+  handle(IPC_CHANNELS.INSTANCES_RENAME, (name: string, newName: string) => runtime.renameInstance(name, newName));
+  // 打开实例目录：先 mkdir 保证可见（首启未落盘的场景不失败），再交系统文件管理器。
+  // openPath 失败语义 = 返回非空错误字符串（成功 = ''），回抛给渲染侧可见。
+  handle(IPC_CHANNELS.INSTANCES_OPEN_DIR, async (name: string) => {
+    const dir = runtime.instanceGameDir(name);
+    fs.mkdirSync(dir, { recursive: true });
+    const err = await shell.openPath(dir);
+    if (err) throw new Error(err);
+  });
   // 自定义版本配置页通道（list/get/save/remove 直连 runtime；import 见下方对话框）。
   handle(IPC_CHANNELS.CUSTOM_LIST, () => runtime.listCustomVersions());
   handle(IPC_CHANNELS.CUSTOM_GET_INFO, (id: string) => runtime.getCustomVersionInfo(id));

@@ -5,18 +5,16 @@
  * 面板常驻挂载、收起=整体下移 (panelH - peekH)、hover 展开 + 110ms 收起防抖 +
  * 600ms 选中重入抑制窗、图钉偏好独立持久化。
  * 本期语义（"先搬过去"）：选中 = 切换激活实例（useInstances.activeName，localStorage 持久化，
- * AppSettings 契约不动）+ 版本联动（select(instance.version)，与宿主 persistInstanceVersion
- * 的回写方向一致）。实例页改版时本组件与 InstanceList 统一收编到同一主从骨架。
+ * AppSettings 契约不动）；版本联动由 useSelection 对 active 的 watch 统一承担
+ * （与宿主 persistInstanceVersion 的回写方向一致）。实例页改版时本组件与 InstanceList 统一收编到同一主从骨架。
  * 数据驱动：列表/计数全走契约，UI 零版本判断（戒律 #1）。
  */
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { useI18n } from '../i18n';
 import { useInstances } from '../composables/useInstances';
-import { useSelection } from '../composables/useSelection';
 
 const { t } = useI18n();
 const { instances, loading, error, load, activeName, active, setActive } = useInstances();
-const { select } = useSelection();
 
 // —— 状态：pinned（持久化偏好）+ hover（瞬时）+ dismissed（显式收起后的 hover 抑制）——
 const STATE_KEY = 'attic:instance-panel:v1';
@@ -81,11 +79,9 @@ function collapse(suppressReenter = false): void {
   persist();
 }
 
-/** 选中实例：切激活 + 版本联动；未固定则收起（带重入抑制窗）。 */
+/** 选中实例：切激活（版本联动由 useSelection 的 active watch 承担）；未固定则收起。 */
 function onPick(name: string): void {
   setActive(name);
-  const inst = instances.value.find((i) => i.name === name);
-  if (inst) select(inst.version);
   if (!pinned.value) collapse(true);
 }
 

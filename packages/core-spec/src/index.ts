@@ -50,8 +50,10 @@ export type {
   LaunchConfig,
 } from './launch';
 export type {
+  AddonDef,
   AppSettings,
   EndpointOverrides,
   InstanceView,
   ThemeMode,
 } from './settings';
+export { INSTANCE_ADDONS, DEFAULT_ADDONS } from './settings';

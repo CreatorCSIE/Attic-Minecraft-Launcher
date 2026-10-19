@@ -152,10 +152,12 @@ async function onSave(): Promise<void> {
       <div v-if="loading" class="menu-state">{{ t('common.loading') }}</div>
       <ul v-else-if="filtered.length" class="menu-list">
         <li v-for="v in filtered" :key="v.id" class="menu-row">
+          <!-- title = 完整 id（248px 下长 id 必截断，hover 兜底看全值；实例页同款） -->
           <button
             class="menu-item"
             :class="{ 'menu-item--selected': selected?.id === v.id }"
             type="button"
+            :title="v.id"
             @click="select(v.id)"
           >
             <span class="mi-name">{{ v.id }}</span>

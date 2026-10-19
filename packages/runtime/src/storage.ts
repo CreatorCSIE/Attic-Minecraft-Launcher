@@ -129,6 +129,20 @@ export interface InstanceConfig {
 
 const INSTANCE_FILE = (root: string, name: string): string => path.join(instancesDir(root), `${name}.txt`);
 
+/** 实例名 = 档案文件名（v1 `<name>.txt` 语义）：按最受限平台（Windows）钉死非法字符集，
+ * 路径分隔符/相对段一并拒绝（防穿越）。写入与改名共用同一道闸。 */
+export function assertInstanceName(name: string): void {
+  if (
+    name.trim() === '' ||
+    name === '.' ||
+    name === '..' ||
+    // eslint-disable-next-line no-control-regex
+    /[\x00-\x1f<>:"/\\|?*]/.test(name)
+  ) {
+    throw new Error(`实例名称不合法：${name}`);
+  }
+}
+
 export function listInstances(root: string): string[] {
   try {
     return fs
@@ -179,7 +193,47 @@ export function loadInstance(root: string, name: string): InstanceConfig | null 
   return config;
 }
 
+/** 删除实例薄档案（<name>.txt）；withFiles=true 时连实例目录（gameDir）一并递归删除。
+ * 递归删除双护栏（触线 = 显式报错不静默）：目录即数据根本身、或与其他实例共享目录
+ * （gameDir 可指向任意路径，误删代价不可逆）。返回是否删到。 */
+export function deleteInstance(root: string, name: string, withFiles = false): boolean {
+  const file = INSTANCE_FILE(root, name);
+  if (!fs.existsSync(file)) return false;
+  if (withFiles) {
+    const dir = path.resolve(loadInstance(root, name)?.gameDir ?? path.join(root, name));
+    if (dir === path.resolve(root)) {
+      throw new Error(`拒绝删除：实例目录即数据根本身（${dir}）`);
+    }
+    for (const other of listInstances(root)) {
+      if (other === name) continue;
+      const otherDir = loadInstance(root, other)?.gameDir;
+      if (otherDir && path.resolve(otherDir) === dir) {
+        throw new Error(`拒绝删除：实例目录与「${other}」共享（${dir}）`);
+      }
+    }
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+  fs.rmSync(file, { force: true });
+  return true;
+}
+
+/** 改实例名（v1 Instance.renameInstance 语义）：克隆档案只换 name，**gameDir 原样带走**——
+ * 目录落位与名字解耦，改名不动存档、不迁文件。v1 的 <name>.png 图标迁移暂无对应物（未实现图标）。
+ * 先写新档案再删旧（任一步失败最坏是双档案，绝不丢配置）；重名/非法名/不存在 = 显式报错。 */
+export function renameInstance(root: string, name: string, newName: string): InstanceConfig {
+  const config = loadInstance(root, name);
+  if (!config) throw new Error(`实例不存在：${name}`);
+  if (newName === name) return config;
+  assertInstanceName(newName);
+  if (fs.existsSync(INSTANCE_FILE(root, newName))) throw new Error(`实例名称已存在：${newName}`);
+  const renamed: InstanceConfig = { ...config, name: newName };
+  saveInstance(root, renamed);
+  fs.rmSync(INSTANCE_FILE(root, name), { force: true });
+  return renamed;
+}
+
 export function saveInstance(root: string, config: InstanceConfig): void {
+  assertInstanceName(config.name);
   const props: Record<string, string> = {
     name: config.name,
     version: config.version,

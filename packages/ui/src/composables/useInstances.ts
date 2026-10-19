@@ -65,6 +65,30 @@ async function save(inst: InstanceView): Promise<boolean> {
   return res.ok;
 }
 
+/** 删除薄档案（withFiles=true 连实例目录一并删，护栏在宿主）；成功后就地移除，
+ * 激活兜底由 watch 自动接管。 */
+async function remove(name: string, withFiles: boolean): Promise<boolean> {
+  const res = await bridge.deleteInstance(name, withFiles);
+  if (res.ok) instances.value = instances.value.filter((i) => i.name !== name);
+  return res.ok;
+}
+
+/** 改名（v1 语义：档案迁移、gameDir 不动）：成功就地替换（改名只动 name，本地视图
+ * 与宿主返回等价），激活实例被改名时 setActive 跟随防指针失效。返回 null=成功 / 错误文案。 */
+async function rename(name: string, newName: string): Promise<string | null> {
+  const res = await bridge.renameInstance(name, newName);
+  if (!res.ok) return res.error;
+  instances.value = instances.value.map((i) => (i.name === name ? { ...i, name: newName } : i));
+  if (activeName.value === name) setActive(newName);
+  return null;
+}
+
+/** 打开实例目录：成功返回 null，失败返回错误文案（UI 内联可见）。 */
+async function openDir(name: string): Promise<string | null> {
+  const res = await bridge.openInstanceDir(name);
+  return res.ok ? null : res.error;
+}
+
 function ensureLoaded(): void {
   if (started) return;
   started = true;
@@ -73,5 +97,5 @@ function ensureLoaded(): void {
 
 export function useInstances() {
   ensureLoaded();
-  return { instances, loading, error, load, save, activeName, active, setActive };
+  return { instances, loading, error, load, save, remove, rename, openDir, activeName, active, setActive };
 }

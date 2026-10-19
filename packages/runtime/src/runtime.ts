@@ -41,6 +41,7 @@ import { DEFAULT_AGENT_MOUNTS } from './quirks';
 import {
   binDir,
   clientJarFile,
+  deleteInstance,
   ensureLayout,
   infoFile,
   jsonsDir,
@@ -52,6 +53,7 @@ import {
   nativesDir,
   offlineUuid,
   readPropertiesFile,
+  renameInstance,
   resolveDataRoot,
   saveAccounts,
   saveInstance,
@@ -346,6 +348,7 @@ export class AtticRuntime {
    * 皆不存在 → main 返回、进程 code=0 静默秒退（pc-132011 实测定格；level.dat 缺失
    * 只是开局噪音，注入后窗口与游戏循环正常）。探测失败 = 不注入（维持可见失败，
    * probeIndevEntry 同纪律）。
+   * 已知不修（用户拍板，视为 Pre-Classic 特色）：rd 窗口内容 LWJGL Display 右下偏移。
    */
   private resolvePreclassicAppletClass(json: VersionJson): string | undefined {
     if (json.betacraft?.launchMethod !== 'preclassic') return undefined;
@@ -661,8 +664,26 @@ export class AtticRuntime {
       width: view.width,
       height: view.height,
       javaPath: view.javaPath,
+      // v1 `addons` 键 = 逗号分隔；[] → 空串 = 显式全关（区别于无键的 legacyfix 缺省）
+      addons: view.addons?.join(','),
     });
     return view;
+  }
+
+  /** 删除实例薄档案；withFiles=true 连实例目录一并删（护栏见 storage.deleteInstance）。
+   * 档案不存在 = 显式报错（可见失败纪律）。 */
+  deleteInstance(name: string, withFiles: boolean): void {
+    if (!deleteInstance(this.root, name, withFiles)) throw new Error(`实例不存在：${name}`);
+  }
+
+  /** 改实例名（v1 语义：档案迁移，gameDir 原样带走不动目录）。返回改名后的权威视图。 */
+  renameInstance(name: string, newName: string): InstanceView {
+    return instanceViewFromConfig(renameInstance(this.root, name, newName));
+  }
+
+  /** 实例 gameDir（档案缺失按契约缺省 root/<实例名>，供宿主打开目录）。 */
+  instanceGameDir(name: string): string {
+    return loadInstance(this.root, name)?.gameDir ?? path.join(this.root, name);
   }
 
   // ---------- 内部编排 ----------
@@ -767,6 +788,8 @@ export class AtticRuntime {
       // v1 惯例（Instance.newInstance）：gameDir = 数据根/<实例名>，版本是实例属性、不参与目录派生。
       gameDir: instance.gameDir,
       launchArgs: instance.launchArgs,
+      // 档案 addons 逗号串 → 数组透传（undefined 保持 = 老档案零注入；空串 = 显式全关）
+      addons: instance.addons?.split(',').map((s) => s.trim()).filter(Boolean),
       width: instance.width,
       height: instance.height,
       assetsDir: path.join(this.root, 'assets'),

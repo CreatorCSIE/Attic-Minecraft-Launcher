@@ -3,7 +3,7 @@
  * 路径一律正斜杠字符串拼接——夹具是中性 POSIX 风格，拼装不得有平台假设。
  */
 
-import type { AgentMount, LaunchConfig, VersionJson } from '@attic/core-spec';
+import { INSTANCE_ADDONS, type AgentMount, type LaunchConfig, type VersionJson } from '@attic/core-spec';
 
 import { resolveLaunchAssetIndexId } from './legacyAssets';
 
@@ -34,6 +34,9 @@ export interface LaunchContext {
    * 仅此通道可起——候选表两个 MinecraftApplet 名在 jar 中皆不存在）；优先于方法数据表。
    */
   appletClass?: string;
+  /** 实例勾选的 addon id 集（宿主从档案透传）；按目录映射注入 -Dlf.* 开关。
+   * undefined = 档案无 addons 键（老档案）→ 零注入，行为与 legacyfix 自身缺省一致。 */
+  addons?: string[];
 }
 
 export interface AssembleOptions {
@@ -150,6 +153,15 @@ export function assembleLaunchConfig(
   // v1 语义：实例 launchArgs（如 "-Xmx1G"）紧随固定 -Xmx 注入——JVM 对重复 -Xmx 取后者，实例覆盖全局。
   for (const token of (context.launchArgs ?? '').trim().split(/\s+/)) {
     if (token) jvmArgs.push(token);
+  }
+  // 实例 addons → legacyfix 开关（目录 INSTANCE_ADDONS）：enable 勾选注入 / disable 取消注入。
+  // addons=undefined（老档案无键）零注入 = legacyfix 自身缺省行为，不擅自改写。
+  if (context.addons) {
+    for (const def of INSTANCE_ADDONS) {
+      if (def.placeholder) continue;
+      const on = context.addons.includes(def.id);
+      if ((def.mode === 'enable') === on) jvmArgs.push(`-Dlf.${def.prop}`);
+    }
   }
   jvmArgs.push('-Djava.util.Arrays.useLegacyMergeSort=true');
   // （历史注）曾注入 -Dsun.java2d.dpiaware=false 试图对症 applet 容器高 DPI 窗口右下偏移——

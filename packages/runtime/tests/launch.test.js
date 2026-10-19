@@ -188,6 +188,36 @@ test('实例 launchArgs 紧随固定 -Xmx 注入；Applet 容器 gameArgs 末尾
   assert.ok(betaConfig.jvmArgs.includes('-Xmx1G'));
 });
 
+test('addons 注入：档案三态 + 勾选/取消按目录映射 -Dlf.*', () => {
+  const versionJson = { id: 'b1.7.3', mainClass: 'net.minecraft.client.Minecraft' };
+  // 属性表钉死 legacyfix 契约（不引目录常量，防"测试跟着实现一起写错"）
+  const ENABLE = ['vsync', 'visualizer', 'modloader', 'beta-forge', 'bouncycastle', 'showNotice'];
+  const DISABLE = ['skin.disable', 'proxy.disable', 'auth-on-server-join.disable'];
+  const has = (c, p) => c.jvmArgs.includes(`-Dlf.${p}`);
+  // 态一：老档案无 addons 键（undefined）→ 零注入，行为 = legacyfix 自身缺省
+  const legacy = assembleLaunchConfig(versionJson, baseContext());
+  for (const p of [...ENABLE, ...DISABLE]) assert.ok(!has(legacy, p), `undefined 不应注入 ${p}`);
+  // 态二：UI 缺省集（disable 族全勾 = 功能默认开）→ 同样零注入
+  const dflt = assembleLaunchConfig(versionJson, { ...baseContext(), addons: ['skins', 'proxy', 'server-auth'] });
+  for (const p of [...ENABLE, ...DISABLE]) assert.ok(!has(dflt, p), `缺省集不应注入 ${p}`);
+  // 态三：显式全关（[]）→ disable 族注入 .disable，enable 族静默
+  const allOff = assembleLaunchConfig(versionJson, { ...baseContext(), addons: [] });
+  for (const p of DISABLE) assert.ok(has(allOff, p), `[] 应注入 ${p}`);
+  for (const p of ENABLE) assert.ok(!has(allOff, p), `[] 不应注入 ${p}`);
+  // 勾选 enable 族 = 注入正开关；disable 族保持勾选 = 不注入 .disable
+  const mixed = assembleLaunchConfig(versionJson, { ...baseContext(), addons: ['vsync', 'skins'] });
+  assert.ok(has(mixed, 'vsync'));
+  assert.ok(!has(mixed, 'skin.disable'));
+  assert.ok(has(mixed, 'proxy.disable'));
+  // 占位项（v1 fullscreen/game-mode-switch/quit-game）勾选也不产生空属性开关
+  const ph = assembleLaunchConfig(versionJson, { ...baseContext(), addons: ['fullscreen', 'game-mode-switch', 'quit-game'] });
+  assert.ok(!ph.jvmArgs.includes('-Dlf.'));
+  // 注入位置：紧随实例 launchArgs token、固定收尾属性之前
+  const pos = assembleLaunchConfig(versionJson, { ...baseContext(), launchArgs: '-XX:+UseG1GC', addons: ['vsync'] });
+  assert.ok(pos.jvmArgs.indexOf('-XX:+UseG1GC') < pos.jvmArgs.indexOf('-Dlf.vsync'));
+  assert.ok(pos.jvmArgs.indexOf('-Dlf.vsync') < pos.jvmArgs.indexOf('-Djava.util.Arrays.useLegacyMergeSort=true'));
+});
+
 function baseContext() {
   return {
     javaPath: '/opt/java/zulu8/bin/java',

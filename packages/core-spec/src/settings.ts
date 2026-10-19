@@ -63,4 +63,39 @@ export interface InstanceView {
   /** 窗口高（Applet 容器 `--height`；v1 缺省 480）。 */
   height?: number;
   javaPath?: string;
+  /** 勾选的 addon id 集（v1 `addons` 档案键 = 逗号分隔；视图用数组，宿主序列化）。 */
+  addons?: string[];
 }
+
+/**
+ * 实例 addon 目录（数据驱动，戒律 #1）：id 入 v1 `addons` 档案键，
+ * prop/mode 映射 legacyfix 的 -Dlf.* 开关（事实源：legacyfix docs/Additional settings.md）。
+ * mode=enable：勾选才注入 prop；mode=disable：取消才注入（功能默认开，如皮肤/代理）。
+ * placeholder：v1 addons 有、legacyfix 无对应开关 → UI 占位禁用，不参与装配。
+ */
+export interface AddonDef {
+  id: string;
+  /** legacyfix JVM 属性名（不含 `-Dlf.` 前缀）；placeholder 项为空串。 */
+  prop: string;
+  mode: 'enable' | 'disable';
+  placeholder?: boolean;
+}
+
+export const INSTANCE_ADDONS: AddonDef[] = [
+  { id: 'vsync', prop: 'vsync', mode: 'enable' },
+  { id: 'visualizer', prop: 'visualizer', mode: 'enable' },
+  { id: 'modloader', prop: 'modloader', mode: 'enable' },
+  { id: 'beta-forge', prop: 'beta-forge', mode: 'enable' },
+  { id: 'bouncycastle', prop: 'bouncycastle', mode: 'enable' },
+  { id: 'show-notice', prop: 'showNotice', mode: 'enable' },
+  { id: 'skins', prop: 'skin.disable', mode: 'disable' },
+  { id: 'proxy', prop: 'proxy.disable', mode: 'disable' },
+  { id: 'server-auth', prop: 'auth-on-server-join.disable', mode: 'disable' },
+  // v1 addons 清单占位（legacyfix 无对应开关，接入后转正）
+  { id: 'fullscreen', prop: '', mode: 'enable', placeholder: true },
+  { id: 'game-mode-switch', prop: '', mode: 'enable', placeholder: true },
+  { id: 'quit-game', prop: '', mode: 'enable', placeholder: true },
+];
+
+/** 新建实例的默认勾选集 = 默认开功能全开（与 legacyfix 自身缺省一致）。 */
+export const DEFAULT_ADDONS: string[] = INSTANCE_ADDONS.filter((a) => a.mode === 'disable' && !a.placeholder).map((a) => a.id);

@@ -16,6 +16,7 @@ import type {
   GameExit,
   GameSession,
   GameStatus,
+  InstanceView,
   IpcResult,
   JavaDetectionReport,
   LaunchConfig,
@@ -62,6 +63,11 @@ const mockBridge: RendererBridge = {
   setSettings: async (s) => ok(s),
   listInstances: async () => ok([]),
   saveInstance: async (i) => ok(i),
+  // 删除与保存同族（表单可用性：UI 就地更新清单，不依赖假 fs）；打开目录是 fs 动作，浏览器无意义。
+  deleteInstance: async () => ok<void>(undefined),
+  // 改名同族：UI 本地就地换名，返回值不参与渲染，回个合法形状即可。
+  renameInstance: async (_name: string, newName: string) => ok<InstanceView>({ name: newName, version: '' }),
+  openInstanceDir: async () => err<void>(NO_BRIDGE),
   windowControl: async () => ok<void>(undefined), // 浏览器无窗可控：no-op
   openConsoleWindow: async () => err<void>(NO_BRIDGE),
   listCustomVersions: async () => ok<CustomVersionView[]>([]),
