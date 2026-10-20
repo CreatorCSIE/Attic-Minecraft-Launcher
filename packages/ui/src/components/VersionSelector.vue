@@ -312,6 +312,8 @@ function subtitleOf(v: VersionRef): string {
 <style scoped>
 .dock {
   position: relative;
+  /* 与 InstanceDock 同级：展开面板浮在 Play/相邻内容之上（原由父层 stage-dock 承担） */
+  z-index: 10;
   width: 300px;
   max-width: 100%;
   /* 页面流里只占收起高度（实测 peek-h）；展开部分经裁剪窗浮层覆盖，不推挤布局 */
@@ -424,6 +426,9 @@ function subtitleOf(v: VersionRef): string {
 .subtitle {
   font-size: var(--fs-xs);
   color: var(--text-muted);
+  /* 显式行高（=InstanceDock 同值）：sans/mono 字体 normal 行高差 ~3px，
+     两个 dock 同款配方曾因此一高一矮（用户实测“实例菜单偏小”） */
+  line-height: 1.4;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

@@ -37,7 +37,7 @@ const { t } = useI18n();
         <path d="M21 18H3" />
       </svg>
     </button>
-    <span v-if="!collapsed" class="menu-text" :title="t('app.title')">{{ t('nav.menu') }}</span>
+    <span class="menu-text" :title="t('app.title')">{{ t('nav.menu') }}</span>
   </div>
 </template>
 
@@ -45,14 +45,16 @@ const { t } = useI18n();
 .wordmark {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
   padding: var(--space-2) var(--space-3);
   color: var(--text-primary);
   user-select: none;
+  /* 折叠零离散切换（与 App.vue 侧栏同一配方）：≡ 居中走 padding-inline 连续过渡，
+     「菜单」二字收放走 max-width/opacity/margin 过渡 */
+  transition: padding-inline var(--dur-base) var(--ease-out);
 }
+/* 折叠态 ≡（28px）居中：内容列宽 = rail - 2*space-2 = 44 → padding = (44-28)/2 */
 .wordmark--collapsed {
-  justify-content: center;
-  padding-inline: 0;
+  padding-inline: calc((var(--rail-width) - 2 * var(--space-2) - 28px) / 2);
 }
 .bars-btn {
   width: 28px;
@@ -81,5 +83,17 @@ const { t } = useI18n();
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  margin-left: var(--space-3);
+  max-width: 96px;
+  opacity: 1;
+  transition:
+    max-width var(--dur-base) var(--ease-out),
+    margin-left var(--dur-base) var(--ease-out),
+    opacity var(--dur-fast) var(--ease-out);
+}
+.wordmark--collapsed .menu-text {
+  margin-left: 0;
+  max-width: 0;
+  opacity: 0;
 }
 </style>

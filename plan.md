@@ -153,6 +153,26 @@
 3. endpoints 端点覆盖与 username 两现有项去向：塞通用栏底部 / 独立「高级」栏 / 移除
 4. 反馈链接：Attic 仓库是否已开 Discussions
 
+### Mods repository 与四功能调研（v1/legacyfix 源码核对 + 端点实测 2026-10-19，待落实）
+
+> 调研输入：`reference/betacraft-launcher`（ModsRepository/ReleaseJson/Launcher/Wrapper/InstanceSettings/Instance）、`reference/legacyfix`（IntelGraphicsPatch/Patcher/Patch）源码 + `http://api.betacraft.uk/getmods.jsp` 2026-10-19 实测（HTTP 200 / 52KB / `last_modified` 至 2026-06，**端点存活且被维护**，mod `.info` 多已迁 GitHub releases 作者自托管）。
+
+**Mods repository → 独立页面（下载图标）**：v1 模型 = mod 即**自定义版本**（`.info` + `base-version` 基座 rezip 合成，非 mods/ 文件夹模型；安装仅落 `.info`，jar 下载与合成延迟到点 Play；加载器 = `launch-method-link` wrapper jar 启动前自动拉取；零鉴权零 API key、与登录解耦、离线可装）。
+- [ ] **一期**：左栏「Mods」页（下载图标）——列表分组（`ModCategory[]/ModEntry[]`：full_name/version/info_file_url/website/autoupdate/last_modified，全量 GET 无分页，失败空态）+ 安装 = GET `info_file_url` 落 `versions/jsons/<full_name>.info`（jsons 监视器现成，落入即自动出现在自定义版本页/启动版本列表）+ **base-version rezip 合成链**（mod jar → `versions/mods/<name>.jar` 带 sha1 → 基座 jar 就绪 → 合并剥 `META-INF/*` 签名 → `versions/<name>.jar`；无合成则点 Play 给明确「缺基座合成」诊断错，不假可用）+ `autoupdate` 启动期刷新 info（失败留备份可离线）
+- [ ] **二期**：`launch-method-link` wrapper jar 挂载链（GET `{hash,url}` → 比对 `launcher/launch-methods/` → 下载 → classpath 挂载 + wrap 参数启动）——涉及启动装配模型改变（现主类数据表是绕开 wrapper 的原生复刻，mods 的第三方 wrapper 无法原生复刻，必须真实挂载）；`launchMethodsDir()` 目录 helper 已在、无消费方，即此缺口
+- [ ] 复刻时修 v1 三缺陷：`loadMods()` 追加不清空静态 list、Load 按钮文案笔误、mod jar 下载无 sha1 前置校验（.info 层）
+
+**Force Update → 进实例设置（搬语义不搬缺陷）**：v1 实况 = 会话级全局静态字段（不持久化、放在实例设置对话框属 UI 错位、`readyAddons` 收参未用）；有效覆盖仅 libs/natives 重装 + 无 sha1 版本 jar 强下。
+- [ ] 实例级持久布尔键 + **一次性生效**：勾选 → 下次启动跳过"本地存在即复用"（libs/natives/版本 jar 强制重下重解压）→ 启动后自动复位取消；落基本设置 card
+
+**Intel 双件套（调研澄清：v1 开关与 legacyfix 是两码事，都收）**
+- [ ] v1 "Apply performance trick for Intel Graphics" = `-XX:HeapDumpPath=java.exe_minecraft.exe.heapdump`（仅 Windows，Java 5u7 时代驱动 workaround，v1 默认开）→ 忠实搬进基本设置（实例级布尔，成本一条 JVM 参数，现代驱动无害）
+- [ ] legacyfix `-Dlf.intel`（`IntelGraphicsPatch`：glActiveTexture 前补 glClientActiveTexture，修老 Intel GPU 多纹理渲染错乱 b1.9–1.7.10，opt-in 默认关）→ 作 **addons 目录第 10 个实装项**（enable 族，现有注入链零改造）
+
+**Discord RPC → 暂不实现（挂 Phase 6 愿望池）**：v1 = 游戏子进程 JVM 内 discord-rpc native 连本机 Discord IPC，展示"User/Version"；app id `939918927989973052` 为 Betacraft 注册物不可复用（需自注册开发者门户+传图）。若未来做：electron 主进程直连 `discord-ipc` 命名管道（纯 WebSocket，无需游戏侧注入），实例档案加 `RPC` 布尔键（v1 键集本有）即可。
+
+**落实顺序（用户口径）**：设置页重写 → Force Update + Intel 双件套（蹭 addons 归置待办顺路做）→ Mods 页一期 → wrapper 二期 → Discord RPC 挂起。
+
 ## 5. Phase 4 — Tauri 壳（Rust core 第二实现）
 
 - [ ] `src-tauri`：core-spec 的 Rust 类型生成/手写对齐

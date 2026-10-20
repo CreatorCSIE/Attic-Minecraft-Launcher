@@ -351,6 +351,9 @@ watch(expanded, async (open) => {
 .subtitle {
   font-size: var(--fs-xs);
   color: var(--text-muted);
+  /* 显式行高（=VersionSelector 同值）：mono 字体 normal 行高比 sans 矮 ~3px，
+     两 dock 同款配方曾因此一高一矮（用户实测"实例菜单偏小"） */
+  line-height: 1.4;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

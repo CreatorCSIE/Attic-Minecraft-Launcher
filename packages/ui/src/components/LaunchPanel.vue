@@ -17,6 +17,7 @@ import { useBridge } from '../composables/useBridge';
 import { useDownloads } from '../composables/useDownloads';
 import { useInstances } from '../composables/useInstances';
 import InstanceDock from './InstanceDock.vue';
+import VersionSelector from './VersionSelector.vue';
 
 const emit = defineEmits<{ (e: 'open-instances'): void }>();
 
@@ -121,9 +122,12 @@ function mb(bytes: number): string {
     </div>
 
     <!-- 动作行：Play+菜单沉底靠右；实例 dock（用户指定）置于 Play 左侧，
-         与左下版本 dock 同款交互，展开向上浮出、不吃布局空间 -->
+         与版本 dock 同款交互，展开向上浮出、不吃布局空间。
+         版本 dock 也在此行（margin-right:auto 钉左缘）：两 dock 同 flex 流互斥收缩，
+         窄窗下不再重叠（曾因 stage-dock 绝对定位与实例 dock 互不感知而压盖）。 -->
     <div class="actions">
-      <InstanceDock />
+      <VersionSelector class="dock-version" />
+      <InstanceDock class="dock-instance" />
       <button
         class="play"
         :class="{ 'play--stop': running }"
@@ -190,13 +194,26 @@ function mb(bytes: number): string {
   min-height: 0;
   background: transparent;
 }
-/* 动作行：Play+菜单沉底靠右 */
+/* 动作行：版本 dock 钉左缘，Play+菜单沉底靠右 */
 .actions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: var(--space-3);
   margin-top: auto;
+}
+/* 版本 dock 推至行首左缘；两 dock 允许收缩到内容以下（内部 name 有 ellipsis 配方接住），
+   窄窗时横向让位而不是互相压盖 */
+.dock-version {
+  margin-right: auto;
+}
+.dock-version,
+.dock-instance {
+  min-width: 0;
+}
+.play,
+.menu-wrap {
+  flex-shrink: 0;
 }
 /* Play —— 质感配方样板：pill 大圆角 + 五层叠影 + 顶部内高光 + hover 抬升 + active 下压 + focus 投影环（token 定义见 tokens.css） */
 .play {

@@ -12,7 +12,6 @@ import { useBridge } from './composables/useBridge';
 import TitleBar from './components/TitleBar.vue';
 import BrandWordmark from './components/BrandWordmark.vue';
 import AccountHero from './components/AccountHero.vue';
-import VersionSelector from './components/VersionSelector.vue';
 import LaunchPanel from './components/LaunchPanel.vue';
 import ConsolePanel from './components/ConsolePanel.vue';
 import InstanceList from './components/InstanceList.vue';
@@ -271,7 +270,6 @@ onMounted(() => {
           <div v-if="view === 'launch'" key="launch" class="launch-stage" :style="{ '--page-dy': pageDy }">
             <AccountHero class="stage-hero" @open-accounts="view = 'accounts'" />
             <div class="stage-main"><LaunchPanel @open-instances="view = 'instances'" /></div>
-            <div class="stage-dock"><VersionSelector /></div>
           </div>
           <div v-else :key="view" class="content" :style="{ '--page-dy': pageDy }">
             <InstanceList v-if="view === 'instances'" />
@@ -319,26 +317,28 @@ onMounted(() => {
     flex-basis var(--dur-base) var(--ease-out),
     padding var(--dur-base) var(--ease-out);
 }
-/* 折叠态：收窄为图标 rail（--rail-width），隐藏文字，图标居中 */
+/* 折叠态：收窄为图标 rail（--rail-width）。
+   零离散切换（用户报"折叠/展开抖动"根因）：display:none、justify-content、
+   padding 瞬跳都会在 t=0 造成位置突变，再叠加 200ms 宽度过渡 = 两段式运动。
+   文字收放走 nav-label 的 max-width/opacity/margin 过渡；图标"居中"由
+   padding-inline 连续过渡达成——折叠态内容列宽 = rail - 2*space-2 = 44，
+   nav-item 保持 space-3 padding 时图标中心 = 8+12+10 = 30 = rail 中心，天然成立；
+   头像（rail-item-size=40）居中需 padding-inline = (44-40)/2，用 calc 表达 */
 .sidebar--collapsed {
   flex-basis: var(--rail-width);
   padding-inline: var(--space-2);
 }
 .sidebar--collapsed .nav-label {
-  display: none;
-}
-.sidebar--collapsed .nav-item {
-  justify-content: center;
-  padding-inline: 0;
+  margin-left: 0;
+  max-width: 0;
+  opacity: 0;
 }
 .sidebar--collapsed .sidebar-foot {
-  justify-content: center;
-  padding-inline: 0;
+  padding-inline: calc((var(--rail-width) - 2 * var(--space-2) - var(--rail-item-size)) / 2);
 }
 .nav-item {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
   width: 100%;
   padding: var(--space-2) var(--space-3);
   background: transparent;
@@ -367,9 +367,18 @@ onMounted(() => {
   height: var(--rail-icon-size);
 }
 .nav-label {
+  /* 图标-文字间距走自身 margin（flex gap 对零宽项仍生效，不能用）；
+     max-width/margin 与宽度过渡同步同时长，opacity 提前淡出避免挤压残影 */
+  margin-left: var(--space-3);
+  max-width: 140px;
+  opacity: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  transition:
+    max-width var(--dur-base) var(--ease-out),
+    margin-left var(--dur-base) var(--ease-out),
+    opacity var(--dur-fast) var(--ease-out);
 }
 .sidebar-foot {
   margin-top: auto;
@@ -377,6 +386,7 @@ onMounted(() => {
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-2) var(--space-3);
+  transition: padding-inline var(--dur-base) var(--ease-out);
 }
 .sidebar-avatar {
   width: var(--rail-item-size);
@@ -447,12 +457,8 @@ onMounted(() => {
   flex-direction: column;
   padding-top: 96px; /* 给左上 AccountHero 让位 */
 }
-.stage-dock {
-  position: absolute;
-  left: var(--space-5);
-  bottom: var(--space-5);
-  z-index: 10;
-}
+/* 版本 dock 已迁入 LaunchPanel 动作行（窄窗下与实例 dock 同 flex 流互斥，
+   不再绝对定位压盖实例 dock——遮挡 bug 的根因即两套布局互不感知） */
 /* —— 独立控制台窗：全屏控制台 —— */
 .console-app {
   height: 100vh;
