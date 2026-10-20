@@ -10,6 +10,7 @@ import { useI18n } from '../i18n';
 import { useBridge } from '../composables/useBridge';
 import { useSettings } from '../composables/useSettings';
 import { useJava } from '../composables/useJava';
+import AppSelect from './AppSelect.vue';
 import type { JavaArchitecture, JavaDiscoverySource } from '@attic/core-spec';
 
 const { t } = useI18n();
@@ -71,10 +72,15 @@ onMounted(() => {
 
     <!-- 模式 + 动作行 -->
     <div class="toolbar">
-      <select class="input select" :value="isManual ? 'manual' : 'auto'" @change="setMode(($event.target as HTMLSelectElement).value === 'manual')">
-        <option value="auto">{{ t('settings.java.auto') }}</option>
-        <option value="manual">{{ t('settings.java.manual') }}</option>
-      </select>
+      <AppSelect
+        :model-value="isManual ? 'manual' : 'auto'"
+        :options="[
+          { value: 'auto', label: t('settings.java.auto') },
+          { value: 'manual', label: t('settings.java.manual') },
+        ]"
+        :aria-label="t('settings.java.auto')"
+        @update:model-value="setMode($event === 'manual')"
+      />
       <div class="spacer"></div>
       <button class="mini" :disabled="loading" @click="detect()">
         {{ loading ? t('common.loading') : t('settings.java.refresh') }}
@@ -156,15 +162,6 @@ onMounted(() => {
 }
 .spacer {
   flex: 1;
-}
-.select {
-  width: auto;
-  padding: var(--space-2) var(--space-3);
-  background: var(--surface-3);
-  border: none;
-  border-radius: var(--radius-md);
-  color: var(--text-primary);
-  box-shadow: var(--input-inset);
 }
 .mini {
   padding: var(--space-2) var(--space-4);

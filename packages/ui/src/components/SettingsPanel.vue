@@ -20,6 +20,7 @@ import SettingsLaunch from './SettingsLaunch.vue';
 import SettingsJava from './SettingsJava.vue';
 import SettingsAbout from './SettingsAbout.vue';
 import AppDialog from './AppDialog.vue';
+import AppSelect from './AppSelect.vue';
 import ConfirmDialog from './ConfirmDialog.vue';
 
 const { t, locale, setLocale } = useI18n();
@@ -59,6 +60,9 @@ const pendingRoot = computed(() => {
   const o = settings.value.rootOverride;
   return o && o !== info.value?.dataRoot ? o : '';
 });
+
+/** 语言下拉选项（AppSelect 形态；自名形态不随 locale 翻译，见 AVAILABLE_LOCALES 注释）。 */
+const localeOptions = AVAILABLE_LOCALES.map((l) => ({ value: l.code, label: l.name }));
 
 const diagnosticLog = computed(() => settings.value.diagnosticLog ?? false);
 
@@ -253,9 +257,12 @@ function feedback(url: string): void {
           <div class="card">
             <div class="field">
               <label class="label" for="lang">{{ t('settings.language.label') }}</label>
-              <select id="lang" class="input select" :value="locale" @change="chooseLanguage(($event.target as HTMLSelectElement).value)">
-                <option v-for="l in AVAILABLE_LOCALES" :key="l.code" :value="l.code">{{ l.name }}</option>
-              </select>
+              <AppSelect
+                id="lang"
+                :model-value="locale"
+                :options="localeOptions"
+                @update:model-value="chooseLanguage"
+              />
               <p class="row-desc">{{ t('settings.language.hint') }}</p>
             </div>
           </div>
@@ -601,9 +608,6 @@ function feedback(url: string): void {
 }
 .mono {
   font-family: var(--font-mono);
-}
-.select {
-  width: fit-content;
 }
 /* 主题分段器（旧 SettingsPanel 配方迁移） */
 .segmented {

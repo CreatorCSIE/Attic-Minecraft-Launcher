@@ -10,6 +10,7 @@ import { useI18n } from '../i18n';
 import { useCustomVersions } from '../composables/useCustomVersions';
 import { useBridge } from '../composables/useBridge';
 import ConfirmDialog from './ConfirmDialog.vue';
+import AppSelect from './AppSelect.vue';
 
 const { t } = useI18n();
 const {
@@ -221,10 +222,16 @@ async function onSave(): Promise<void> {
             {{ t('custom.launchMethod') }}
             <span class="req">*</span>
           </label>
-          <select id="cv-launch" v-model="form['launch-method']" class="input" :class="{ 'input--invalid': !form['launch-method'] }">
-            <option value="">{{ t('custom.launchMethodNone') }}</option>
-            <option v-for="m in detail.launchMethods" :key="m" :value="m">{{ m }}</option>
-          </select>
+          <AppSelect
+            id="cv-launch"
+            :model-value="form['launch-method'] ?? ''"
+            :options="[
+              { value: '', label: t('custom.launchMethodNone') },
+              ...(detail?.launchMethods ?? []).map((m) => ({ value: m, label: m })),
+            ]"
+            :invalid="!form['launch-method']"
+            @update:model-value="form['launch-method'] = $event"
+          />
           <p v-if="!form['launch-method']" class="req-hint">{{ t('custom.launchMethodRequired') }}</p>
         </div>
 
@@ -585,9 +592,6 @@ async function onSave(): Promise<void> {
   outline: none;
   box-shadow: var(--input-focus-shadow);
 }
-select.input {
-  cursor: pointer;
-}
 /* 必填标记与缺失反馈（launch-method） */
 .req {
   color: var(--danger);
@@ -597,9 +601,6 @@ select.input {
   margin: 0;
   font-size: var(--fs-xs);
   color: var(--danger);
-}
-.input--invalid {
-  box-shadow: var(--input-inset), inset 0 0 0 1px var(--danger);
 }
 .actions {
   display: flex;

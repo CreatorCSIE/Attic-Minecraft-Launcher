@@ -9,6 +9,7 @@
 import { useI18n } from '../i18n';
 import { useBridge } from '../composables/useBridge';
 import { useSysInfo } from '../composables/useSysInfo';
+import AppSelect from './AppSelect.vue';
 
 const { t } = useI18n();
 const { bridge } = useBridge();
@@ -75,10 +76,16 @@ function openUrl(url: string): void {
           <span class="row-name">{{ t('settings.about.updateChannel') }}</span>
           <p class="row-desc">{{ t('settings.about.updateSoon') }}</p>
         </div>
-        <select class="input select" disabled :aria-label="t('settings.about.updateChannel')">
-          <option>{{ t('settings.about.channelRelease') }}</option>
-          <option>{{ t('settings.about.channelBeta') }}</option>
-        </select>
+        <AppSelect
+          class="select"
+          :model-value="'release'"
+          :options="[
+            { value: 'release', label: t('settings.about.channelRelease') },
+            { value: 'beta', label: t('settings.about.channelBeta') },
+          ]"
+          :aria-label="t('settings.about.updateChannel')"
+          disabled
+        />
       </div>
     </div>
 
@@ -264,15 +271,6 @@ function openUrl(url: string): void {
 }
 .select {
   flex: 0 0 auto;
-  padding: var(--space-2) var(--space-3);
-  background: var(--surface-3);
-  border: none;
-  border-radius: var(--radius-md);
-  color: var(--text-primary);
-  box-shadow: var(--input-inset);
-}
-.select:disabled {
-  opacity: 0.5;
 }
 .mono {
   font-family: var(--font-mono);

@@ -11,6 +11,7 @@ import { useSettings } from '../composables/useSettings';
 import { useSysInfo } from '../composables/useSysInfo';
 import { useDebouncedField } from '../composables/useDebouncedField';
 import SettingToggle from './SettingToggle.vue';
+import AppSelect from './AppSelect.vue';
 
 const { t } = useI18n();
 const { settings, patch } = useSettings();
@@ -106,10 +107,15 @@ function setMemoryMode(mode: 'auto' | 'manual'): void {
     <div class="card">
       <div class="field">
         <label class="label" for="memmode">{{ t('settings.launch.memory') }}</label>
-        <select id="memmode" class="input select" :value="memoryMode" @change="setMemoryMode(($event.target as HTMLSelectElement).value as 'auto' | 'manual')">
-          <option value="manual">{{ t('settings.launch.memoryManual') }}</option>
-          <option value="auto">{{ t('settings.launch.memoryAuto') }}</option>
-        </select>
+        <AppSelect
+          id="memmode"
+          :model-value="memoryMode"
+          :options="[
+            { value: 'manual', label: t('settings.launch.memoryManual') },
+            { value: 'auto', label: t('settings.launch.memoryAuto') },
+          ]"
+          @update:model-value="setMemoryMode($event as 'auto' | 'manual')"
+        />
       </div>
 
       <div v-if="memoryMode === 'manual'" class="field">
@@ -197,9 +203,6 @@ function setMemoryMode(mode: 'auto' | 'manual'): void {
 }
 .mono {
   font-family: var(--font-mono);
-}
-.select {
-  width: fit-content;
 }
 .tabular {
   font-variant-numeric: tabular-nums;
