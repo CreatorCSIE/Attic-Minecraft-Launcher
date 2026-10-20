@@ -57,6 +57,12 @@ export interface AppSettings {
   /** 诊断日志：每次启动都写 launcher/logs（普通启动也落盘，testLaunch 通道不受此开关影响恒写）；缺省 false。 */
   diagnosticLog?: boolean;
   /**
+   * 启动成功后自动打开独立控制台窗（v1「Game log」开关的全局化转置——v1 放实例对话框属其时代产物，
+   * Attic 判定为用户习惯而非实例属性）；缺省 true = 维持既有"每次启动弹窗"行为。
+   * testLaunch 不受此开关影响恒弹（显式诊断语义）。
+   */
+  consoleOnLaunch?: boolean;
+  /**
    * 数据根覆盖（更换目录逃生舱）：下次启动应用后生效——root 属构造级配置，
    * 宿主启动时从平台默认根的 launcher.settings 读本键。portable/env 覆盖优先级更高。
    */

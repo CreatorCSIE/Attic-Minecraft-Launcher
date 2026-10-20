@@ -273,6 +273,8 @@ export const zhCN: Record<string, unknown> = {
       fixMissingDesc: '发现问题时自动重新下载；关闭后仅报错，不改动本地文件。',
       minimize: '启动成功后最小化',
       minimizeDesc: '游戏启动后把启动器主窗最小化到后台。',
+      consoleOnLaunch: '启动时自动打开控制台窗',
+      consoleOnLaunchDesc: '游戏启动成功后唤起独立控制台窗，实时查看 LegacyFix 与游戏日志。测试启动不受此开关影响，始终打开。',
       server: '关卡存档服务器',
       serverPlaceholder: '留空 = LegacyFix 首次询问',
       serverDesc: 'LegacyFix 的 lf.proxy.levelServer：URL = 在线关卡存档；local = 强制本地单人存档。',

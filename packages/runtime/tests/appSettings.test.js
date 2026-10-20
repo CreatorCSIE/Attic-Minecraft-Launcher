@@ -4,7 +4,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { settingsFromProps, applySettingsToProps, estimateMaxMemoryMb } = require('../dist/index.js');
+const { settingsFromProps, applySettingsToProps, estimateMaxMemoryMb, maskSecrets } = require('../dist/index.js');
 
 test('AppSettings 新键回环：写入 launcher.settings 属性再读出形状不变', () => {
   const settings = {
@@ -19,12 +19,14 @@ test('AppSettings 新键回环：写入 launcher.settings 属性再读出形状�
     fixMissing: true,
     minimizeOnLaunch: false,
     diagnosticLog: true,
+    consoleOnLaunch: false,
     rootOverride: 'D:/AtticData',
     levelServer: 'local',
     endpoints: { versionList: 'https://example.test/version_list.txt' },
   };
   const props = applySettingsToProps({}, settings);
   assert.equal(props['checkIntegrity'], 'false');
+  assert.equal(props['consoleOnLaunch'], 'false');
   assert.equal(props['endpoint.versionList'], 'https://example.test/version_list.txt');
   assert.deepEqual(settingsFromProps(props), settings);
 });
@@ -35,6 +37,8 @@ test('布尔三态：缺键=undefined（消费端缺省），true/false 显式�
   assert.equal(settingsFromProps({ checkIntegrity: 'false' }).fixMissing, undefined);
   assert.equal(settingsFromProps({ fixMissing: 'garbage' }).fixMissing, undefined);
   assert.equal(settingsFromProps({ diagnosticLog: 'false' }).diagnosticLog, false);
+  assert.equal(settingsFromProps({ consoleOnLaunch: 'false' }).consoleOnLaunch, false);
+  assert.equal(settingsFromProps({ consoleOnLaunch: 'true' }).consoleOnLaunch, true);
 });
 
 test('undefined 值删除 managed 键；v1 未知键原样保留', () => {
@@ -54,4 +58,18 @@ test('estimateMaxMemoryMb：40% 取 128 步长夹 [512,2048]，无宿主数据�
   assert.equal(estimateMaxMemoryMb(1024), 512);
   assert.equal(estimateMaxMemoryMb(0), 1024);
   assert.equal(estimateMaxMemoryMb(-1), 1024);
+});
+
+test('maskSecrets：长 token 全量替换 [censored sessionid]；短值/缺省不动（v1 脱敏语义）', () => {
+  const token = 'eyJhbGciOiJIUzI1NiJ9.SIGNATURE.PAYLOAD';
+  assert.equal(
+    maskSecrets(`# command="java" --token ${token} --width 854`, token),
+    `# command="java" --token [censored sessionid] --width 854`,
+  );
+  // 多次出现全部替换
+  assert.equal(maskSecrets(`${token} x ${token}`, token), '[censored sessionid] x [censored sessionid]');
+  // 离线短 token '0' 不替换（避免误伤通用子串）
+  assert.equal(maskSecrets('gameArgs Player 0 -width 854', '0'), 'gameArgs Player 0 -width 854');
+  assert.equal(maskSecrets('anything', undefined), 'anything');
+  assert.equal(maskSecrets('anything', ''), 'anything');
 });

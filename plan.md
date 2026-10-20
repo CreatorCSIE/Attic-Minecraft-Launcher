@@ -123,7 +123,7 @@
 - [x] **热切换已拍板并落地**（待决策 #1）：切换即全站即时生效零 reload，demo 实测英↔中往返通过
 
 **启动和内存栏**（部分复制，逐项判定过）
-- [x] 开关实际落地 **3 个**（SettingToggle）：启动前检查文件完整性 `verifyClientJar` / 缺失自动补全 `autoRepairJar`（前者关则后者禁用+联动，betacraft 侧 repair=false 抛明确诊断）/ 启动后自动加入服务器（legacyfix `-Dlf.server=`，UI 采 serverInput 文本输入而非开关——收编契约悬空键 `levelServer` 为地址输入项）；**「启动后最小化启动器」「全屏启动」明示不搬**（前者涉主窗 IPC 超出本次范围，后者老 Applet 容器无此能力，见旧不适用项注记）
+- [x] 开关落地 **4 个**（SettingToggle）：启动前检查文件完整性 `checkIntegrity` / 缺失自动补全 `fixMissing`（前者关则后者禁用+联动，betacraft 侧 repair=false 抛明确诊断）/ 启动后最小化 `minimizeOnLaunch` / **启动时自动打开控制台窗 `consoleOnLaunch`**（v1「Game log」开关的全局化转置，缺省开；testLaunch 恒弹不受约束——2026-10-20 调研补入）；启动后自动加入服务器采 serverInput 文本输入（收编契约悬空键 `levelServer` 为地址输入项）；**「全屏启动」明示不搬**（老 Applet 容器无此能力，见旧不适用项注记）
 - [x] 内存：自动/手动模式下拉 `memoryMode` + 最大内存滑杆（滑杆上限 = `min(总-2GB, 75%总)` + 系统总/可用内存摘要走宿主 `attic:sys:info` 通道）；auto 估算 `estimateMaxMemoryMb = round(总×0.4/128)×128` 夹 `[512,2048]`，UI 与宿主双侧同公式（contract.md 有双侧同步警示），demo 16384MB→2048 实测一致
 - [x] 全局 JVM 参数 `globalJvmArgs` 落 settings（组序插位：Xmx → globalJvmArgs → launchArgs → legacyfix 系，launch.test.js 断言锁定）；与旧候选「inheritsGlobal 全局设置升级」同题的部分留待该待办落实时合并设计
 - [x] 不搬：pre/post 执行命令、全局游戏参数（老版本场景价值低）；下载分区对应物 endpoints + username 按待决策 #3 拍板**迁入新建「开发者设置」栏**（逐键防抖合并写，warn 注记下次启动生效；发行时再评估可见性）

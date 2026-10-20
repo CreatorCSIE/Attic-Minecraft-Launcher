@@ -19,6 +19,7 @@ const { info } = useSysInfo();
 const checkIntegrity = computed(() => settings.value.checkIntegrity ?? true);
 const fixMissing = computed(() => settings.value.fixMissing ?? true);
 const minimize = computed(() => settings.value.minimizeOnLaunch ?? false);
+const consoleOnLaunch = computed(() => settings.value.consoleOnLaunch ?? true);
 
 const memoryMode = computed(() => settings.value.memoryMode ?? 'manual');
 
@@ -81,6 +82,12 @@ function setMemoryMode(mode: 'auto' | 'manual'): void {
         :label="t('settings.launch.minimize')"
         :desc="t('settings.launch.minimizeDesc')"
         @update:model-value="patch({ minimizeOnLaunch: $event })"
+      />
+      <SettingToggle
+        :model-value="consoleOnLaunch"
+        :label="t('settings.launch.consoleOnLaunch')"
+        :desc="t('settings.launch.consoleOnLaunchDesc')"
+        @update:model-value="patch({ consoleOnLaunch: $event })"
       />
       <div class="field">
         <label class="label" for="server">{{ t('settings.launch.server') }}</label>

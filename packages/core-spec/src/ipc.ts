@@ -57,6 +57,9 @@ export const IPC_CHANNELS = {
   WINDOW_CONTROL: 'attic:window:control',
   /** 打开/聚焦独立控制台窗口（v1 语义：MC 日志独立窗，与主页解耦）。 */
   WINDOW_CONSOLE: 'attic:window:console',
+  /** 控制台积压日志补拉（backlog）：新建控制台窗订阅后拉取本会话已发射的输出与退出事件，
+   * 消除「spawn 即发射、窗未挂载即丢」竞态（LegacyFix premain 首批日志丢失的根因修复）。 */
+  GAME_BACKLOG: 'attic:game:backlog',
   /** 自定义版本列表（仅 custom 项：裸 jar=未配置 / .info custom=true=已配置；官方版本不落入）。 */
   CUSTOM_LIST: 'attic:custom:list',
   /** 读取单个自定义版本的 .info 原始属性（未配置裸 jar 附 detectLaunchMethod 建议）。 */
@@ -127,11 +130,24 @@ export interface GameOutputEvent {
   stream: 'stdout' | 'stderr';
   chunk: string;
   pid: number;
+  /** 宿主在会话内分配的单调序号（electron 主进程广播时盖戳）：
+   * 控制台窗用它对「实时事件」与 backlog 补拉结果去重。宿主不实现 backlog 时缺省。 */
+  seq?: number;
 }
 
 export interface GameExitEvent extends GameExit {
   pid: number;
   versionId: string;
+}
+
+/** 控制台 backlog 响应（GAME_BACKLOG）：会话已发射输出 + 已发生的退出事件的补拉快照。 */
+export interface GameBacklog {
+  /** 本会话输出（按 seq 升序；宿主环形缓冲溢出时只含尾部）。 */
+  lines: GameOutputEvent[];
+  /** 会话已退出时的退出事件（游戏秒退、控制台窗收不到实时事件的补拉场景）；在跑 = null。 */
+  exit: GameExitEvent | null;
+  /** 宿主缓冲封顶截断过更早的行。 */
+  truncated: boolean;
 }
 
 /** 自定义版本 .info 外部改动事件（jsons 目录监视 → 去抖 → 按 id 发射）。 */
@@ -221,6 +237,8 @@ export interface RendererBridge {
   openInstanceDir(name: string): Promise<IpcResult<void>>;
   windowControl(action: WindowAction): Promise<IpcResult<void>>;
   openConsoleWindow(): Promise<IpcResult<void>>;
+  /** 拉取指定会话的积压输出与退出事件（控制台窗订阅后补拉；宿主未实现时返回错误、UI 静默降级）。 */
+  getGameBacklog(pid: number): Promise<IpcResult<GameBacklog>>;
   listCustomVersions(): Promise<IpcResult<CustomVersionView[]>>;
   getCustomVersionInfo(id: string): Promise<IpcResult<CustomInfoView>>;
   saveCustomVersionInfo(id: string, props: Record<string, string>): Promise<IpcResult<CustomVersionView>>;

@@ -10,6 +10,7 @@ export type {
   AtticEventPayloads,
   DownloadItem,
   DownloadProgressEvent,
+  GameBacklog,
   GameExitEvent,
   GameOutputEvent,
   IpcChannel,

@@ -283,6 +283,8 @@ export const en = {
       fixMissingDesc: 'Re-download automatically when issues are found; when off, only report errors without touching files.',
       minimize: 'Minimize after successful launch',
       minimizeDesc: 'Minimize the launcher window to the background once the game starts.',
+      consoleOnLaunch: 'Open console window on launch',
+      consoleOnLaunchDesc: 'Pop up the standalone console window after a successful launch to follow LegacyFix and game logs live. Test launch always opens it, regardless of this switch.',
       server: 'Level server',
       serverPlaceholder: 'Empty = LegacyFix asks once',
       serverDesc: 'LegacyFix lf.proxy.levelServer: URL = online level saves; local = force local singleplayer.',

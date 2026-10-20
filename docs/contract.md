@@ -65,13 +65,13 @@ legacyfix jar 原位补丁（窗口偏右下最小修复，不属启动命令行
 
 `CrashCategory`（v0 分类器枚举）：`none/java-missing/out-of-memory/gl-init/lwjgl-native/unsatisfied-link/unknown`。
 
-`LaunchRequest.testLaunch`（≡ 菜单"测试启动"）：宿主在 `attic:launch` 成功后把启动前后日志逐行落盘 `<root>/launcher/logs/test-launch-<ISO>.log`（启动器侧头行：时间戳/版本/java/gameDir/完整命令行；随后游戏 stdout/stderr 全量；进程退出追加退出行并退订）。日志落盘归 runtime（不触窗）；独立控制台窗由 UI 侧随后调用 `attic:window:console` 唤起。普通启动缺省不写；`AppSettings.diagnosticLog=true` 时普通启动同样落盘（文件名前缀 `launch-`）。
+`LaunchRequest.testLaunch`（≡ 菜单"测试启动"）：宿主在 `attic:launch` 成功后把启动前后日志逐行落盘 `<root>/launcher/logs/test-launch-<ISO>.log`（启动器侧头行：时间戳/版本/java/gameDir/命令行——**accessToken 已脱敏**：命令行与游戏输出行里的 token 一律替换为 `[censored sessionid]` 再写盘，v1 Launcher.java L659/L685 同款；离线短 token `'0'` 不替换，避免误伤通用子串；随后游戏 stdout/stderr 全量；进程退出追加退出行并退订）。日志落盘归 runtime（不触窗）；独立控制台窗由 UI 侧随后调用 `attic:window:console` 唤起（普通启动受 `consoleOnLaunch` 开关约束，testLaunch 恒弹）。普通启动缺省不写；`AppSettings.diagnosticLog=true` 时普通启动同样落盘（文件名前缀 `launch-`）。
 
 ### 2.7 AppSettings / InstanceView（[settings.ts](../packages/core-spec/src/settings.ts)，Phase 3）
 
 渲染侧只通过契约读写设置/实例，绝不直接碰 `launcher.settings` / `instances/*.txt`（戒律 #1：设置是数据）。
 
-- `AppSettings`：`javaPath?`、`maxMemoryMb?`、`memoryMode?`（`auto|manual`，缺省 manual）、`username?`、`theme?`（`dark|light|system`）、`language?`（i18n locale 键，渲染侧热切换，单一真相；localStorage 仅 bootstrap 缓存）、`jvmArgs?`（全局 JVM 参数，组序见 §2.6）、`checkIntegrity?`/`fixMissing?`/`minimizeOnLaunch?`/`diagnosticLog?`（布尔三态：落盘 `'true'/'false'`，缺键 = undefined = 消费端缺省——前两者缺省 true，后两者缺省 false）、`rootOverride?`（数据根更换：下次启动应用后由宿主从平台默认根 peek，portable/env 优先）、`levelServer?`（LegacyFix 关卡存档模式：`local`/URL；有值时直通 `-Dlf.proxy.levelServer`，抑制一次性对话框并覆盖陈旧 txt）、`endpoints?`。落盘键同名 + `endpoint.*`；`setSettings` 合并写回、未知键保留（v1 遗留键不丢）。
+- `AppSettings`：`javaPath?`、`maxMemoryMb?`、`memoryMode?`（`auto|manual`，缺省 manual）、`username?`、`theme?`（`dark|light|system`）、`language?`（i18n locale 键，渲染侧热切换，单一真相；localStorage 仅 bootstrap 缓存）、`jvmArgs?`（全局 JVM 参数，组序见 §2.6）、`checkIntegrity?`/`fixMissing?`/`minimizeOnLaunch?`/`diagnosticLog?`/`consoleOnLaunch?`（布尔三态：落盘 `'true'/'false'`，缺键 = undefined = 消费端缺省——`checkIntegrity`/`fixMissing`/`consoleOnLaunch` 缺省 true，`minimizeOnLaunch`/`diagnosticLog` 缺省 false；`consoleOnLaunch` = 启动成功后自动唤起独立控制台窗（v1「Game log」开关的全局化转置，testLaunch 不受约束恒弹））、`rootOverride?`（数据根更换：下次启动应用后由宿主从平台默认根 peek，portable/env 优先）、`levelServer?`（LegacyFix 关卡存档模式：`local`/URL；有值时直通 `-Dlf.proxy.levelServer`，抑制一次性对话框并覆盖陈旧 txt）、`endpoints?`。落盘键同名 + `endpoint.*`；`setSettings` 合并写回、未知键保留（v1 遗留键不丢）。
 - 派生语义（无独立契约键）：Java 模式 = `javaPath` 有值为手动、空为自动（自动 → 手动由 UI 固化当前选中项）；堆内存三级优先 = `LaunchRequest.maxMemoryMb` > `memoryMode=auto` 宿主估算（`round(总×0.4)` 取 128 步长夹 `[512,2048]`，取不到回落 1024）> `maxMemoryMb` 定值 > 1024；UI 展示拷贝与宿主估算公式改动须双侧同步。
 - `EndpointOverrides`：全为可序列化的纯字符串（`versionList`/`filesBase`/`legacyfixRelease`/`zuluMetadata`/`mojangManifest`）。函数形态的 `versionJson(id)`/`assetIndex(id)` 由 `filesBase` 在 runtime 侧派生（`endpointsFromOverrides`），契约层不携带可调用形状。端点属构造级配置——改动在下次启动应用后生效。
 - `InstanceView`：对齐 v1 Instance Settings 可编辑集 `{ name, version, gameDir?, launchArgs?, width?, height?, javaPath? }`。`gameDir` 缺省 = 宿主派生 `root/<实例名>`（v1 `Instance.newInstance`；已存在实例保留其落位）；`launchArgs`/`width`/`height` 缺省 = v1 `newInstance` 值（`-Xmx1G`、854×480，`loadInstance` 以缺省为底、属性覆盖）。版本是实例属性——launch 时选中版本写回实例（v1 `InstanceSettings` 语义：同实例切版本存档共享）。`LaunchRequest.instanceId?` 缺省 = `default instance`（v1 首启自动建档）。
@@ -99,7 +99,8 @@ legacyfix jar 原位补丁（窗口偏右下最小修复，不属启动命令行
 | `attic:instances:list` | — | `IpcResult<InstanceView[]>` |
 | `attic:instances:save` | `InstanceView` | `IpcResult<InstanceView>` |
 | `attic:window:control` | `WindowAction`（`minimize` \| `toggle-maximize` \| `close`） | `IpcResult<void>`（无边距窗顶栏三键；`toggle-maximize` 由宿主在最大化/还原间切换） |
-| `attic:window:console` | — | `IpcResult<void>`（独立控制台窗口；v1 语义：MC 日志独立窗，与主页解耦。每次调用新建窗口并绑定当前会话 pid（`?window=console&pid=`），旧控制台不复用；ConsolePanel 按 pid 过滤本会话输出） |
+| `attic:window:console` | — | `IpcResult<void>`（独立控制台窗口；v1 语义：MC 日志独立窗，与主页解耦。每次调用新建窗口并绑定当前会话 pid（`?window=console&pid=`），旧控制台不复用；ConsolePanel 按 pid 过滤本会话输出。唤起时机归 UI 侧：普通启动受全局开关 `consoleOnLaunch`（缺省开）约束，testLaunch 恒弹） |
+| `attic:game:backlog` | `pid: number` | `IpcResult<GameBacklog{lines,exit,truncated}>`（控制台 backlog 补拉——丢首批日志的竞态根因修复：独立控制台窗挂载订阅前，spawn 瞬间的早期输出（LegacyFix premain 等）已广播完毕，实时事件面永远收不到。宿主按 pid 缓存会话输出（盖 seq 戳，环形封顶 1MB、最多 4 个会话）+ 退出事件；新窗**先订阅后补拉**，按 seq 去重有序插回；游戏秒退时顺带恢复已错过的 exit（崩溃摘要卡不空窗）。宿主未实现=错误返回，UI 静默降级为纯实时流） |
 | `attic:custom:list` | — | `IpcResult<CustomVersionView[]>`（仅 custom 项：`.info` custom=true=已配置 / 裸 jar=未配置；Betacraft 官方版本不落入——**官方清单缓存 id 命中即官方，优先于本地 custom=true 残留声明**（inf-20100227-1433 实案，裸 jar 与已配置两分支同源排除），`importCustomJar` 同源拒绝官方 id） |
 | `attic:custom:info` | `id: string` | `IpcResult<CustomInfoView>`（官方清单 id 直接拒绝；已配置回 `.info` 原始 props；未配置裸 jar 附 `detectLaunchMethod` 建议——v1 检测名经 `canonicalLaunchMethod` 归一为官方值，必属 `launchMethods` 键集，表内无合法值（custom/1.6）不给建议；`launchMethods` 为合法键集，UI 下拉零硬编码） |
 | `attic:custom:info:save` | `id: string, props: Record<string,string>` | `IpcResult<CustomVersionView>`（官方清单 id 直接拒绝；`launch-method` 必填；其余字段选填，留空落盘为 `key=` 空值段；强制 `custom=true`；launch-method 不在主类表内时必须显式给 main-class，否则报错） |
@@ -117,7 +118,7 @@ legacyfix jar 原位补丁（窗口偏右下最小修复，不属启动命令行
 
 | 事件 | payload | 说明 |
 | --- | --- | --- |
-| `attic:game:output` | `GameOutputEvent{stream,chunk,pid}` | stdout/stderr 流，UI 控制台面板消费 |
+| `attic:game:output` | `GameOutputEvent{stream,chunk,pid,seq?}` | stdout/stderr 流，UI 控制台面板消费；`seq` = electron 宿主广播时盖的会话内单调序号（backlog 补拉与实时事件去重用，见 `attic:game:backlog`；宿主不实现 backlog 时缺省） |
 | `attic:game:exit` | `GameExitEvent{code,signal,crash,stoppedByUser?,pid,versionId}` | 退出 + 崩溃分类摘要；`stoppedByUser:true` = 用户主动停止（点停止按钮/关游戏窗触发看门狗），`crash` 恒为 null，控制台以中性条显示最后一行日志；外部 taskkill/自身异常退出仍照常报崩溃条 |
 | `attic:download:progress` | `DownloadProgressEvent{item,id,phase,bytesDone,bytesTotal?,bytesPerSec?,error?}` | jar/资产/Java/legacyfix 统一形状；`phase`: `queued/transferring/verifying/done/failed` |
 | `attic:custom:info-changed` | `CustomInfoChangedEvent{id}` | 宿主监视 `versions/jsons/` 目录：外部编辑/新建/删除 `.info`，按 id 去抖 250ms 合并后发射；自定义版本配置页实时刷新（未编辑自动重载，有未保存编辑则提示不覆盖；本方保存/删除的回声由 UI selfWrite 窗口吸收） |

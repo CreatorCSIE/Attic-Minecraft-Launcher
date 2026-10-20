@@ -54,6 +54,8 @@ export function settingsFromProps(props: Record<string, string>): AppSettings {
   if (minimizeOnLaunch !== undefined) out.minimizeOnLaunch = minimizeOnLaunch;
   const diagnosticLog = boolFromProps(props['diagnosticLog']);
   if (diagnosticLog !== undefined) out.diagnosticLog = diagnosticLog;
+  const consoleOnLaunch = boolFromProps(props['consoleOnLaunch']);
+  if (consoleOnLaunch !== undefined) out.consoleOnLaunch = consoleOnLaunch;
   if (props['rootOverride']) out.rootOverride = props['rootOverride'];
   if (props['levelServer']) out.levelServer = props['levelServer'];
 
@@ -96,6 +98,7 @@ export function applySettingsToProps(
   put('fixMissing', settings.fixMissing === undefined ? undefined : String(settings.fixMissing));
   put('minimizeOnLaunch', settings.minimizeOnLaunch === undefined ? undefined : String(settings.minimizeOnLaunch));
   put('diagnosticLog', settings.diagnosticLog === undefined ? undefined : String(settings.diagnosticLog));
+  put('consoleOnLaunch', settings.consoleOnLaunch === undefined ? undefined : String(settings.consoleOnLaunch));
   put('rootOverride', settings.rootOverride);
   put('levelServer', settings.levelServer);
 

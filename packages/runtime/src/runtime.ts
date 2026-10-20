@@ -90,6 +90,16 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+/**
+ * 诊断日志脱敏（v1 Launcher.java L659/L685 `[censored sessionid]` 同款）：
+ * 命令行与游戏输出行里的 accessToken 一律替换后再落盘。
+ * 短值（离线 '0'、空）不替换——避免把 '0' 这类通用子串在整行里乱伤。
+ */
+export function maskSecrets(text: string, accessToken: string | undefined): string {
+  if (!accessToken || accessToken.length < 16) return text;
+  return text.split(accessToken).join('[censored sessionid]');
+}
+
 /** v1 首启语义（Launcher.java L369）：缺省实例名 "default instance"。 */
 export const DEFAULT_INSTANCE_NAME = 'default instance';
 
@@ -427,7 +437,13 @@ export class AtticRuntime {
       const session = this.processes.start(config, request.versionId);
       // 日志落盘：testLaunch 恒写；普通启动受「诊断日志」开关（diagnosticLog=true 全量落盘）
       if (request.testLaunch || settings['diagnosticLog'] === 'true') {
-        this.attachLaunchLog(request.versionId, config, session, request.testLaunch ? 'test-launch' : 'launch');
+        this.attachLaunchLog(
+          request.versionId,
+          config,
+          session,
+          request.testLaunch ? 'test-launch' : 'launch',
+          context.accessToken,
+        );
       }
       // v1 语义（InstanceSettings.java L556）：选中版本写回实例属性——同实例切版本 gameDir 不变、存档共享。
       this.persistInstanceVersion(request);
@@ -765,7 +781,7 @@ export class AtticRuntime {
 
   /**
    * 启动日志（testLaunch ≡ 菜单语义 + diagnosticLog 开关的普通启动共用）：启动器侧头行
-   * （时间戳/版本/完整命令行）+ 游戏 stdout/stderr 全量 + 退出行，
+   * （时间戳/版本/命令行——token 已脱敏）+ 游戏 stdout/stderr 全量 + 退出行，
    * 逐行落盘 `<root>/launcher/logs/<prefix>-<ISO>.log`。
    * 控制台窗口唤起归 UI 侧（WINDOW_CONSOLE），runtime 不触窗；落盘失败静默（不阻断启动）。
    */
@@ -774,6 +790,7 @@ export class AtticRuntime {
     config: LaunchConfig,
     session: GameSession,
     prefix: 'test-launch' | 'launch',
+    accessToken?: string,
   ): void {
     const logsDir = path.join(launcherDir(this.root), 'logs');
     fs.mkdirSync(logsDir, { recursive: true });
@@ -787,12 +804,13 @@ export class AtticRuntime {
       }
     };
     const at = (): string => new Date().toISOString().slice(11, 23);
+    const censor = (line: string): string => maskSecrets(line, accessToken);
     write(`# Attic ${prefix} ${versionId} pid=${session.pid} ${new Date().toISOString()}`);
     write(`# java=${config.javaPath}`);
     write(`# gameDir=${config.gameDir}`);
-    write(`# command="${config.javaPath}" ${config.jvmArgs.join(' ')} -cp "${config.classpath.join(path.delimiter)}" ${config.mainClass} ${config.gameArgs.join(' ')}`);
+    write(censor(`# command="${config.javaPath}" ${config.jvmArgs.join(' ')} -cp "${config.classpath.join(path.delimiter)}" ${config.mainClass} ${config.gameArgs.join(' ')}`));
     const offOutput = this.on(IPC_EVENTS.GAME_OUTPUT, (event) => {
-      write(`[${at()}] [${event.stream}] ${event.chunk.trimEnd()}`);
+      write(censor(`[${at()}] [${event.stream}] ${event.chunk.trimEnd()}`));
     });
     const offExit = this.on(IPC_EVENTS.GAME_EXIT, (event) => {
       write(`[${at()}] === exit code=${event.code} signal=${event.signal} crash=${event.crash?.category ?? 'none'} ===`);

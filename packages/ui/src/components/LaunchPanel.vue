@@ -62,7 +62,8 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick, true));
 
 /**
  * 启动编排：accountId = 当前账户（契约可选字段，缺省回落宿主首个账户）；
- * test=true 走测试启动（宿主落盘启动前后日志）；成功后唤起独立控制台窗（v1 语义）。
+ * test=true 走测试启动（宿主落盘启动前后日志）；成功后唤起独立控制台窗（v1 语义）——
+ * 普通启动受全局开关 consoleOnLaunch（缺省开）约束；测试启动属显式诊断，恒弹。
  */
 async function doLaunch(test: boolean): Promise<void> {
   const v = selected.value;
@@ -78,7 +79,7 @@ async function doLaunch(test: boolean): Promise<void> {
     maxMemoryMb: settings.value.maxMemoryMb,
     ...(test ? { testLaunch: true } : {}),
   });
-  if (ok) void bridge.openConsoleWindow();
+  if (ok && (test || settings.value.consoleOnLaunch !== false)) void bridge.openConsoleWindow();
 }
 
 function onToggle(): void {

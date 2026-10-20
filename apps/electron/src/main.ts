@@ -7,6 +7,9 @@ import {
   type AppSettings,
   type AtticEventPayloads,
   type CustomVersionView,
+  type GameBacklog,
+  type GameExitEvent,
+  type GameOutputEvent,
   type InstanceView,
   type IpcResult,
   type LaunchRequest,
@@ -63,18 +66,63 @@ function handle<I extends unknown[], T>(channel: string, fn: (...args: I) => T |
 }
 
 /** 事件广播：runtime 事件面 → 全部窗口的 webContents（preload 的 on() 订阅侧）。 */
+function broadcast<E extends keyof AtticEventPayloads>(event: E, payload: AtticEventPayloads[E]): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    win.webContents.send(event, payload);
+  }
+}
+
+/**
+ * 控制台 backlog（GAME_BACKLOG 通道的数据源）：按 pid 缓存本会话已发射的输出与退出事件。
+ * 根因修复——独立控制台窗是启动后才新建/挂载的，spawn 瞬间的 LegacyFix premain 首批输出
+ * 在窗内 useConsole 订阅前就广播完了，实时事件面永远收不到（用户实测"丢前段日志"）。
+ * 新窗订阅完成后按 pid 补拉，seq 去重；每会话缓冲封顶 1MB（截断置 truncated），最多保留 4 个会话。
+ */
+interface SessionBacklog {
+  seq: number;
+  entries: GameOutputEvent[];
+  bytes: number;
+  exit: GameExitEvent | null;
+  truncated: boolean;
+}
+const backlogs = new Map<number, SessionBacklog>();
+const BACKLOG_BYTES_LIMIT = 1024 * 1024;
+
+function backlogFor(pid: number): SessionBacklog {
+  let b = backlogs.get(pid);
+  if (!b) {
+    b = { seq: 0, entries: [], bytes: 0, exit: null, truncated: false };
+    backlogs.set(pid, b);
+    while (backlogs.size > 4) {
+      const oldest = backlogs.keys().next().value as number;
+      backlogs.delete(oldest);
+    }
+  }
+  return b;
+}
+
 function wireEvents(): void {
-  for (const event of [
-    IPC_EVENTS.GAME_OUTPUT,
-    IPC_EVENTS.GAME_EXIT,
-    IPC_EVENTS.DOWNLOAD_PROGRESS,
-    IPC_EVENTS.CUSTOM_INFO_CHANGED,
-  ] as const) {
+  // 输出事件：盖会话内单调 seq 戳 → 进 backlog → 广播（渲染侧以 seq 对补拉去重）。
+  runtime.on(IPC_EVENTS.GAME_OUTPUT, (payload) => {
+    const b = backlogFor(payload.pid);
+    const stamped: GameOutputEvent = { ...payload, seq: ++b.seq };
+    b.entries.push(stamped);
+    b.bytes += stamped.chunk.length;
+    while (b.bytes > BACKLOG_BYTES_LIMIT && b.entries.length > 1) {
+      const drop = b.entries.shift() as GameOutputEvent;
+      b.bytes -= drop.chunk.length;
+      b.truncated = true;
+    }
+    broadcast(IPC_EVENTS.GAME_OUTPUT, stamped);
+  });
+  // 退出事件同样入档：游戏秒退时新建控制台窗收不到实时 exit，靠补拉恢复崩溃摘要卡。
+  runtime.on(IPC_EVENTS.GAME_EXIT, (payload) => {
+    backlogFor(payload.pid).exit = payload;
+    broadcast(IPC_EVENTS.GAME_EXIT, payload);
+  });
+  for (const event of [IPC_EVENTS.DOWNLOAD_PROGRESS, IPC_EVENTS.CUSTOM_INFO_CHANGED] as const) {
     runtime.on(event, (payload: AtticEventPayloads[typeof event]) => {
-      console.log(`[attic-main] broadcast ${event} → ${BrowserWindow.getAllWindows().length} window(s)`);
-      for (const win of BrowserWindow.getAllWindows()) {
-        win.webContents.send(event, payload);
-      }
+      broadcast(event, payload);
     });
   }
 }
@@ -270,6 +318,12 @@ app.whenReady().then(() => {
   // 独立控制台窗：唤起/聚焦（v1 语义；主页 Play/测试启动后由 UI 侧触发）。
   handle<[], void>(IPC_CHANNELS.WINDOW_CONSOLE, () => {
     createConsoleWindow();
+  });
+  // 控制台 backlog 补拉（丢首批日志的竞态修复）：新窗订阅后按 pid 拉取已发射输出与退出事件。
+  handle<[number], GameBacklog>(IPC_CHANNELS.GAME_BACKLOG, (pid) => {
+    const b = backlogs.get(pid);
+    if (!b) return { lines: [], exit: null, truncated: false };
+    return { lines: [...b.entries], exit: b.exit, truncated: b.truncated };
   });
 
   wireEvents();

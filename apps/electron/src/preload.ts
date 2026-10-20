@@ -35,6 +35,7 @@ const bridge: RendererBridge = {
   openInstanceDir: (name) => invoke(IPC_CHANNELS.INSTANCES_OPEN_DIR, name),
   windowControl: (action) => invoke(IPC_CHANNELS.WINDOW_CONTROL, action),
   openConsoleWindow: () => invoke(IPC_CHANNELS.WINDOW_CONSOLE),
+  getGameBacklog: (pid) => invoke(IPC_CHANNELS.GAME_BACKLOG, pid),
   listCustomVersions: () => invoke(IPC_CHANNELS.CUSTOM_LIST),
   getCustomVersionInfo: (id) => invoke(IPC_CHANNELS.CUSTOM_GET_INFO, id),
   saveCustomVersionInfo: (id, props) => invoke(IPC_CHANNELS.CUSTOM_SAVE_INFO, id, props),

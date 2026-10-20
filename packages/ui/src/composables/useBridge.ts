@@ -13,6 +13,7 @@ import type {
   AppSettings,
   CustomInfoView,
   CustomVersionView,
+  GameBacklog,
   GameExit,
   GameSession,
   GameStatus,
@@ -71,6 +72,8 @@ const mockBridge: RendererBridge = {
   openInstanceDir: async () => err<void>(NO_BRIDGE),
   windowControl: async () => ok<void>(undefined), // 浏览器无窗可控：no-op
   openConsoleWindow: async () => err<void>(NO_BRIDGE),
+  // backlog 属宿主事件缓存，浏览器 mock 无真值（控制台窗 mock 链路本就不存在）。
+  getGameBacklog: async () => err<GameBacklog>(NO_BRIDGE),
   listCustomVersions: async () => ok<CustomVersionView[]>([]),
   getCustomVersionInfo: async () => err<CustomInfoView>(NO_BRIDGE),
   saveCustomVersionInfo: async () => err<CustomVersionView>(NO_BRIDGE),

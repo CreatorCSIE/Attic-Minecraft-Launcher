@@ -101,7 +101,7 @@ export {
   type AssetIndexEntry,
   type AssetObjectPlan,
 } from './legacyAssets';
-export { AtticRuntime, type AtticRuntimeOptions } from './runtime';
+export { AtticRuntime, maskSecrets, type AtticRuntimeOptions } from './runtime';
 
 // 契约面透传：壳层只 import 本包即可拿到全部通道常量与类型。
 export {

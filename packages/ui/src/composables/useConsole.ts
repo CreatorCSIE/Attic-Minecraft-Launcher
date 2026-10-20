@@ -14,6 +14,8 @@ export interface ConsoleLine {
   stream: 'stdout' | 'stderr';
   text: string;
   ts: number;
+  /** 宿主盖戳的会话内单调序号（electron backlog 去重/排序用；无桥宿主缺省）。 */
+  hseq?: number;
 }
 
 const MAX_LINES = 2000;
@@ -23,6 +25,9 @@ const lastExit: Ref<GameExitEvent | null> = ref(null);
 
 let seq = 0;
 let subscribed = false;
+/** 已入账的宿主序号（实时 + backlog 共用）：backlog 补拉与实时事件重叠时去重。 */
+const seenHostSeq = new Set<number>();
+let backlogPulled = false;
 
 const { bridge } = useBridge();
 
@@ -44,7 +49,12 @@ function subscribe(): void {
 
   bridge.on(IPC_EVENTS.GAME_OUTPUT, (e) => {
     if (!matchesSession(e.pid)) return;
-    lines.value.push({ seq: seq++, stream: e.stream, text: e.chunk, ts: Date.now() });
+    // 宿主盖戳事件：与 backlog 补拉重叠的序号跳过（backlog 先到则实时重复丢弃，反之亦然）。
+    if (e.seq !== undefined) {
+      if (seenHostSeq.has(e.seq)) return;
+      seenHostSeq.add(e.seq);
+    }
+    lines.value.push({ seq: seq++, stream: e.stream, text: e.chunk, ts: Date.now(), hseq: e.seq });
     if (lines.value.length > MAX_LINES) {
       lines.value.splice(0, lines.value.length - MAX_LINES);
     }
@@ -54,6 +64,39 @@ function subscribe(): void {
     if (!matchesSession(e.pid)) return;
     lastExit.value = e;
   });
+}
+
+/**
+ * backlog 补拉（丢首批日志的竞态修复，宿主 GAME_BACKLOG 通道）：
+ * 独立控制台窗挂载订阅时，spawn 瞬间的早期输出（LegacyFix premain 等）已广播完毕——
+ * 订阅后按 pid 补拉一次，按宿主序号去重、有序插回，顺带恢复已错过的退出事件。
+ * 宿主未实现（错误返回）= 静默降级为纯实时流（旧行为）。
+ */
+async function pullBacklog(): Promise<void> {
+  if (boundPid === null) return;
+  const pid = Number(boundPid);
+  if (!Number.isInteger(pid)) return;
+  const res = await bridge.getGameBacklog(pid);
+  if (!res.ok) return;
+  const missing = res.value.lines
+    .filter((l) => l.seq === undefined || !seenHostSeq.has(l.seq))
+    .sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0));
+  if (missing.length > 0) {
+    const entries: ConsoleLine[] = missing.map((l) => {
+      if (l.seq !== undefined) seenHostSeq.add(l.seq);
+      return { seq: seq++, stream: l.stream, text: l.chunk, ts: Date.now(), hseq: l.seq };
+    });
+    // 补拉行都早于订阅后的实时行：插到首个比它新的宿主行之前（无宿主序号则直接垫底）。
+    const firstLive = lines.value.findIndex((l) => l.hseq === undefined || (entries[0]?.hseq ?? Infinity) < l.hseq);
+    const at = firstLive === -1 ? lines.value.length : firstLive;
+    lines.value.splice(at, 0, ...entries);
+    if (lines.value.length > MAX_LINES) {
+      lines.value.splice(0, lines.value.length - MAX_LINES);
+    }
+  }
+  if (res.value.exit && lastExit.value === null) {
+    lastExit.value = res.value.exit;
+  }
 }
 
 function clear(): void {
@@ -69,5 +112,9 @@ export interface ConsoleStore {
 
 export function useConsole(): ConsoleStore {
   subscribe();
+  if (!backlogPulled) {
+    backlogPulled = true;
+    void pullBacklog();
+  }
   return { lines, lastExit, clear };
 }
