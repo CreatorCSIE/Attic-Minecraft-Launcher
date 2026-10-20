@@ -10,12 +10,27 @@ import {
   type InstanceView,
   type IpcResult,
   type LaunchRequest,
+  type PickTarget,
+  type SpecialDir,
   type WindowAction,
 } from '@attic/core-spec';
-import { AtticRuntime } from '@attic/runtime';
+import { AtticRuntime, launcherDir, loadSettings, resolveDataRoot } from '@attic/runtime';
+
+/**
+ * 数据根覆盖引导：设置页「更换数据根」写的是平台默认根 launcher.settings 的 rootOverride
+ * （root 属构造级配置，运行期不换根）——启动时从默认根 peek 一次，指过去即完成迁移式切换。
+ * portable/env 覆盖在 resolveDataRoot 内部优先于此（本函数只读默认根的键，不与之争）。
+ */
+function bootstrapRootDir(): string | undefined {
+  try {
+    return loadSettings(resolveDataRoot())['rootOverride'] || undefined;
+  } catch {
+    return undefined; // 首启无 settings = 走平台默认根
+  }
+}
 
 /** TS 启动器核心门面（Phase 2）：主进程唯一实例。 */
-const runtime = new AtticRuntime();
+const runtime = new AtticRuntime({ rootDir: bootstrapRootDir(), version: app.getVersion() });
 
 /** 无边距主窗引用（WINDOW_CONTROL 通道操作目标）。 */
 let mainWindow: BrowserWindow | null = null;
@@ -151,7 +166,12 @@ app.whenReady().then(() => {
   handle(IPC_CHANNELS.VERSIONS_LIST, () => runtime.listVersions());
   handle(IPC_CHANNELS.VERSIONS_JSON, (versionId: string) => runtime.getVersionJson(versionId));
   handle(IPC_CHANNELS.LAUNCH_DRY_RUN, (request: LaunchRequest) => runtime.dryRunLaunch(request));
-  handle(IPC_CHANNELS.LAUNCH, (request: LaunchRequest) => runtime.launch(request));
+  handle(IPC_CHANNELS.LAUNCH, async (request: LaunchRequest) => {
+    const session = await runtime.launch(request);
+    // 「启动后最小化启动器」：窗行为归壳层，开关消费点在成功启动之后（失败不缩窗）
+    if (runtime.getSettings().minimizeOnLaunch) mainWindow?.minimize();
+    return session;
+  });
   handle(IPC_CHANNELS.KILL, () => runtime.kill());
   handle(IPC_CHANNELS.STATUS, () => runtime.status());
   handle(IPC_CHANNELS.JAVA_DETECT, () => runtime.detectJava());
@@ -192,6 +212,45 @@ app.whenReady().then(() => {
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : String(error) };
     }
+  });
+  // —— 设置页宿主能力面（SYS_INFO/目录/日志/对话框/外链）——
+  handle(IPC_CHANNELS.SYS_INFO, () => runtime.getSystemInfo());
+  // 打开特殊目录：白名单枚举、路径宿主解析（渲染侧给不出任意路径）；logs 未生成时先建再开。
+  handle(IPC_CHANNELS.SHELL_OPEN_DIR, async (target: SpecialDir) => {
+    const dir = target === 'logs-dir' ? path.join(launcherDir(runtime.root), 'logs') : runtime.root;
+    fs.mkdirSync(dir, { recursive: true });
+    const err = await shell.openPath(dir);
+    if (err) throw new Error(err);
+  });
+  handle(IPC_CHANNELS.LOGS_CLEAR, () => runtime.clearLogs());
+  // 原生对话框选择（java 可执行 / 目录）：取消 = ok(null)，与 CUSTOM_IMPORT_JAR 同语义。
+  ipcMain.handle(IPC_CHANNELS.DIALOG_PICK, async (_event, kind: PickTarget): Promise<IpcResult<string | null>> => {
+    try {
+      const res = await dialog.showOpenDialog({
+        title: kind === 'java-executable' ? '选择 Java 可执行文件' : '选择文件夹',
+        properties: kind === 'java-executable' ? ['openFile'] : ['openDirectory', 'createDirectory'],
+        ...(kind === 'java-executable' && process.platform === 'win32'
+          ? { filters: [{ name: 'java 可执行文件', extensions: ['exe'] }] }
+          : {}),
+      });
+      const picked = res.filePaths[0];
+      return { ok: true, value: res.canceled || !picked ? null : picked };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+  // 外链出门：协议白名单 http/https（渲染进程拿不到 shell，唯一出门口收紧校验）。
+  handle(IPC_CHANNELS.SHELL_OPEN_URL, async (url: string) => {
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      throw new Error(`非法 URL：${url}`);
+    }
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+      throw new Error(`仅允许 http/https 协议：${parsed.protocol}`);
+    }
+    await shell.openExternal(parsed.toString());
   });
   // 窗控制：动作合法性由契约类型保证；toggle-maximize 在最大化/还原间切换。
   // 按发送方窗口操作（非固定 mainWindow）——独立控制台窗的顶栏三键才能控自己的窗。

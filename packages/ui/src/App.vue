@@ -18,6 +18,7 @@ import InstanceList from './components/InstanceList.vue';
 import AccountsPanel from './components/AccountsPanel.vue';
 import CustomVersionsPanel from './components/CustomVersionsPanel.vue';
 import SettingsPanel from './components/SettingsPanel.vue';
+import { goSection } from './composables/useSettingsNav';
 
 /** 独立控制台窗模式：主进程以 ?window=console 加载同一 UI，只渲染控制台。 */
 const isConsoleWindow =
@@ -249,16 +250,22 @@ onMounted(() => {
           <span class="nav-label">{{ t('nav.settings') }}</span>
         </button>
 
-        <!-- 侧栏底部作者头像（GitHub 在线获取 + 本地缓存；未就绪时保留圆形占位） -->
+        <!-- 侧栏底部作者头像（GitHub 在线获取 + 本地缓存；未就绪时保留圆形占位）；
+             点击进入设置页·关于分区（BlockHelm 同款入口，GitHub 外链收进关于页） -->
         <div class="sidebar-foot">
-          <img
-            v-if="avatarSrc"
-            class="sidebar-avatar"
-            :src="avatarSrc"
-            :alt="`GitHub: ${CREATOR_GITHUB}`"
-            :title="`GitHub: ${CREATOR_GITHUB}`"
-          />
-          <span v-else class="sidebar-avatar" aria-hidden="true"></span>
+          <button
+            class="sidebar-avatar-btn"
+            :title="t('settings.nav.about')"
+            @click="goSection('about'); view = 'settings'"
+          >
+            <img
+              v-if="avatarSrc"
+              class="sidebar-avatar"
+              :src="avatarSrc"
+              :alt="`GitHub: ${CREATOR_GITHUB}`"
+            />
+            <span v-else class="sidebar-avatar" aria-hidden="true"></span>
+          </button>
         </div>
       </nav>
 
@@ -387,6 +394,18 @@ onMounted(() => {
   gap: var(--space-3);
   padding: var(--space-2) var(--space-3);
   transition: padding-inline var(--dur-base) var(--ease-out);
+}
+.sidebar-avatar-btn {
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  line-height: 0; /* 消除行内基线间隙，按钮与头像严丝合缝（零抖动延续） */
+  transition: box-shadow var(--dur-fast) var(--ease-out);
+}
+.sidebar-avatar-btn:hover {
+  box-shadow: 0 0 0 2px var(--surface-4);
 }
 .sidebar-avatar {
   width: var(--rail-item-size);

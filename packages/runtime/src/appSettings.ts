@@ -15,6 +15,25 @@ const ENDPOINT_KEYS: (keyof EndpointOverrides)[] = [
   'mojangManifest',
 ];
 const THEMES: ThemeMode[] = ['dark', 'light', 'system'];
+const MEMORY_MODES: string[] = ['auto', 'manual'];
+
+/** properties 布尔三态：'true'→true / 'false'→false / 其他（含缺失）→undefined（= 消费端缺省）。 */
+function boolFromProps(v: string | undefined): boolean | undefined {
+  if (v === 'true') return true;
+  if (v === 'false') return false;
+  return undefined;
+}
+
+/**
+ * 内存 auto 模式估算（BlockHelm 公式的 Attic 变体）：总内存 40% 取 128 步长，
+ * 夹在 [512, 2048]——老版本场景堆需求低，上探 2G 无益（实例 launchArgs 仍可覆盖一切）。
+ * totalMemMb<=0（宿主取不到）回落 1024（与历史定值缺省一致）。
+ */
+export function estimateMaxMemoryMb(totalMemMb: number): number {
+  if (!(totalMemMb > 0)) return 1024;
+  const want = Math.round((totalMemMb * 0.4) / 128) * 128;
+  return Math.min(Math.max(want, 512), 2048);
+}
 
 /** 从 launcher.settings 的扁平属性读出渲染侧设置视图（缺省字段省略）。 */
 export function settingsFromProps(props: Record<string, string>): AppSettings {
@@ -22,8 +41,20 @@ export function settingsFromProps(props: Record<string, string>): AppSettings {
   if (props['javaPath']) out.javaPath = props['javaPath'];
   const mem = Number(props['maxMemoryMb']);
   if (Number.isFinite(mem) && mem > 0) out.maxMemoryMb = mem;
+  if (MEMORY_MODES.includes(props['memoryMode'] ?? '')) out.memoryMode = props['memoryMode'] as 'auto' | 'manual';
   if (props['username']) out.username = props['username'];
   if (THEMES.includes(props['theme'] as ThemeMode)) out.theme = props['theme'] as ThemeMode;
+  if (props['language']) out.language = props['language'];
+  if (props['jvmArgs']) out.jvmArgs = props['jvmArgs'];
+  const checkIntegrity = boolFromProps(props['checkIntegrity']);
+  if (checkIntegrity !== undefined) out.checkIntegrity = checkIntegrity;
+  const fixMissing = boolFromProps(props['fixMissing']);
+  if (fixMissing !== undefined) out.fixMissing = fixMissing;
+  const minimizeOnLaunch = boolFromProps(props['minimizeOnLaunch']);
+  if (minimizeOnLaunch !== undefined) out.minimizeOnLaunch = minimizeOnLaunch;
+  const diagnosticLog = boolFromProps(props['diagnosticLog']);
+  if (diagnosticLog !== undefined) out.diagnosticLog = diagnosticLog;
+  if (props['rootOverride']) out.rootOverride = props['rootOverride'];
   if (props['levelServer']) out.levelServer = props['levelServer'];
 
   const endpoints: EndpointOverrides = {};
@@ -56,8 +87,16 @@ export function applySettingsToProps(
 
   put('javaPath', settings.javaPath);
   put('maxMemoryMb', settings.maxMemoryMb === undefined ? undefined : String(settings.maxMemoryMb));
+  put('memoryMode', settings.memoryMode);
   put('username', settings.username);
   put('theme', settings.theme);
+  put('language', settings.language);
+  put('jvmArgs', settings.jvmArgs);
+  put('checkIntegrity', settings.checkIntegrity === undefined ? undefined : String(settings.checkIntegrity));
+  put('fixMissing', settings.fixMissing === undefined ? undefined : String(settings.fixMissing));
+  put('minimizeOnLaunch', settings.minimizeOnLaunch === undefined ? undefined : String(settings.minimizeOnLaunch));
+  put('diagnosticLog', settings.diagnosticLog === undefined ? undefined : String(settings.diagnosticLog));
+  put('rootOverride', settings.rootOverride);
   put('levelServer', settings.levelServer);
 
   for (const key of ENDPOINT_KEYS) {

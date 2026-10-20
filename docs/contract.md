@@ -57,7 +57,7 @@
 5. `gameArgs[0]` 是用户名；
 6. `betacraft.proxyArgs` 全量进 `jvmArgs`。
 
-`jvmArgs` 固定组（顺序即拼装顺序）：`-Xmx`（+可选 `-Xms`）→ 实例 `launchArgs` 空白分隔逐 token 注入（v1 语义：重复 `-Xmx` JVM 取后者，实例覆盖全局）→ `-Djava.util.Arrays.useLegacyMergeSort=true` → `-Dhttp.nonProxyHosts=api.betacraft.uk|files.betacraft.uk|checkip.amazonaws.com|textures.minecraft.net` → LWJGL2 natives 两参（`org.lwjgl.librarypath`/`net.java.games.input.librarypath` = `<dataDir>/bin/natives`）→ `proxyArgs` → `-Dlf.proxy.levelServer=<AppSettings.levelServer>`（仅设置里有值时注入，覆盖 `gameDir/legacyfix/level-server.txt`）→ `javaagent` 展开 → 请求侧 `extraJvmArgs`。（曾有的 `-Dsun.java2d.dpiaware=false` 已证伪摘除——该 Oracle JDK8 扩展属性只影响 Java2D 渲染缩放，对 LWJGL 原生窗坐标无作用。）
+`jvmArgs` 固定组（顺序即拼装顺序）：`-Xmx`（+可选 `-Xms`）→ 全局 `jvmArgs`（`AppSettings.jvmArgs` 空白分隔逐 token）→ 实例 `launchArgs` 空白分隔逐 token 注入（v1 语义：重复 `-Xmx` JVM 取后者，实例覆盖全局，全局居中）→ `-Djava.util.Arrays.useLegacyMergeSort=true` → `-Dhttp.nonProxyHosts=api.betacraft.uk|files.betacraft.uk|checkip.amazonaws.com|textures.minecraft.net` → LWJGL2 natives 两参（`org.lwjgl.librarypath`/`net.java.games.input.librarypath` = `<dataDir>/bin/natives`）→ `proxyArgs` → `-Dlf.proxy.levelServer=<AppSettings.levelServer>`（仅设置里有值时注入，覆盖 `gameDir/legacyfix/level-server.txt`）→ `javaagent` 展开 → 请求侧 `extraJvmArgs`。（曾有的 `-Dsun.java2d.dpiaware=false` 已证伪摘除——该 Oracle JDK8 扩展属性只影响 Java2D 渲染缩放，对 LWJGL 原生窗坐标无作用。）
 
 Applet 容器（主类 `AppletLauncher`）的 `gameArgs` 末尾追加 `--width <w> --height <h>`（实例值，v1 缺省 854×480；`AppletFrame.java` 读取，缺省兜底 640×480）。非 Applet 版本窗口由 LWJGL/DeAwt 自管，不注入。
 
@@ -65,13 +65,14 @@ legacyfix jar 原位补丁（窗口偏右下最小修复，不属启动命令行
 
 `CrashCategory`（v0 分类器枚举）：`none/java-missing/out-of-memory/gl-init/lwjgl-native/unsatisfied-link/unknown`。
 
-`LaunchRequest.testLaunch`（≡ 菜单"测试启动"）：宿主在 `attic:launch` 成功后把启动前后日志逐行落盘 `<root>/launcher/logs/test-launch-<ISO>.log`（启动器侧头行：时间戳/版本/java/gameDir/完整命令行；随后游戏 stdout/stderr 全量；进程退出追加退出行并退订）。日志落盘归 runtime（不触窗）；独立控制台窗由 UI 侧随后调用 `attic:window:console` 唤起。普通启动不写此文件。
+`LaunchRequest.testLaunch`（≡ 菜单"测试启动"）：宿主在 `attic:launch` 成功后把启动前后日志逐行落盘 `<root>/launcher/logs/test-launch-<ISO>.log`（启动器侧头行：时间戳/版本/java/gameDir/完整命令行；随后游戏 stdout/stderr 全量；进程退出追加退出行并退订）。日志落盘归 runtime（不触窗）；独立控制台窗由 UI 侧随后调用 `attic:window:console` 唤起。普通启动缺省不写；`AppSettings.diagnosticLog=true` 时普通启动同样落盘（文件名前缀 `launch-`）。
 
 ### 2.7 AppSettings / InstanceView（[settings.ts](../packages/core-spec/src/settings.ts)，Phase 3）
 
 渲染侧只通过契约读写设置/实例，绝不直接碰 `launcher.settings` / `instances/*.txt`（戒律 #1：设置是数据）。
 
-- `AppSettings`：`javaPath?`、`maxMemoryMb?`、`username?`、`theme?`（`dark|light|system`）、`levelServer?`（LegacyFix 关卡存档模式：`local`/URL；有值时直通 `-Dlf.proxy.levelServer`，抑制一次性对话框并覆盖陈旧 txt）、`endpoints?`。落盘键：`javaPath`/`maxMemoryMb`/`username`/`theme`/`levelServer` + `endpoint.*`；`setSettings` 合并写回、未知键保留（v1 遗留键不丢）。
+- `AppSettings`：`javaPath?`、`maxMemoryMb?`、`memoryMode?`（`auto|manual`，缺省 manual）、`username?`、`theme?`（`dark|light|system`）、`language?`（i18n locale 键，渲染侧热切换，单一真相；localStorage 仅 bootstrap 缓存）、`jvmArgs?`（全局 JVM 参数，组序见 §2.6）、`checkIntegrity?`/`fixMissing?`/`minimizeOnLaunch?`/`diagnosticLog?`（布尔三态：落盘 `'true'/'false'`，缺键 = undefined = 消费端缺省——前两者缺省 true，后两者缺省 false）、`rootOverride?`（数据根更换：下次启动应用后由宿主从平台默认根 peek，portable/env 优先）、`levelServer?`（LegacyFix 关卡存档模式：`local`/URL；有值时直通 `-Dlf.proxy.levelServer`，抑制一次性对话框并覆盖陈旧 txt）、`endpoints?`。落盘键同名 + `endpoint.*`；`setSettings` 合并写回、未知键保留（v1 遗留键不丢）。
+- 派生语义（无独立契约键）：Java 模式 = `javaPath` 有值为手动、空为自动（自动 → 手动由 UI 固化当前选中项）；堆内存三级优先 = `LaunchRequest.maxMemoryMb` > `memoryMode=auto` 宿主估算（`round(总×0.4)` 取 128 步长夹 `[512,2048]`，取不到回落 1024）> `maxMemoryMb` 定值 > 1024；UI 展示拷贝与宿主估算公式改动须双侧同步。
 - `EndpointOverrides`：全为可序列化的纯字符串（`versionList`/`filesBase`/`legacyfixRelease`/`zuluMetadata`/`mojangManifest`）。函数形态的 `versionJson(id)`/`assetIndex(id)` 由 `filesBase` 在 runtime 侧派生（`endpointsFromOverrides`），契约层不携带可调用形状。端点属构造级配置——改动在下次启动应用后生效。
 - `InstanceView`：对齐 v1 Instance Settings 可编辑集 `{ name, version, gameDir?, launchArgs?, width?, height?, javaPath? }`。`gameDir` 缺省 = 宿主派生 `root/<实例名>`（v1 `Instance.newInstance`；已存在实例保留其落位）；`launchArgs`/`width`/`height` 缺省 = v1 `newInstance` 值（`-Xmx1G`、854×480，`loadInstance` 以缺省为底、属性覆盖）。版本是实例属性——launch 时选中版本写回实例（v1 `InstanceSettings` 语义：同实例切版本存档共享）。`LaunchRequest.instanceId?` 缺省 = `default instance`（v1 首启自动建档）。
 
@@ -104,6 +105,11 @@ legacyfix jar 原位补丁（窗口偏右下最小修复，不属启动命令行
 | `attic:custom:info:save` | `id: string, props: Record<string,string>` | `IpcResult<CustomVersionView>`（官方清单 id 直接拒绝；`launch-method` 必填；其余字段选填，留空落盘为 `key=` 空值段；强制 `custom=true`；launch-method 不在主类表内时必须显式给 main-class，否则报错） |
 | `attic:custom:import-jar` | — | `IpcResult<CustomVersionView \| null>`（宿主弹原生文件对话框；取消=`null`；选中复制为 `versions/<id>.jar`，id=文件名去扩展名，同名报错不覆盖，落裸 jar=未配置态） |
 | `attic:custom:remove` | `id: string` | `IpcResult<void>`（jar 与 `.info` 一并移除；门禁=listCustomVersions 成员判定，官方版本/不存在显式报错；UI 删除须经确认弹窗，本通道不做二次确认） |
+| `attic:sys:info` | — | `IpcResult<SystemInfo>`（宿主快照单通道：`launcherVersion/platform/dataRoot/logsDir/totalMemMb/freeMemMb`；版本=壳注入（runtime 构造参数，缺省 0.0.0），内存=os 总量/空闲 MB 取整） |
+| `attic:shell:open-dir` | `SpecialDir`（`data-root` \| `logs-dir`） | `IpcResult<void>`（宿主白名单枚举解析目录后 `shell.openPath`；logs 目录不存在时先建；不接受任意路径，防注入） |
+| `attic:logs:clear` | — | `IpcResult<number>`（只删 `<root>/launcher/logs` 下 `*.log`，被占用文件跳过不报错；目录不存在返 0；返回删除数） |
+| `attic:dialog:pick` | `PickTarget`（`java-executable` \| `directory`） | `IpcResult<string \| null>`（原生打开对话框；取消=`null`；java 过滤可执行文件，directory 允许新建目录） |
+| `attic:shell:open-url` | `url: string` | `IpcResult<void>`（宿主 `new URL` 校验协议仅 http/https 后 `shell.openExternal`；渲染侧外链唯一出口） |
 
 统一 `IpcResult<T>` 封装：错误以 `{ ok:false, error }` 返回，不跨进程抛异常。未实现通道返回 `error: 'not-implemented'`（Phase 1 桥面占位即此值）。
 

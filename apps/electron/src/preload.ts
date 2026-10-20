@@ -40,6 +40,12 @@ const bridge: RendererBridge = {
   saveCustomVersionInfo: (id, props) => invoke(IPC_CHANNELS.CUSTOM_SAVE_INFO, id, props),
   importCustomJar: () => invoke(IPC_CHANNELS.CUSTOM_IMPORT_JAR),
   removeCustomVersion: (id) => invoke(IPC_CHANNELS.CUSTOM_REMOVE, id),
+  getSystemInfo: () => invoke(IPC_CHANNELS.SYS_INFO),
+  openSpecialDir: (target) => invoke(IPC_CHANNELS.SHELL_OPEN_DIR, target),
+  clearLogs: () => invoke(IPC_CHANNELS.LOGS_CLEAR),
+  pickJavaExecutable: () => invoke(IPC_CHANNELS.DIALOG_PICK, 'java-executable'),
+  pickDirectory: () => invoke(IPC_CHANNELS.DIALOG_PICK, 'directory'),
+  openExternalUrl: (url) => invoke(IPC_CHANNELS.SHELL_OPEN_URL, url),
   on: <E extends keyof AtticEventPayloads>(event: E, cb: (payload: AtticEventPayloads[E]) => void) => {
     const handler = (_: unknown, payload: AtticEventPayloads[E]): void => {
       if (event === IPC_EVENTS.GAME_EXIT) console.log(`[attic-preload] recv ${event}`);

@@ -11,6 +11,7 @@ import type {
   InstanceView,
   JavaDetectionReport,
   JavaInstall,
+  SystemInfo,
   VersionRef,
 } from '@attic/core-spec';
 
@@ -103,8 +104,21 @@ export const demoInstances: InstanceView[] = [{ name: 'Demo Classic', version: '
 /** 假全局设置（字段对齐 AppSettings；theme 固定 dark 便于视觉迭代，可在设置面板切换）。 */
 export const demoSettings: AppSettings = {
   theme: 'dark',
+  memoryMode: 'manual',
   maxMemoryMb: 1024,
   username: 'DemoPlayer',
+  language: 'zh-CN',
+  jvmArgs: '-XX:+UseSerialGC',
+};
+
+/** 假宿主快照（16G 机器场景）：设置页通用/内存滑杆上限/关于版本号在 demo 里有真形状可排。 */
+export const demoSysInfo: SystemInfo = {
+  launcherVersion: '0.0.0-demo',
+  platform: 'win32',
+  dataRoot: 'C:\\Users\\Player\\AppData\\Roaming\\.attic',
+  logsDir: 'C:\\Users\\Player\\AppData\\Roaming\\.attic\\launcher\\logs',
+  totalMemMb: 16384,
+  freeMemMb: 8192,
 };
 
 /** 假控制台输出行（useConsole 的 demo 分支灌入，模拟远古版本启动日志）。 */

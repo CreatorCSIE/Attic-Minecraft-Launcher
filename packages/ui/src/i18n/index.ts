@@ -10,6 +10,12 @@ import { zhCN } from './locales/zh-CN';
 
 export type Locale = 'en' | 'zh-CN';
 
+/** 可选界面语言（自名形态，不随 locale 翻译）；语言栏下拉的唯一数据源。 */
+export const AVAILABLE_LOCALES: { code: Locale; name: string }[] = [
+  { code: 'zh-CN', name: '简体中文' },
+  { code: 'en', name: 'English' },
+];
+
 const LOCALE_KEY = 'attic.locale';
 
 type Dict = Record<string, unknown>;

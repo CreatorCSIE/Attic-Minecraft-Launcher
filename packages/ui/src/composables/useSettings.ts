@@ -6,6 +6,7 @@
 
 import { computed, ref, type ComputedRef } from 'vue';
 import type { AppSettings, ThemeMode } from '@attic/core-spec';
+import { setLocale } from '../i18n';
 import { useBridge } from './useBridge';
 
 const settings = ref<AppSettings>({});
@@ -46,6 +47,13 @@ async function load(): Promise<void> {
   if (res.ok) settings.value = res.value;
   loaded.value = true;
   applyTheme();
+  applyLanguage();
+}
+
+/** 语言单一真相 = settings.language（localStorage 仅 bootstrap 缓存）；load 后即时无感应用。 */
+function applyLanguage(): void {
+  const lang = settings.value.language;
+  if (lang === 'en' || lang === 'zh-CN') setLocale(lang);
 }
 
 /** 合并补丁并落盘；返回是否成功。 */

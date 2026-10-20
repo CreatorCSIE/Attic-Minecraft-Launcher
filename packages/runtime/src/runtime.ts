@@ -5,6 +5,7 @@
  */
 
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 import {
@@ -15,6 +16,7 @@ import {
   type CustomVersionView,
   type OfflineAccount,
   type AppSettings,
+  type SystemInfo,
   type AtticEventPayloads,
   type DownloadProgressEvent,
   type GameExit,
@@ -29,7 +31,7 @@ import {
   type VersionRef,
 } from '@attic/core-spec';
 
-import { applySettingsToProps, instanceViewFromConfig, settingsFromProps } from './appSettings';
+import { applySettingsToProps, estimateMaxMemoryMb, instanceViewFromConfig, settingsFromProps } from './appSettings';
 import { BetacraftClient, type FetchImpl } from './betacraft';
 import { endpointsFromOverrides, resolveEndpoints, type Endpoints } from './endpoints';
 import { infoToVersionJson, LAUNCH_METHOD_MAIN_CLASS } from './info';
@@ -80,6 +82,8 @@ export interface AtticRuntimeOptions {
   env?: NodeJS.ProcessEnv;
   execPath?: string;
   platform?: NodeJS.Platform;
+  /** 启动器版本（宿主注入：electron = app.getVersion()；SYS_INFO 展示用）。 */
+  version?: string;
 }
 
 function messageOf(error: unknown): string {
@@ -129,6 +133,8 @@ function assertSafeVersionId(id: string): void {
 export class AtticRuntime {
   readonly root: string;
   readonly endpoints: Endpoints;
+  /** 启动器版本（宿主注入，SYS_INFO/关于页消费）。 */
+  readonly version: string;
   private readonly platform: NodeJS.Platform;
   private readonly fetchImpl: FetchImpl;
   private readonly client: BetacraftClient;
@@ -148,6 +154,7 @@ export class AtticRuntime {
       rootDirOverride: options.rootDir,
     });
     ensureLayout(this.root);
+    this.version = options.version ?? '0.0.0';
     this.platform = options.platform ?? process.platform;
     // 端点优先级：构造参数（测试/程序化）> launcher.settings 的 endpoint.* 覆盖 > 默认。
     this.endpoints = options.endpoints
@@ -374,6 +381,8 @@ export class AtticRuntime {
   async launch(request: LaunchRequest): Promise<GameSession> {
     try {
       if (this.processes.running) throw new Error('游戏进程已在运行');
+      // 设置页开关的消费点（properties 三态：缺键=缺省开/关按各键注释）
+      const settings = loadSettings(this.root);
       let json = await this.refreshVersionInfo(request.versionId);
       // BC `.info` 无 libraries → 从 Mojang 重发布 JSON 回填库池（classic 等不在清单：BC jar 自捆绑依赖，静默跳过）。
       if (!json.libraries || json.libraries.length === 0) {
@@ -384,7 +393,12 @@ export class AtticRuntime {
         }
       }
       // 裸 jar custom 合成元数据无下载地址：jar 本体已在位，跳过下载（v1 downloadJson 豁免）
-      if (json.jar?.url || json.downloads?.client?.url) await this.client.downloadClientJar(json, this.root);
+      if (json.jar?.url || json.downloads?.client?.url) {
+        await this.client.downloadClientJar(json, this.root, {
+          verify: settings['checkIntegrity'] !== 'false',
+          repair: settings['fixMissing'] !== 'false',
+        });
+      }
       json = this.resolveIndevMainClass(json);
       await this.client.downloadLibrariesToBin(json, this.root);
       this.extractNatives();
@@ -411,7 +425,10 @@ export class AtticRuntime {
 
       fs.mkdirSync(context.gameDir, { recursive: true });
       const session = this.processes.start(config, request.versionId);
-      if (request.testLaunch) this.attachTestLaunchLog(request.versionId, config, session);
+      // 日志落盘：testLaunch 恒写；普通启动受「诊断日志」开关（diagnosticLog=true 全量落盘）
+      if (request.testLaunch || settings['diagnosticLog'] === 'true') {
+        this.attachLaunchLog(request.versionId, config, session, request.testLaunch ? 'test-launch' : 'launch');
+      }
       // v1 语义（InstanceSettings.java L556）：选中版本写回实例属性——同实例切版本 gameDir 不变、存档共享。
       this.persistInstanceVersion(request);
       this.lastLaunchError = null;
@@ -638,6 +655,40 @@ export class AtticRuntime {
     return settingsFromProps(loadSettings(this.root));
   }
 
+  /** 宿主环境快照（设置页通用/内存/关于栏共用；内存取不到按 0 返回，UI 端降级）。 */
+  getSystemInfo(): SystemInfo {
+    return {
+      launcherVersion: this.version,
+      platform: this.platform,
+      dataRoot: this.root,
+      logsDir: path.join(launcherDir(this.root), 'logs'),
+      totalMemMb: Math.round(os.totalmem() / 0x100000),
+      freeMemMb: Math.round(os.freemem() / 0x100000),
+    };
+  }
+
+  /** 清理 launcher/logs 下的 *.log（正在被占用的文件跳过），返回删除个数。 */
+  clearLogs(): number {
+    const dir = path.join(launcherDir(this.root), 'logs');
+    let removed = 0;
+    let entries: string[];
+    try {
+      entries = fs.readdirSync(dir);
+    } catch {
+      return 0; // 目录不存在 = 无日志可清
+    }
+    for (const file of entries) {
+      if (!file.endsWith('.log')) continue;
+      try {
+        fs.rmSync(path.join(dir, file));
+        removed++;
+      } catch {
+        /* 文件被句柄占用（如诊断日志仍在写）：跳过不阻断 */
+      }
+    }
+    return removed;
+  }
+
   /** 合并落盘（未知键保留），返回保存后的视图。端点改动下次启动应用生效。 */
   setSettings(settings: AppSettings): AppSettings {
     saveSettings(this.root, applySettingsToProps(loadSettings(this.root), settings));
@@ -713,15 +764,21 @@ export class AtticRuntime {
   }
 
   /**
-   * 测试启动日志（≡ 菜单语义）：启动器侧头行（时间戳/版本/完整命令行）+ 游戏 stdout/stderr 全量
-   * + 退出行，逐行落盘 `<root>/launcher/logs/test-launch-<ISO>.log`。
+   * 启动日志（testLaunch ≡ 菜单语义 + diagnosticLog 开关的普通启动共用）：启动器侧头行
+   * （时间戳/版本/完整命令行）+ 游戏 stdout/stderr 全量 + 退出行，
+   * 逐行落盘 `<root>/launcher/logs/<prefix>-<ISO>.log`。
    * 控制台窗口唤起归 UI 侧（WINDOW_CONSOLE），runtime 不触窗；落盘失败静默（不阻断启动）。
    */
-  private attachTestLaunchLog(versionId: string, config: LaunchConfig, session: GameSession): void {
+  private attachLaunchLog(
+    versionId: string,
+    config: LaunchConfig,
+    session: GameSession,
+    prefix: 'test-launch' | 'launch',
+  ): void {
     const logsDir = path.join(launcherDir(this.root), 'logs');
     fs.mkdirSync(logsDir, { recursive: true });
     // Windows 文件名禁冒点：ISO 串统一替换。
-    const file = path.join(logsDir, `test-launch-${new Date().toISOString().replace(/[:.]/g, '-')}.log`);
+    const file = path.join(logsDir, `${prefix}-${new Date().toISOString().replace(/[:.]/g, '-')}.log`);
     const write = (line: string): void => {
       try {
         fs.appendFileSync(file, `${line}\n`, 'utf8');
@@ -730,7 +787,7 @@ export class AtticRuntime {
       }
     };
     const at = (): string => new Date().toISOString().slice(11, 23);
-    write(`# Attic test launch ${versionId} pid=${session.pid} ${new Date().toISOString()}`);
+    write(`# Attic ${prefix} ${versionId} pid=${session.pid} ${new Date().toISOString()}`);
     write(`# java=${config.javaPath}`);
     write(`# gameDir=${config.gameDir}`);
     write(`# command="${config.javaPath}" ${config.jvmArgs.join(' ')} -cp "${config.classpath.join(path.delimiter)}" ${config.mainClass} ${config.gameArgs.join(' ')}`);
@@ -778,8 +835,15 @@ export class AtticRuntime {
     if (!account) throw new Error('无可用账户，请先在账户页添加账户');
 
     const javaPath = request.javaPath ?? settings['javaPath'] ?? (await this.ensureJavaPath(settings));
-    const memory = request.maxMemoryMb ?? Number(settings['maxMemoryMb']);
-    const maxMemoryMb = Number.isFinite(memory) && memory > 0 ? memory : 1024;
+    // 内存三级优先：请求覆盖 > memoryMode=auto 宿主估算（总内存 40% 夹 [512,2048]）> 定值 > 1024 兜底
+    const memory = Number(settings['maxMemoryMb']);
+    const maxMemoryMb =
+      request.maxMemoryMb ??
+      (settings['memoryMode'] === 'auto'
+        ? estimateMaxMemoryMb(Math.round(os.totalmem() / 0x100000))
+        : Number.isFinite(memory) && memory > 0
+          ? memory
+          : 1024);
 
     const instance = this.resolveInstance(request.instanceId ?? DEFAULT_INSTANCE_NAME);
 
@@ -788,6 +852,8 @@ export class AtticRuntime {
       // v1 惯例（Instance.newInstance）：gameDir = 数据根/<实例名>，版本是实例属性、不参与目录派生。
       gameDir: instance.gameDir,
       launchArgs: instance.launchArgs,
+      // 全局 JVM 参数（设置页「全局 JVM 参数」）：注入在实例参数之前（后者胜，实例可覆盖）
+      globalJvmArgs: settings['jvmArgs'],
       // 档案 addons 逗号串 → 数组透传（undefined 保持 = 老档案零注入；空串 = 显式全关）
       addons: instance.addons?.split(',').map((s) => s.trim()).filter(Boolean),
       width: instance.width,

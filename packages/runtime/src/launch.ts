@@ -26,6 +26,9 @@ export interface LaunchContext {
   levelServer?: string;
   /** 实例 JVM 参数（v1 launchArgs，如 `-Xmx1G`），空白分隔注入 jvmArgs。 */
   launchArgs?: string;
+  /** 全局 JVM 参数（launcher.settings `jvmArgs`，设置页「全局 JVM 参数」）：注入在实例参数之前，
+   * JVM「后者胜」规则下实例级同名参数可覆盖全局。空白分隔。 */
+  globalJvmArgs?: string;
   /** 窗口尺寸（Applet 容器 `--width/--height` 游戏参数；v1 缺省 854x480）。 */
   width?: number;
   height?: number;
@@ -150,6 +153,10 @@ export function assembleLaunchConfig(
   // ---------- jvmArgs 固定组（顺序即契约） ----------
   const jvmArgs: string[] = [`-Xmx${context.maxMemoryMb}m`];
   if (context.minMemoryMb !== undefined) jvmArgs.push(`-Xms${context.minMemoryMb}m`);
+  // 组序契约：固定堆参数 → 全局 JVM 参数（settings.jvmArgs）→ 实例 launchArgs。
+  for (const token of (context.globalJvmArgs ?? '').trim().split(/\s+/)) {
+    if (token) jvmArgs.push(token);
+  }
   // v1 语义：实例 launchArgs（如 "-Xmx1G"）紧随固定 -Xmx 注入——JVM 对重复 -Xmx 取后者，实例覆盖全局。
   for (const token of (context.launchArgs ?? '').trim().split(/\s+/)) {
     if (token) jvmArgs.push(token);

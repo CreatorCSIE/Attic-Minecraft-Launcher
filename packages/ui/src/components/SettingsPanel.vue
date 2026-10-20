@@ -1,214 +1,474 @@
 <script setup lang="ts">
 /**
- * 设置面板 —— Java 路径（含探测全候选面板，风险 #7）、内存、端点（下次启动生效）、主题。
- * 写入统一走桥 setSettings（合并落盘属 runtime）；UI 不碰文件（戒律 #1）。
+ * 设置面板（BlockHelm 形态重写，用户定稿）：左栏分区导航 + 右栏详情，即改即存（防抖 400ms，无保存按钮）。
+ * 分区：通用 / 语言 / 启动与内存 / Java / 外观 / 关于 / 开发者设置；末项「建议与反馈」弹对话框不切页。
+ * 启动/Java/关于属重组件（SettingsLaunch/SettingsJava/SettingsAbout）；
+ * 语言热切换（setLocale 即时 + settings.language 单一真相）；主题仅模式可用，强调色/背景占位。
+ * 宿主动作（打开目录/对话框/清理）无桥时禁用——demo 排版靠假 SystemInfo，动作不伪装可用。
  */
-import { reactive, ref, watch } from 'vue';
-import { useI18n } from '../i18n';
+import { computed, ref, type Ref } from 'vue';
+import type { EndpointOverrides } from '@attic/core-spec';
+import type { Locale } from '../i18n';
+import { AVAILABLE_LOCALES, useI18n } from '../i18n';
+import { useBridge } from '../composables/useBridge';
 import { useSettings } from '../composables/useSettings';
-import { useJava } from '../composables/useJava';
-import type { EndpointOverrides, ThemeMode } from '@attic/core-spec';
+import { useSysInfo } from '../composables/useSysInfo';
+import { useSettingsNav } from '../composables/useSettingsNav';
+import { useDebouncedField } from '../composables/useDebouncedField';
+import SettingToggle from './SettingToggle.vue';
+import SettingsLaunch from './SettingsLaunch.vue';
+import SettingsJava from './SettingsJava.vue';
+import SettingsAbout from './SettingsAbout.vue';
+import AppDialog from './AppDialog.vue';
+import ConfirmDialog from './ConfirmDialog.vue';
 
-const { t } = useI18n();
-const { settings, loaded, saving, themeMode, patch, setTheme } = useSettings();
-const { report, loading: javaLoading, error: javaError, detect } = useJava();
+const { t, locale, setLocale } = useI18n();
+const { hasBridge, bridge } = useBridge();
+const { settings, patch } = useSettings();
+const { info } = useSysInfo();
+const { activeSection } = useSettingsNav();
 
-const form = reactive({
-  javaPath: '',
-  maxMemoryMb: 1024,
-  username: '',
-  endpoints: {
-    versionList: '',
-    filesBase: '',
-    legacyfixRelease: '',
-    zuluMetadata: '',
-    mojangManifest: '',
-  } as Record<keyof EndpointOverrides, string>,
+const ENDPOINT_KEYS: (keyof EndpointOverrides)[] = [
+  'versionList',
+  'filesBase',
+  'legacyfixRelease',
+  'zuluMetadata',
+  'mojangManifest',
+];
+
+const usernameLocal = useDebouncedField(
+  () => settings.value.username ?? '',
+  (v) => void patch({ username: v.trim() || undefined }),
+);
+/** 端点逐键防抖合并写（undefined 键 = 回落内置缺省；下次启动应用后生效）。 */
+const endpointLocals = Object.fromEntries(
+  ENDPOINT_KEYS.map((k) => [
+    k,
+    useDebouncedField(
+      () => settings.value.endpoints?.[k] ?? '',
+      (v) => void patch({ endpoints: { ...settings.value.endpoints, [k]: v.trim() || undefined } }),
+    ),
+  ]),
+) as Record<keyof EndpointOverrides, { local: Ref<string> }>;
+
+// —— 通用栏：数据根（单根+更换/打开，重启生效）与日志（打开/清理/诊断开关） ——
+const dataRoot = computed(() => info.value?.dataRoot ?? '');
+const logsDir = computed(() => info.value?.logsDir ?? '');
+/** 已设定但尚未生效的更换目标（≠ 当前应用根时提示重启）。 */
+const pendingRoot = computed(() => {
+  const o = settings.value.rootOverride;
+  return o && o !== info.value?.dataRoot ? o : '';
 });
 
-function syncForm(): void {
-  form.javaPath = settings.value.javaPath ?? '';
-  form.maxMemoryMb = settings.value.maxMemoryMb ?? 1024;
-  form.username = settings.value.username ?? '';
-  const ep = settings.value.endpoints ?? {};
-  (Object.keys(form.endpoints) as (keyof EndpointOverrides)[]).forEach((k) => {
-    form.endpoints[k] = ep[k] ?? '';
-  });
+const diagnosticLog = computed(() => settings.value.diagnosticLog ?? false);
+
+async function openDir(target: 'data-root' | 'logs-dir'): Promise<void> {
+  await bridge.openSpecialDir(target);
 }
 
-watch(loaded, (v) => {
-  if (v) syncForm();
-});
-
-const saved = ref(false);
-
-function cleanEndpoints(): EndpointOverrides | undefined {
-  const out: EndpointOverrides = {};
-  let any = false;
-  (Object.keys(form.endpoints) as (keyof EndpointOverrides)[]).forEach((k) => {
-    const val = form.endpoints[k].trim();
-    if (val) {
-      out[k] = val;
-      any = true;
-    }
-  });
-  return any ? out : undefined;
+async function changeRoot(): Promise<void> {
+  const res = await bridge.pickDirectory();
+  if (!res.ok || !res.value) return;
+  await patch({ rootOverride: res.value });
 }
 
-async function onSave(): Promise<void> {
-  saved.value = false;
-  const ok = await patch({
-    javaPath: form.javaPath.trim() || undefined,
-    maxMemoryMb: form.maxMemoryMb,
-    username: form.username.trim() || undefined,
-    endpoints: cleanEndpoints(),
-  });
-  saved.value = ok;
+const clearOpen = ref(false);
+const clearing = ref(false);
+const clearMsg = ref('');
+
+async function doClearLogs(): Promise<void> {
+  clearing.value = true;
+  const res = await bridge.clearLogs();
+  clearing.value = false;
+  clearOpen.value = false;
+  if (res.ok) clearMsg.value = res.value > 0 ? t('settings.general.cleared', { n: res.value }) : t('settings.general.clearNothing');
 }
 
-const themes: ThemeMode[] = ['dark', 'light', 'system'];
+// —— 语言栏：热切换（即时应用 + 持久化到 settings.language 单一真相） ——
+async function chooseLanguage(code: string): Promise<void> {
+  if (code === locale.value) return;
+  setLocale(code as Locale);
+  await patch({ language: code });
+}
+
+// —— 主题栏 ——
+const themes = ['dark', 'light', 'system'] as const;
+
+// —— 反馈弹屏（两条都指 Issues，模板区分；用户拍板） ——
+const feedbackOpen = ref(false);
+const FEATURE_URL = 'https://github.com/CreatorCSIE/Attic-Minecraft-Launcher/issues/new?template=feature-request';
+const BUG_URL = 'https://github.com/CreatorCSIE/Attic-Minecraft-Launcher/issues/new?template=bug-report';
+
+function feedback(url: string): void {
+  feedbackOpen.value = false;
+  void bridge.openExternalUrl(url);
+}
 </script>
 
 <template>
-  <section class="settings">
-    <div class="head">
-      <span class="label">{{ t('settings.title') }}</span>
-    </div>
-
-    <!-- Java -->
-    <div class="block">
-      <div class="block-head">
-        <span class="label">{{ t('settings.java') }}</span>
-        <button class="mini" :disabled="javaLoading" @click="detect()">
-          {{ javaLoading ? t('common.loading') : t('settings.javaDetect') }}
-        </button>
-      </div>
-      <input v-model="form.javaPath" class="input mono" type="text" :placeholder="t('settings.javaAuto')" />
-
-      <div v-if="javaError" class="err">{{ t('common.error') }}：{{ javaError }}</div>
-
-      <div v-else-if="report" class="java-report">
-        <div class="sub">
-          <span class="label">{{ t('settings.selection') }}</span>
-          <span v-if="report.selection.install" class="mono sel">
-            {{ report.selection.install.executable }}
-            <span class="tag">Java {{ report.selection.install.major }} · {{ report.selection.install.architecture }}</span>
-          </span>
-          <span v-else class="muted">{{ t('settings.noneDetected') }}</span>
-          <p class="reason">{{ report.selection.reason }}</p>
-          <p v-if="report.selection.usedFallback" class="warn">{{ t('settings.usedFallback') }}</p>
-        </div>
-
-        <div v-if="report.installs.length" class="sub">
-          <span class="label">{{ t('settings.candidates') }}</span>
-          <ul class="rows">
-            <li v-for="i in report.installs" :key="i.executable">
-              <span class="mono">{{ i.executable }}</span>
-              <span class="tag">{{ i.raw }} · {{ i.architecture }} · {{ i.source }}</span>
-            </li>
-          </ul>
-        </div>
-
-        <div v-if="report.failures.length" class="sub">
-          <span class="label">{{ t('settings.failures') }}</span>
-          <ul class="rows">
-            <li v-for="f in report.failures" :key="f.executable">
-              <span class="mono">{{ f.executable }}</span>
-              <span class="tag tag--err">{{ f.reason }}</span>
-            </li>
-          </ul>
-        </div>
-
-        <div v-if="report.diagnostics.length" class="sub">
-          <span class="label">{{ t('settings.diagnostics') }}</span>
-          <ul class="rows muted">
-            <li v-for="(d, idx) in report.diagnostics" :key="idx">{{ d }}</li>
-          </ul>
-        </div>
-      </div>
-    </div>
-
-    <!-- 内存 / 用户名 -->
-    <div class="grid">
-      <div class="block">
-        <label class="label" for="mem">{{ t('settings.memory') }}</label>
-        <input id="mem" v-model.number="form.maxMemoryMb" class="input tabular" type="number" min="256" step="128" />
-      </div>
-      <div class="block">
-        <label class="label" for="user">{{ t('settings.username') }}</label>
-        <input id="user" v-model="form.username" class="input" type="text" placeholder="Player" />
-      </div>
-    </div>
-
-    <!-- 主题 -->
-    <div class="block">
-      <span class="label">{{ t('settings.theme') }}</span>
-      <div class="segmented">
-        <button
-          v-for="th in themes"
-          :key="th"
-          class="seg"
-          :class="{ 'seg--active': themeMode === th }"
-          @click="setTheme(th)"
-        >
-          {{ t(`settings.theme${th.charAt(0).toUpperCase()}${th.slice(1)}`) }}
-        </button>
-      </div>
-    </div>
-
-    <!-- 端点 -->
-    <div class="block">
-      <div class="block-head">
-        <span class="label">{{ t('settings.endpoints') }}</span>
-        <span class="note">{{ t('settings.endpointsNote') }}</span>
-      </div>
-      <div class="grid grid--2">
-        <input v-model="form.endpoints.versionList" class="input mono" type="text" placeholder="versionList" />
-        <input v-model="form.endpoints.filesBase" class="input mono" type="text" placeholder="filesBase" />
-        <input v-model="form.endpoints.legacyfixRelease" class="input mono" type="text" placeholder="legacyfixRelease" />
-        <input v-model="form.endpoints.zuluMetadata" class="input mono" type="text" placeholder="zuluMetadata" />
-        <input v-model="form.endpoints.mojangManifest" class="input mono" type="text" placeholder="mojangManifest" />
-      </div>
-    </div>
-
-    <div class="foot">
-      <button class="primary" :disabled="saving" @click="onSave">
-        {{ saving ? t('common.loading') : t('settings.save') }}
+  <div class="settings">
+    <!-- 左栏：分区导航（BlockHelm SecondaryMenu 形态；反馈为弹屏项不切页） -->
+    <nav class="menu" :aria-label="t('settings.title')">
+      <span class="menu-title">{{ t('settings.title') }}</span>
+      <button
+        class="menu-item"
+        :class="{ 'menu-item--active': activeSection === 'general' }"
+        @click="activeSection = 'general'"
+      >
+        <!-- lucide: settings -->
+        <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+          <circle cx="12" cy="12" r="3" />
+        </svg>
+        <span class="menu-label">{{ t('settings.nav.general') }}</span>
       </button>
-      <span v-if="saved" class="saved">{{ t('settings.saved') }}</span>
+      <button
+        class="menu-item"
+        :class="{ 'menu-item--active': activeSection === 'language' }"
+        @click="activeSection = 'language'"
+      >
+        <!-- lucide: globe -->
+        <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="10" />
+          <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" />
+          <path d="M2 12h20" />
+        </svg>
+        <span class="menu-label">{{ t('settings.nav.language') }}</span>
+      </button>
+      <button
+        class="menu-item"
+        :class="{ 'menu-item--active': activeSection === 'launch' }"
+        @click="activeSection = 'launch'"
+      >
+        <!-- lucide: rocket -->
+        <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z" />
+          <path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z" />
+          <path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0" />
+          <path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5" />
+        </svg>
+        <span class="menu-label">{{ t('settings.nav.launch') }}</span>
+      </button>
+      <button
+        class="menu-item"
+        :class="{ 'menu-item--active': activeSection === 'java' }"
+        @click="activeSection = 'java'"
+      >
+        <!-- lucide: coffee -->
+        <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M17 8h1a4 4 0 1 1 0 8h-1" />
+          <path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z" />
+          <path d="M6 2v2" />
+          <path d="M10 2v2" />
+          <path d="M14 2v2" />
+        </svg>
+        <span class="menu-label">{{ t('settings.nav.java') }}</span>
+      </button>
+      <button
+        class="menu-item"
+        :class="{ 'menu-item--active': activeSection === 'theme' }"
+        @click="activeSection = 'theme'"
+      >
+        <!-- 对比圆（主题/外观通用形态：右半实心） -->
+        <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="10" />
+          <path d="M12 2v20" />
+          <path d="M12 2a10 10 0 0 1 0 20z" fill="currentColor" stroke="none" />
+        </svg>
+        <span class="menu-label">{{ t('settings.nav.theme') }}</span>
+      </button>
+      <button
+        class="menu-item"
+        :class="{ 'menu-item--active': activeSection === 'about' }"
+        @click="activeSection = 'about'"
+      >
+        <!-- lucide: info -->
+        <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="10" />
+          <path d="M12 16v-4" />
+          <path d="M12 8h.01" />
+        </svg>
+        <span class="menu-label">{{ t('settings.nav.about') }}</span>
+      </button>
+      <button
+        class="menu-item"
+        :class="{ 'menu-item--active': activeSection === 'developer' }"
+        @click="activeSection = 'developer'"
+      >
+        <!-- lucide: code -->
+        <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="m16 18 6-6-6-6" />
+          <path d="m8 6-6 6 6 6" />
+        </svg>
+        <span class="menu-label">{{ t('settings.nav.developer') }}</span>
+      </button>
+
+      <button class="menu-item" @click="feedbackOpen = true">
+        <!-- lucide: message-square -->
+        <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+        </svg>
+        <span class="menu-label">{{ t('settings.nav.feedback') }}</span>
+      </button>
+    </nav>
+
+    <!-- 右栏：详情（内容列在剩余空间内浮中，同旧页用户指定） -->
+    <div class="detail">
+      <div class="detail-inner">
+        <!-- 通用 -->
+        <section v-if="activeSection === 'general'" class="pane">
+          <h3 class="pane-title">{{ t('settings.sectionGeneral') }}</h3>
+
+          <div class="card">
+            <h4 class="group-title">{{ t('settings.general.dataRoot') }}</h4>
+            <p class="row-desc">{{ t('settings.general.dataRootDesc') }}</p>
+            <p class="path mono" :title="dataRoot">{{ dataRoot || '—' }}</p>
+            <div class="btn-row">
+              <button class="mini" :disabled="!hasBridge" @click="openDir('data-root')">{{ t('settings.general.open') }}</button>
+              <button class="mini" :disabled="!hasBridge" @click="changeRoot">{{ t('settings.general.change') }}</button>
+            </div>
+            <p v-if="pendingRoot" class="warn">{{ t('settings.general.rootPending', { path: pendingRoot }) }}</p>
+          </div>
+
+          <div class="card">
+            <h4 class="group-title">{{ t('settings.general.logs') }}</h4>
+            <p class="path mono" :title="logsDir">{{ logsDir || '—' }}</p>
+            <div class="btn-row">
+              <button class="mini" :disabled="!hasBridge" @click="openDir('logs-dir')">{{ t('settings.general.open') }}</button>
+              <button class="mini" :disabled="!hasBridge" @click="clearOpen = true">{{ t('settings.general.logsClear') }}</button>
+            </div>
+            <p v-if="clearMsg" class="ok-line">{{ clearMsg }}</p>
+            <SettingToggle
+              :model-value="diagnosticLog"
+              :label="t('settings.general.diagLog')"
+              :desc="t('settings.general.diagLogDesc')"
+              @update:model-value="patch({ diagnosticLog: $event })"
+            />
+          </div>
+        </section>
+
+        <!-- 语言 -->
+        <section v-else-if="activeSection === 'language'" class="pane">
+          <h3 class="pane-title">{{ t('settings.sectionLanguage') }}</h3>
+          <div class="card">
+            <div class="field">
+              <label class="label" for="lang">{{ t('settings.language.label') }}</label>
+              <select id="lang" class="input select" :value="locale" @change="chooseLanguage(($event.target as HTMLSelectElement).value)">
+                <option v-for="l in AVAILABLE_LOCALES" :key="l.code" :value="l.code">{{ l.name }}</option>
+              </select>
+              <p class="row-desc">{{ t('settings.language.hint') }}</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- 启动与内存 / Java / 关于：重组件 -->
+        <SettingsLaunch v-else-if="activeSection === 'launch'" />
+        <SettingsJava v-else-if="activeSection === 'java'" />
+        <SettingsAbout v-else-if="activeSection === 'about'" />
+
+        <!-- 外观 -->
+        <section v-else-if="activeSection === 'theme'" class="pane">
+          <h3 class="pane-title">{{ t('settings.sectionTheme') }}</h3>
+          <div class="card">
+            <div class="field">
+              <span class="label">{{ t('settings.theme.mode') }}</span>
+              <div class="segmented">
+                <button
+                  v-for="th in themes"
+                  :key="th"
+                  class="seg"
+                  :class="{ 'seg--active': (settings.theme ?? 'system') === th }"
+                  @click="patch({ theme: th })"
+                >
+                  {{ t(`settings.theme.${th}`) }}
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="soon-row">
+              <span class="row-name">
+                {{ t('settings.theme.accent') }}
+                <span class="soon">{{ t('settings.soon') }}</span>
+              </span>
+              <p class="row-desc">{{ t('settings.theme.accentDesc') }}</p>
+            </div>
+            <div class="soon-row">
+              <span class="row-name">
+                {{ t('settings.theme.background') }}
+                <span class="soon">{{ t('settings.soon') }}</span>
+              </span>
+              <p class="row-desc">{{ t('settings.theme.backgroundDesc') }}</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- 开发者设置（用户拍板：endpoints+username 收编于此，发行时再评估可见性） -->
+        <section v-else class="pane">
+          <h3 class="pane-title">{{ t('settings.sectionDeveloper') }}</h3>
+          <div class="card">
+            <div class="field">
+              <label class="label" for="dev-user">{{ t('settings.developer.username') }}</label>
+              <input id="dev-user" v-model="usernameLocal.local.value" class="input" type="text" placeholder="Player" />
+              <p class="row-desc">{{ t('settings.developer.usernameDesc') }}</p>
+            </div>
+          </div>
+          <div class="card">
+            <div class="head-row">
+              <h4 class="group-title">{{ t('settings.developer.endpoints') }}</h4>
+              <span class="note">{{ t('settings.developer.endpointsNote') }}</span>
+            </div>
+            <div v-for="k in ENDPOINT_KEYS" :key="k" class="field">
+              <label class="label" :for="`ep-${k}`">{{ k }}</label>
+              <input :id="`ep-${k}`" v-model="endpointLocals[k].local.value" class="input mono" type="text" />
+            </div>
+          </div>
+        </section>
+      </div>
     </div>
-  </section>
+
+    <!-- 反馈弹屏（不切页，纯外链两条大按钮；BlockHelm Dialog_Feedback 同款） -->
+    <AppDialog :open="feedbackOpen" @close="feedbackOpen = false">
+      <header class="fb-head">
+        <h2 class="fb-title">{{ t('settings.feedback.title') }}</h2>
+        <p class="fb-sub">{{ t('settings.feedback.subtitle') }}</p>
+      </header>
+      <div class="fb-list">
+        <button class="fb-item" @click="feedback(FEATURE_URL)">
+          <!-- lucide: lightbulb -->
+          <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5" />
+            <path d="M9 18h6" />
+            <path d="M10 22h4" />
+          </svg>
+          <span class="fb-info">
+            <span class="fb-name">{{ t('settings.feedback.feature') }}</span>
+            <span class="fb-desc">{{ t('settings.feedback.featureDesc') }}</span>
+          </span>
+        </button>
+        <button class="fb-item" @click="feedback(BUG_URL)">
+          <!-- lucide: bug -->
+          <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="m8 2 1.88 1.88" />
+            <path d="M14.12 3.88 16 2" />
+            <path d="M9 7v1a3 3 0 0 0 6 0V7" />
+            <path d="M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3c0 3.3-2.7 6-6 6" />
+            <path d="M12 20v-9" />
+            <path d="M6.53 9C4.6 8.8 3 7.1 3 5" />
+            <path d="M6 13H2" />
+            <path d="M3 21c0-2.1 1.7-3.9 3.8-4" />
+            <path d="M20.97 5c0 2.1-1.7 3.8-3.5 4" />
+            <path d="M22 13h-4" />
+            <path d="M17.2 17c0 2.1 1.9 3.9 4 4" />
+          </svg>
+          <span class="fb-info">
+            <span class="fb-name">{{ t('settings.feedback.bug') }}</span>
+            <span class="fb-desc">{{ t('settings.feedback.bugDesc') }}</span>
+          </span>
+        </button>
+      </div>
+      <footer class="fb-foot">
+        <button class="ghost" @click="feedbackOpen = false">{{ t('common.cancel') }}</button>
+      </footer>
+    </AppDialog>
+
+    <!-- 清理日志确认（防误删） -->
+    <ConfirmDialog
+      v-model:open="clearOpen"
+      :busy="clearing"
+      :title="t('settings.general.clearConfirmTitle')"
+      :message="t('settings.general.clearConfirmMessage')"
+      @confirm="doClearLogs"
+    />
+  </div>
 </template>
 
 <style scoped>
 .settings {
   display: flex;
-  flex-direction: column;
+  flex: 1;
   gap: var(--space-5);
-  height: 100%;
+  min-height: 0;
+  padding: var(--space-5);
+}
+/* —— 左栏分区导航：与实例/账户/自定义版本页同构的 SecondaryMenuFrame 卡片列
+   （BlockHelm 实况核对：其设置页与游戏下载等页左栏为同一形态，非贴边侧栏） —— */
+.menu {
+  flex: 0 0 248px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-5) var(--space-4);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  overflow-y: auto;
+}
+.menu-title {
+  margin: 0 0 var(--space-3) var(--space-2);
+  font-size: var(--fs-xl);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: var(--fs-md);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+.menu-item:hover {
+  background-color: var(--surface-3);
+}
+.menu-item--active {
+  background-color: var(--surface-3);
+  box-shadow: inset 0 0 0 1px var(--surface-4);
+  color: var(--text-primary);
+}
+.menu-icon {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+}
+.menu-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* —— 右栏详情：滚动 + 内容列浮中（同旧页用户指定） —— */
+.detail {
+  flex: 1;
+  min-width: 0;
   min-height: 0;
   overflow-y: auto;
-  padding: var(--space-5);
-  max-width: 720px;
-  /* 组居中（用户指定）：单栏页同样水平居中，不留左侧贴边 */
+  padding: var(--space-6);
+}
+.detail-inner {
+  max-width: 680px;
   margin-inline: auto;
 }
-.head {
+.pane {
   display: flex;
-  align-items: baseline;
+  flex-direction: column;
+  gap: var(--space-4);
 }
-/* 分区标题：fs-lg 加粗（java-report 内的微标签保留 uppercase tracking 形态） */
-.head .label,
-.block > .label,
-.block-head > .label {
+.pane-title {
+  margin: 0;
   font-size: var(--fs-lg);
   font-weight: 600;
-  color: var(--text-primary);
-  letter-spacing: 0;
-  text-transform: none;
 }
-/* Settings 分区 = base-card 统一配方 */
-.block {
+.card {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
@@ -218,43 +478,68 @@ const themes: ThemeMode[] = ['dark', 'light', 'system'];
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-card);
 }
-.block-head {
+.group-title {
+  margin: 0;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.head-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.label {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.row-name {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-}
-.grid {
-  display: grid;
-  gap: var(--space-4);
-}
-.grid--2 {
-  grid-template-columns: 1fr 1fr;
-}
-/* 输入控件 inset 质感：第3级底 + 底缘内阴影 + 无边框，focus accent 投影环 */
-.input {
-  padding: var(--space-3) var(--space-4);
-  background: var(--surface-3);
-  border: none;
-  border-radius: var(--radius-md);
+  gap: var(--space-2);
+  font-size: var(--fs-sm);
+  font-weight: 600;
   color: var(--text-primary);
+}
+.row-desc {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+.path {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+  background: var(--surface-1);
+  border-radius: var(--radius-md);
   box-shadow: var(--input-inset);
-  transition: background-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.input:hover {
-  background: var(--surface-4);
-}
-.input:focus-visible {
-  outline: none;
-  box-shadow: var(--input-focus-shadow);
+.btn-row {
+  display: flex;
+  gap: var(--space-3);
 }
 .mini {
-  padding: var(--space-1) var(--space-3);
+  padding: var(--space-2) var(--space-4);
   background: transparent;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
   font-size: var(--fs-sm);
   color: var(--text-primary);
   box-shadow: var(--inset-bottom);
+  cursor: pointer;
   transition: background var(--dur-fast) var(--ease-out);
 }
 .mini:hover:not(:disabled) {
@@ -264,75 +549,63 @@ const themes: ThemeMode[] = ['dark', 'light', 'system'];
   opacity: 0.5;
   cursor: not-allowed;
 }
+.warn {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--warn);
+}
+.ok-line {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--ok);
+}
 .note {
   font-size: var(--fs-xs);
   color: var(--warn);
 }
-.err {
-  font-size: var(--fs-sm);
-  color: var(--danger);
-}
-.warn {
-  font-size: var(--fs-sm);
-  color: var(--warn);
-}
-.muted {
+.soon {
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 600;
   color: var(--text-muted);
-}
-/* 探测面板 = 卡片上的下沉井：第1级底 + 底缘内阴影 */
-.java-report {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-4);
   background: var(--surface-1);
-  border: none;
-  border-radius: var(--radius-md);
-  box-shadow: var(--input-inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
 }
-.sub {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-.sel {
-  font-size: var(--fs-sm);
-  color: var(--text-primary);
-}
-.reason {
-  font-size: var(--fs-xs);
-  color: var(--text-secondary);
-}
-.rows {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+.soon-row {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  font-size: var(--fs-xs);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--border);
+  opacity: 0.65;
 }
-.rows li {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
+.soon-row:first-child {
+  padding-top: 0;
 }
-.rows .mono {
+.soon-row:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+.input {
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-3);
+  border: none;
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  box-shadow: var(--input-inset);
+}
+.input:focus-visible {
+  outline: none;
+  box-shadow: var(--input-focus-shadow);
+}
+.mono {
   font-family: var(--font-mono);
-  color: var(--text-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
-.tag {
-  color: var(--text-muted);
-  flex: 0 0 auto;
+.select {
+  width: fit-content;
 }
-.tag--err {
-  color: var(--danger);
-}
-/* 主题分段器：第1级下沉轨道 + 内衬圆角块，激活=第4级高亮 */
+/* 主题分段器（旧 SettingsPanel 配方迁移） */
 .segmented {
   display: inline-flex;
   gap: var(--space-1);
@@ -349,6 +622,7 @@ const themes: ThemeMode[] = ['dark', 'light', 'system'];
   border: none;
   border-radius: var(--radius-sm);
   color: var(--text-secondary);
+  cursor: pointer;
   transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
 }
 .seg:hover {
@@ -358,32 +632,74 @@ const themes: ThemeMode[] = ['dark', 'light', 'system'];
   background: var(--surface-4);
   color: var(--text-primary);
 }
-.foot {
+/* —— 反馈弹屏：两条外链大按钮行（图标+标题+描述，零表单） —— */
+.fb-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.fb-title {
+  margin: 0;
+  font-size: var(--fs-xl);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.fb-sub {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+.fb-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+.fb-item {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-}
-.primary {
-  padding: var(--space-2) var(--space-5);
-  background: var(--accent);
-  color: var(--accent-ink);
-  border: none;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  background: var(--surface-3);
+  border: 1px solid var(--card-border);
   border-radius: var(--radius-md);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.fb-item:hover {
+  background: var(--surface-4);
+}
+.fb-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.fb-name {
+  font-size: var(--fs-md);
   font-weight: 600;
-  transition: background var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
 }
-.primary:hover:not(:disabled) {
-  background: var(--accent-hover);
+.fb-desc {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
 }
-.primary:active:not(:disabled) {
-  transform: scale(0.97);
+.fb-foot {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--space-4);
 }
-.primary:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
+.ghost {
+  padding: var(--space-2) var(--space-5);
+  background: var(--surface-3);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--inset-bottom);
+  color: var(--text-primary);
+  cursor: pointer;
 }
-.saved {
-  font-size: var(--fs-sm);
-  color: var(--ok);
+.ghost:hover {
+  background: var(--surface-4);
 }
 </style>

@@ -137,6 +137,52 @@ test('downloadClientJar：本地已存在且 sha1 相符则不重下', async (t)
   assert.equal(fetched, 0);
 });
 
+test('downloadClientJar：verify=false 存在即复用（损坏也不复核）', async (t) => {
+  const root = tempRoot(t);
+  fs.mkdirSync(path.join(root, 'versions'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'versions', 'c2.0.jar'), 'CORRUPT');
+  let fetched = 0;
+  const client = new BetacraftClient({
+    fetchImpl: async (url) => {
+      fetched++;
+      return fakeFetch({ [url]: 'GOOD' })(url);
+    },
+  });
+  await client.downloadClientJar({ id: 'c2.0', jar: { url: 'http://x/c2.0.jar', sha1: sha1('GOOD') } }, root, { verify: false });
+  assert.equal(fetched, 0);
+  assert.equal(fs.readFileSync(path.join(root, 'versions', 'c2.0.jar'), 'utf8'), 'CORRUPT');
+});
+
+test('downloadClientJar：repair=false 复核不符显式抛错（不静默覆盖）', async (t) => {
+  const root = tempRoot(t);
+  fs.mkdirSync(path.join(root, 'versions'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'versions', 'c2.0.jar'), 'CORRUPT');
+  const client = new BetacraftClient({ fetchImpl: fakeFetch({ 'http://x/c2.0.jar': 'GOOD' }) });
+  await assert.rejects(
+    () => client.downloadClientJar({ id: 'c2.0', jar: { url: 'http://x/c2.0.jar', sha1: sha1('GOOD') } }, root, { repair: false }),
+    /校验不符.*自动补全已禁用/,
+  );
+  assert.equal(fs.readFileSync(path.join(root, 'versions', 'c2.0.jar'), 'utf8'), 'CORRUPT');
+});
+
+test('downloadClientJar：repair=false 缺失显式抛错（不擅自下载）', async (t) => {
+  const root = tempRoot(t);
+  const client = new BetacraftClient({ fetchImpl: fakeFetch({ 'http://x/c2.0.jar': 'GOOD' }) });
+  await assert.rejects(
+    () => client.downloadClientJar({ id: 'c2.0', jar: { url: 'http://x/c2.0.jar', sha1: sha1('GOOD') } }, root, { repair: false }),
+    /缺失.*自动补全已禁用/,
+  );
+});
+
+test('downloadClientJar：缺省行为损坏时自动重下修复', async (t) => {
+  const root = tempRoot(t);
+  fs.mkdirSync(path.join(root, 'versions'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'versions', 'c2.0.jar'), 'CORRUPT');
+  const client = new BetacraftClient({ fetchImpl: fakeFetch({ 'http://x/c2.0.jar': 'GOOD' }) });
+  await client.downloadClientJar({ id: 'c2.0', jar: { url: 'http://x/c2.0.jar', sha1: sha1('GOOD') } }, root);
+  assert.equal(fs.readFileSync(path.join(root, 'versions', 'c2.0.jar'), 'utf8'), 'GOOD');
+});
+
 test('ensureLegacyfix：GitHub Release 构件匹配 + 下载落位', async (t) => {
   const root = tempRoot(t);
   const jar = 'LEGACYFIX';

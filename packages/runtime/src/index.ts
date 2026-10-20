@@ -10,6 +10,7 @@ export {
   settingsFromProps,
   applySettingsToProps,
   instanceViewFromConfig,
+  estimateMaxMemoryMb,
 } from './appSettings';
 export {
   resolveDataRoot,

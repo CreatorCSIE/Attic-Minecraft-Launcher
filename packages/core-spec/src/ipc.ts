@@ -67,7 +67,39 @@ export const IPC_CHANNELS = {
   CUSTOM_IMPORT_JAR: 'attic:custom:import-jar',
   /** 删除自定义版本（jar 与 .info 一并移除；官方版本拒绝）。 */
   CUSTOM_REMOVE: 'attic:custom:remove',
+  /** 系统/宿主快照（设置页一次性取：启动器版本/平台/数据根/日志目录/总内存/可用内存）。 */
+  SYS_INFO: 'attic:sys:info',
+  /** 打开特殊目录（数据根/日志目录；枚举参数，渲染侧不传任意路径——openPath 面收紧到白名单目标）。 */
+  SHELL_OPEN_DIR: 'attic:shell:open-dir',
+  /** 清理启动器日志目录（只删 launcher/logs 下的 *.log；返回删除个数）。 */
+  LOGS_CLEAR: 'attic:logs:clear',
+  /** 原生文件/目录对话框选择（kind 见 PickTarget；取消 = null）。 */
+  DIALOG_PICK: 'attic:dialog:pick',
+  /** 系统浏览器打开外链（宿主校验 http/https 协议，拒绝其余 scheme）。 */
+  SHELL_OPEN_URL: 'attic:shell:open-url',
 } as const;
+
+/** 可打开的特殊目录目标（SHELL_OPEN_DIR 白名单；路径解析在宿主，渲染侧只给意图）。 */
+export type SpecialDir = 'data-root' | 'logs-dir';
+
+/** 对话框选择目标（DIALOG_PICK）：java 可执行文件 / 任意目录。 */
+export type PickTarget = 'java-executable' | 'directory';
+
+/** 宿主环境快照（设置页展示 + 内存滑杆上限推导的数据源）。 */
+export interface SystemInfo {
+  /** 启动器版本（宿主注入：electron = app.getVersion()）。 */
+  launcherVersion: string;
+  /** process.platform 原样值。 */
+  platform: string;
+  /** 生效中的数据根绝对路径（rootOverride 应用后的结果）。 */
+  dataRoot: string;
+  /** 启动器日志目录（`<dataRoot>/launcher/logs`）。 */
+  logsDir: string;
+  /** 系统总物理内存 MB（取不到 = 0，UI 端滑杆回退保守上限）。 */
+  totalMemMb: number;
+  /** 系统当前可用内存 MB（取不到 = 0）。 */
+  freeMemMb: number;
+}
 
 /** 窗口控制动作：toggle-maximize 由宿主在最大化/还原间切换。 */
 export type WindowAction = 'minimize' | 'toggle-maximize' | 'close';
@@ -196,6 +228,18 @@ export interface RendererBridge {
   importCustomJar(): Promise<IpcResult<CustomVersionView | null>>;
   /** 删除自定义版本（jar + .info 一并移除；官方版本/不存在报错）。 */
   removeCustomVersion(id: string): Promise<IpcResult<void>>;
+  /** 宿主环境快照（版本/数据根/日志目录/内存——设置页多栏共用）。 */
+  getSystemInfo(): Promise<IpcResult<SystemInfo>>;
+  /** 在系统文件管理器打开特殊目录（白名单枚举，路径宿主解析）。 */
+  openSpecialDir(target: SpecialDir): Promise<IpcResult<void>>;
+  /** 清理启动器日志（launcher/logs 下 *.log），返回删除个数。 */
+  clearLogs(): Promise<IpcResult<number>>;
+  /** 原生对话框选 java 可执行文件（取消 = null）。 */
+  pickJavaExecutable(): Promise<IpcResult<string | null>>;
+  /** 原生对话框选目录（取消 = null）。 */
+  pickDirectory(): Promise<IpcResult<string | null>>;
+  /** 系统浏览器打开外链（宿主限 http/https；渲染内导航被禁止后的唯一出门口）。 */
+  openExternalUrl(url: string): Promise<IpcResult<void>>;
   /** 订阅事件，返回退订函数。 */
   on<E extends keyof AtticEventPayloads>(event: E, cb: (payload: AtticEventPayloads[E]) => void): () => void;
 }

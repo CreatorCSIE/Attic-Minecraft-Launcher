@@ -21,9 +21,10 @@ import type {
   JavaDetectionReport,
   LaunchConfig,
   RendererBridge,
+  SystemInfo,
   VersionJson,
 } from '@attic/core-spec';
-import { demoInstances, demoJavaReport, demoSettings, demoVersions, isDemo } from '../dev/demo';
+import { demoInstances, demoJavaReport, demoSettings, demoSysInfo, demoVersions, isDemo } from '../dev/demo';
 
 const NO_BRIDGE = 'no-bridge';
 
@@ -75,6 +76,23 @@ const mockBridge: RendererBridge = {
   saveCustomVersionInfo: async () => err<CustomVersionView>(NO_BRIDGE),
   importCustomJar: async () => err<CustomVersionView | null>(NO_BRIDGE),
   removeCustomVersion: async () => err<void>(NO_BRIDGE),
+  // —— 设置页宿主能力面：fs/对话框/内存属宿主语义，浏览器无真值（err 可见失败）——
+  getSystemInfo: async () => err<SystemInfo>(NO_BRIDGE),
+  openSpecialDir: async () => err<void>(NO_BRIDGE),
+  clearLogs: async () => err<number>(NO_BRIDGE),
+  pickJavaExecutable: async () => err<string | null>(NO_BRIDGE),
+  pickDirectory: async () => err<string | null>(NO_BRIDGE),
+  // 外链是唯一浏览器可忠实实现的"宿主动作"：window.open 即系统默认浏览器行为，照常放行。
+  openExternalUrl: async (url: string) => {
+    try {
+      const parsed = new URL(url);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') throw new Error(`仅允许 http/https：${parsed.protocol}`);
+      window.open(url, '_blank', 'noopener');
+      return ok<void>(undefined);
+    } catch (error) {
+      return err<void>(error instanceof Error ? error.message : String(error));
+    }
+  },
   on: () => () => {},
 };
 
@@ -91,6 +109,8 @@ function demoBridge(): RendererBridge {
     listInstances: async () => ok(demoInstances),
     getSettings: async () => ok<AppSettings>(demoSettings),
     detectJava: async () => ok<JavaDetectionReport>(demoJavaReport),
+    // 假宿主快照：让设置页通用/内存/关于栏在浏览器里排出真稿（动作类仍走 mock err）。
+    getSystemInfo: async () => ok<SystemInfo>(demoSysInfo),
   };
 }
 

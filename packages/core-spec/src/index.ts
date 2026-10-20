@@ -16,7 +16,10 @@ export type {
   IpcEventName,
   IpcResult,
   LaunchRequest,
+  PickTarget,
   RendererBridge,
+  SpecialDir,
+  SystemInfo,
   WindowAction,
 } from './ipc';
 export type {
@@ -54,6 +57,7 @@ export type {
   AppSettings,
   EndpointOverrides,
   InstanceView,
+  MemoryMode,
   ThemeMode,
 } from './settings';
 export { INSTANCE_ADDONS, DEFAULT_ADDONS } from './settings';

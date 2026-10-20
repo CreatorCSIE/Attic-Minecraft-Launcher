@@ -64,6 +64,19 @@ test('extraJvmArgs 追加在固定组末尾；gameParams 以 --k v 追加', () =
   assert.deepEqual(config.gameArgs.slice(-4), ['--server', '1.2.3.4', '--port', '25565']);
 });
 
+test('组序契约：固定堆参数 → 全局 jvmArgs → 实例 launchArgs（后者 JVM 胜出覆盖）', () => {
+  const versionJson = { id: 'c2.0', mainClass: 'net.minecraft.client.Minecraft' };
+  const context = { ...baseContext(), globalJvmArgs: '-XX:+UseSerialGC  -Dg=1', launchArgs: '-Xmx2G' };
+  const config = assembleLaunchConfig(versionJson, context);
+  assert.deepEqual(config.jvmArgs.slice(0, 5), [
+    '-Xmx1024m',
+    '-XX:+UseSerialGC',
+    '-Dg=1',
+    '-Xmx2G',
+    '-Djava.util.Arrays.useLegacyMergeSort=true',
+  ]);
+});
+
 test('minMemoryMb 下发 -Xms 且进 LaunchConfig', () => {
   const versionJson = { id: 'c2.0', mainClass: 'net.minecraft.client.Minecraft' };
   const context = { ...baseContext(), minMemoryMb: 256 };

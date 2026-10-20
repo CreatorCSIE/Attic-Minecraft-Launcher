@@ -204,15 +204,30 @@ export class BetacraftClient {
     fs.writeFileSync(dest, text, 'utf8');
   }
 
-  /** 客户端 jar → versions/<id>.jar；本地已存在且 sha1 相符则跳过。 */
-  async downloadClientJar(json: VersionJson, root: string): Promise<void> {
+  /**
+   * 客户端 jar → versions/<id>.jar（设置页双开关真实接线，BlockHelm「启动前检查/补全」语义）：
+   * - `verify=false`（checkIntegrity 关）：本地存在即复用，跳过 sha1 复核；
+   * - `repair=false`（fixMissing 关）：缺失或复核不符时显式报错，不擅自重下载/覆盖。
+   * 缺省（都不传）= 恒复核 + 自动补全 = 历史行为，测试与其他调用点零改动。
+   */
+  async downloadClientJar(
+    json: VersionJson,
+    root: string,
+    opts: { verify?: boolean; repair?: boolean } = {},
+  ): Promise<void> {
     const url = json.jar?.url ?? json.downloads?.client?.url;
     if (!url) throw new Error(`版本 ${json.id} 无 jar 下载地址`);
     const sha1 = json.jar?.sha1 ?? json.downloads?.client?.sha1;
     const dest = clientJarFile(root, json.id);
     if (fs.existsSync(dest)) {
-      if (!sha1) return;
+      if (!sha1 || opts.verify === false) return;
       if ((await hashFile(dest, 'sha1')) === sha1.toLowerCase()) return;
+      // 复核不符 = 本地损坏；补全关闭时把决定权交回用户（可见失败，不静默覆盖）
+      if (opts.repair === false) {
+        throw new Error(`版本 ${json.id} 的 jar 校验不符（本地文件损坏），自动补全已禁用——请手动删除该 jar 或开启补全开关`);
+      }
+    } else if (opts.repair === false) {
+      throw new Error(`版本 ${json.id} 的 jar 缺失，自动补全已禁用——请开启补全开关或手动放入 versions/${json.id}.jar`);
     }
     await this.download(url, dest, 'client-jar', json.id, sha1 ? { algo: 'sha1', value: sha1 } : undefined);
   }

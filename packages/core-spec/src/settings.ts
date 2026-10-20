@@ -8,6 +8,9 @@
 /** 主题模式（持久化以便双壳一致；解析/应用属渲染侧）。 */
 export type ThemeMode = 'dark' | 'light' | 'system';
 
+/** 内存分配模式（BlockHelm 语义移植）：auto = 宿主按总内存估算；manual = 用 maxMemoryMb。 */
+export type MemoryMode = 'auto' | 'manual';
+
 /**
  * 端点覆盖（风险 #1）：全部为可 IPC 序列化的纯字符串。
  * 函数形态的 `versionJson(id)`/`assetIndex(id)` 由 `filesBase` 在 runtime 侧派生，
@@ -28,14 +31,36 @@ export interface EndpointOverrides {
 
 /** 全局应用设置（`launcher.settings` 的渲染侧视图；缺省字段 = 沿用宿主默认）。 */
 export interface AppSettings {
-  /** 手动 Java 路径；缺省 = 自动探测（探测失败再 Zulu 供给，风险 #7）。 */
+  /** 手动 Java 路径；缺省 = 自动探测（探测失败再 Zulu 供给，风险 #7）。设置即手动模式，清空即回自动（Java 栏双态由此派生）。 */
   javaPath?: string;
-  /** 堆内存上限 MB；缺省 = 1024。 */
+  /** 堆内存上限 MB；缺省 = 1024（memoryMode=auto 时被宿主估算值取代）。 */
   maxMemoryMb?: number;
+  /** 内存分配模式；缺省 = manual（保持老用户/老档案既有的定值 1024 语义，auto 属 opt-in）。 */
+  memoryMode?: MemoryMode;
   /** 离线/默认用户名；缺省 = Player。 */
   username?: string;
   /** 主题；缺省 = system。 */
   theme?: ThemeMode;
+  /** 启动器界面语言（i18n locale 键，如 `zh-CN`/`en`）；缺省 = 渲染侧默认。渲染侧热切换生效，无重启语义。 */
+  language?: string;
+  /**
+   * 全局 JVM 参数（BlockHelm 语义：固定 `-Xmx/-Xms` 之后、实例 launchArgs 之前注入，
+   * 实例级同名参数按 JVM「后者胜」规则覆盖全局）。空白分隔。
+   */
+  jvmArgs?: string;
+  /** 启动前复核版本 jar sha1；缺省 true。false = 本地存在即复用（大 jar 省哈希时间，坏文件不发现）。 */
+  checkIntegrity?: boolean;
+  /** 缺失/损坏自动补全（重下载）；缺省 true，仅在 checkIntegrity 生效时有意义。false = 发现问题显式报错，不擅动文件。 */
+  fixMissing?: boolean;
+  /** 启动成功后最小化主窗（宿主窗行为）；缺省 false。 */
+  minimizeOnLaunch?: boolean;
+  /** 诊断日志：每次启动都写 launcher/logs（普通启动也落盘，testLaunch 通道不受此开关影响恒写）；缺省 false。 */
+  diagnosticLog?: boolean;
+  /**
+   * 数据根覆盖（更换目录逃生舱）：下次启动应用后生效——root 属构造级配置，
+   * 宿主启动时从平台默认根的 launcher.settings 读本键。portable/env 覆盖优先级更高。
+   */
+  rootOverride?: string;
   /**
    * LegacyFix 关卡存档模式（JVM 属性 `lf.proxy.levelServer` 直通）：
    * `local`=强制本地单人存档；URL=在线关卡代理；缺省=LegacyFix 一次性对话框。
