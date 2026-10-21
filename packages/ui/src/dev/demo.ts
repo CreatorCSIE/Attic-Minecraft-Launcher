@@ -114,7 +114,8 @@ export const demoSettings: AppSettings = {
 
 /** 假宿主快照（16G 机器场景）：设置页通用/内存滑杆上限/关于版本号在 demo 里有真形状可排。 */
 export const demoSysInfo: SystemInfo = {
-  launcherVersion: '0.0.0-demo',
+  // 纯版本号：`-dev`/`-demo` 标注统一由关于页运行面后缀合成（假宿主也演「宿主零感知」语义）
+  launcherVersion: '0.0.0',
   platform: 'win32',
   dataRoot: 'C:\\Users\\Player\\AppData\\Roaming\\.attic',
   logsDir: 'C:\\Users\\Player\\AppData\\Roaming\\.attic\\launcher\\logs',

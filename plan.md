@@ -226,6 +226,7 @@
 - [ ] 能力探测并入：字节码判定 `resizable`/`supportsFullscreen` 自动填充版本表（MCANextGen 资产，可反哺上游）
 - [ ] 与 Betacraft 的协作界面评估（我们做壳、他们做数据/修复的分工是否可正式化）
 - [ ] addons 重启路径（若需求真实存在）：优先给 legacyfix 提 GameModeSwitch/QuitGame/Fullscreen 补丁（上游空缺清单已盘点，见数据目录布局注记），而非恢复 wrapper 通道；仅当 addons 生态无法补丁化时才评估 wrapper container 字段
+- [ ] **i18n 全量人工润色（用户反馈 2026-10-21：部分句子/词语用语生硬）**：现有 zh-CN/en 文案多为随功能落地时的直译/机翻初稿（Mods 页、自定义版本页、设置页等新节尤甚），需逐页功能核对语境后完善表达——键面零改动（双语镜像 + `contract.test.js` 键集绊线不动），只改 value 措辞；核对时顺带清理中英混排不一致（如「下载中…」「已安装」类状态词的全页统一口径）。
 
 ## 8. 风险登记
 

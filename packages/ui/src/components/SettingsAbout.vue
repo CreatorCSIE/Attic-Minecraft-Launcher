@@ -9,6 +9,7 @@
 import { useI18n } from '../i18n';
 import { useBridge } from '../composables/useBridge';
 import { useSysInfo } from '../composables/useSysInfo';
+import { isDemo } from '../dev/demo';
 import AppSelect from './AppSelect.vue';
 
 const { t } = useI18n();
@@ -17,6 +18,11 @@ const { info } = useSysInfo();
 
 const REPO_URL = 'https://github.com/CreatorCSIE/Attic-Minecraft-Launcher';
 const LICENSE_URL = `${REPO_URL}/blob/HEAD/LICENSE`;
+
+// 运行面后缀（宿主版本号零感知，标注全在 UI 侧合成）：
+// vite dev server（pnpm/npm run dev）下 DEV=true → `-dev`；?demo=1 时续接 `-demo`
+// （isDemo 仅 dev 存活，顺序恒为 -dev-demo）；构建产物两态恒 false，后缀整体消失。
+const versionSuffix = `${import.meta.env.DEV ? '-dev' : ''}${isDemo() ? '-demo' : ''}`;
 
 interface ReferenceProject {
   name: string;
@@ -56,7 +62,7 @@ function openUrl(url: string): void {
         </span>
         <div>
           <p class="head-name">{{ t('app.title') }}</p>
-          <p v-if="info" class="head-version mono">v{{ info.launcherVersion }}</p>
+          <p v-if="info" class="head-version mono">v{{ info.launcherVersion }}{{ versionSuffix }}</p>
         </div>
       </div>
       <div class="head-actions">
