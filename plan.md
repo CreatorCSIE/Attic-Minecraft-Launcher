@@ -187,9 +187,20 @@
 - **macOS（WKWebView，随系统）**：10.10 起系统内置、随 OS 更新，**不受支持版本不再更新 WebKit** → 没有"装 WebView"这回事，只能钉 OS 下限：`bundle.macOS.minimumSystemVersion`（Tauri 官方支持面 10.15+，对应 WebKit 608/Safari 13 等价基线）。CSS/JS 保守基线按 Safari 13 划线。
 - **Linux（webkit2gtk-4.1，发行版决定）**：无法自带运行时，最低版本 = **构建基线发行版决定**：官方口径"用最旧的受支持且仓库提供 `libwebkit2gtk-4.1-dev` 的系统构建"——Ubuntu 22.04 / Debian 12 为合格基线（webkit 2.36 ≈ Safari 16 等价）；deb 包自动声明依赖 `libwebkit2gtk-4.1-0` + `libgtk-3-0`，老发行版（如 Ubuntu 20.04 初始 2.28）装得上但 WebView 漂移——与风险 #4 缓解一致，Tier-2 定位不变。
 
+**用户侧真正可用版本下限钉死（2026-10-21，补上述"做法/档位"缺的数字锚点）**：
+- **两个天然硬锚（皆上游官方弃支持线，无需我们写 OS 检测逻辑）**：
+  - Windows 主通道锚 = **WebView2 110**：Edge/WebView2 Evergreen 运行时在 Win7/8/8.1 永久停在 109（2023-01-10 起停支持，110+ 仅 Win10）——`minimumWebview2Version: "110.0.1531.0"` 钉下即自动排除 7/8/8.1（旧系统装得到 109 但不达标 → 安装器按 webviewInstallMode 拉 bootstrap，成功后仍是 109 → 显式失败提示，天然形成"版本墙"）。有效 OS 下限 = **Win10**（1803+ 可装 WebView2，21H2+ 预装免拉）。
+  - 兜底通道锚 = **Electron 22.x**：官方官宣 22 = 最后支持 Win<10 的 major（23 起要求 Win10+，与 Chromium 110 弃支持同拍）；钉 22 线末期补丁（22.3.x，具体末版发版 SOP 时锁），OS 下限 = **Win7 SP1**（含 8.1），运行面 = Chromium 108 / Node 16 代。
+- **特性下限自检（已核，非假设）**：当前 UI 保守基线对运行面的最高要求 = Chromium **107**（折页动画 grid-template-rows 0fr→1fr 插值）；无 `:has()`（105+ 才有）、`color-mix`（111+）已规避（tokens.css 注记"基线风险 #4 规避 → 预计算 rgba"）、`backdrop-filter` 全带降级 → **两锚皆绿**（110 ≥ 107 ✓、108 ≥ 107 ✓）。macOS 已知视觉降级：0fr 插值 WebKit 需 16 → 10.15–15 的 WKWebView 上折页退化为无动画显隐（功能完整）。Linux ≥2.36（≈Safari 16）全绿。
+- **兜底通道的隐性锁（新增约束，易踩）**：runtime/core-spec 共享代码会进 Electron 22 **主进程 = Node 16 代**——`structuredClone`（Node 17+）等 API 宿主侧禁用；TS 编译 target 需确认落 ES2021 面（现状 tsconfig 待核，Phase 4 双壳 CI 闸门加 lint/lib 约束）。UI 侧 renderer 由 Chromium 108 供给，另受"≤108 ∩ ≤WebKit 608"特性天花板约束——未来引入 >108 特性须显式评估兜底降级。
+- **工具链下限（构建面，随记）**：Rust MSRV 1.90（Tauri 2.12 stable-3 政策）；此为玩家无关的 CI 面约束。
+- **已拍板（2026-10-21）**：
+  - ① **WebView2 钉 `110.0.1531.0`**（特性余量最小够用，未来引入 >110 特性时再评估上调）。落点 = `tauri.conf.json: bundle.windows.minimumWebview2Version`。
+  - ② **安装器加旧系统检测提示**（非仅文档指路）：NSIS 自定义逻辑二判——OS 版本 < Win10（6.2/6.3/6.1 = 7/8.1）或 WebView2 Evergreen 注册表键（`…\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}`，HKLM+HKCU/WOW6432Node）读到的版本 ≤109 → MessageBox 明示「本机 WebView2 已停更，请改下载 electron 兼容构件」+ releases 页 URL 常量。实现通道 = `bundle.windows.nsis.template`（自定义 NSIS 模板）挂 customInit 钩子；Phase 5 落实项，URL 占位与构件命名（`attic-electron-*`）对齐发版 SOP。
+
 ## 6. Phase 5 — 分发
 
-- [ ] Windows：Tauri NSIS 主发布；Electron 版走 electron-builder 作参考实现
+- [ ] Windows：Tauri NSIS 主发布；Electron 版走 electron-builder（同为 NSIS）= 兼容兜底通道（2026-10-21 从「参考实现」升格，细则见下方选型调研）
 - [ ] Linux：AppImage + 已知问题清单（DMABUF/Wayland 环境变量逃生舱）；Tier-2
 - [ ] macOS：ARM 为主（基线 Apple Silicon + 近两版 macOS）；未签名发布 + 右键打开教程；$99 开发者签名作为后置决策（风险 #5）
 - [ ] CI 矩阵：三平台仅构建 + 契约测试（不启动游戏）
@@ -198,6 +209,7 @@
 
 **安装包选型 + 架构矩阵早期调研（2026-10-21，来源 tauri.app distribute 文档 + tauri-bundler changelog）**：
 - **格式支持面**：Tauri bundler 原生 targets 仅 `["deb","rpm","appimage","nsis","msi","app","dmg"]` 或 `"all"`——**Inno Setup 无官方通道**（需社区外挂自写 .iss），排除；结论：Windows 不引入 Inno，维持 NSIS 主发布。
+- **「NSIS 比 Inno 好」论据展开（2026-10-21 补充）**：installer 工艺层面两者互有胜负、Inno 甚至略占优（Pascal 式脚本更易学文档更稳、LZMA2 solid 压缩略好、6.3+ 有 WoA 原生 arm64 stub——NSIS stub 仍是 x86 靠 Prism 模拟，ARM64 机器装用无感）；per-user 免管理员（MULTIUSER vs `PrivilegesRequired=lowest`）、静默参数（`/S` vs `/VERYSILENT`）两等价。选型真正的依据是**供给链三点，非工艺优劣**：① Tauri 官方 target 零维护 vs Inno 自写 `.iss` 并跟随 bundler 打包布局变化（目录结构/快捷方式/卸载注册键全自维护）；② `makensis` 有 Linux/macOS 原生二进制，装包步骤可在任一 runner 交叉出，`ISCC` 是 Windows-only——引入 Inno = CI 被迫加专职 Windows installer-build job，与「三平台仅构建+契约测试」矩阵相抵；③ Tauri updater 直接消费 `*-setup.exe`（NSIS 静默升级=通道本体），Inno 需自造与插件协议对齐的升级逻辑。加成项：**electron-builder Windows 缺省 target 同为 NSIS**——双壳同 installer 栈（静默/卸载/文档一套通用）；若 Tauri 侧引入 Inno 则一项目两套 installer 体系（Tauri 自造外挂、Electron 仍 NSIS），最差分叉。
 - **Windows NSIS vs MSI**：NSIS 出 `*-setup.exe`，可 Linux/macOS 上 `cargo-xwin` 交叉构建，且 updater 直接复用 setup 包；MSI 走 WiX v3，**只能在 Windows 上构建**（.NET 3.5 依赖需装 VBSCRIPT 可选功能），价值在企业/GPO 静默分发场景——按需后置（`targets` 加一项即可，不费力）。双轨发：NSIS 必发，MSI 可选附件。
 - **Linux 三发**：deb（Debian/Ubuntu 系）+ rpm（Fedora/openSUSE 系）+ AppImage（免 root 兜底）全发——bundler 一次构建各格式自动产出，边际成本低；AppImage 运行仍需 FUSE（Ubuntu 24.04 只带 fuse3 的发行版给 `--appimage-extract-and-run` 逃生舱，进已知问题清单）；pacman 等社区需求出现再加。
 - **macOS**：`app`（.app 目录）+ `dmg`（分发容器）两个都发，未签名 + 右键打开教程（承接上条）。
@@ -205,8 +217,27 @@
   - Windows：`x86_64-pc-windows-msvc` 必发；**arm64（`aarch64-pc-windows-msvc`）值得做**——需 VS C++ ARM64 build tools，注意 NSIS 安装器 stub 本身仍是 x86（靠 Prism 模拟运行，装在 ARM64 机器上无感），包内应用为原生 arm64；Win-on-ARM 设备保有量上升（Copilot+ PC），供给成本低。i686 32 位（`i686-pc-windows-msvc` 可构建）暂缓——仅服务 32 位老系统，而那批用户已被分流到 Electron 兜底壳（见 Phase 4 Win7 红线）。
   - macOS：ARM（Apple Silicon）为主已定；x86_64 版本靠 Rosetta 2 过渡，或 CI 加一条 `--target x86_64-apple-darwin` 发 universal dmg（`lipo` 合并，成本低，发版前决策）。
   - Linux：`x86_64` 必发；`aarch64-unknown-linux-gnu` 用 Ubuntu 22.04 arm64 runner 原生构建即可（webkit2gtk-4.1 在 arm64 仓库同源），面向树莓派 OS 64 位等 SBC 玩家——老 Minecraft 与 SBC 重叠度待社区验证，Tier-2/3。
-  - Electron 对照（同一矩阵口径）：electron-builder 支持 win x64/arm64/ia32、linux x64/arm64/armv7l、mac x64/arm64——我们的发版面：win x64（主）+ arm64（次），linux x64 + arm64（deb/rpm/AppImage），mac arm64 主 x64 次；ia32/armv7l 均暂缓。
-  - **游戏侧无关约束**：发行版架构 ≠ 游戏 JVM 架构——远古版本要 32 位 x86 JRE（Zulu 归档 x86 有、arm64 无 JRE 8 老构建则另议），壳的 arm64 发行不能替玩家解决 JVM 供给，安装器文档需说明（风险 #7 同族）。
+  - Electron 对照（同一矩阵口径）：electron-builder 支持 win x64/arm64/ia32、linux x64/arm64/armv7l、mac x64/arm64——兜底通道实际发版面：win x64 + win ia32（2026-10-21 修正：原「ia32 暂缓」与兜底定位矛盾——32 位 Win7/8.1 正是远古 MC 玩家存量大头、兜底唯一服务对象；Electron 22 全系有官方 win32-ia32 构件，官方砍线在 Electron 44，22 不受影响）；electron 的 mac/linux/arm64 构件不发（兜底卖点=老 Windows 面，见 Phase 5 兜底通道细则）。
+- **Electron 发行 = 兼容兜底通道（用户意向 2026-10-21，从「参考实现」升格为备选发行）**：
+  - **通道定位**：Tauri = 主发布（最新壳体验、updater 自动升级）；Electron = 兼容兜底——服务对象与 Phase 4 既有红线一致：Win7/8.1 老玩家（钉 **Electron 22.x** 最后支持线，23 起官方放弃）为**唯一承诺面**；Linux WebKitGTK 碎片化/老 glibc、macOS 老 WKWebView 两面由主通道基线（22.04/10.15）承接其合理部分，**比这更老的 mac/linux 面不承诺、兜底不发其构件**（2026-10-21 收窄，避免发布矩阵虚胖）。Electron 自带 Chromium，运行面确定性正是 Win7 兜底场景要的。
+  - **安装包同栈**：Windows 走 electron-builder 缺省 NSIS（与主通道同静默参数/卸载行为，文档一套），仅出 x64+ia32 两构件；不做 linux/mac 包（与发布面收窄定稿一致）。
+  - **发布面**：同一 GitHub Releases，构件命名分通道（如 `attic-tauri-*` / `attic-electron-*`）；更新通知沿用 Releases 轮询（照抄 v2 做法），latest 解析按通道前缀分轨——玩家侧「哪里下」只有一个入口，兼容需求者按文档选 electron 构件。
+  - **责任边界（必须文档明示）**：22.x 线自身 EOL，兼容通道**不回填壳侧安全更新**，按现状提供（as-is）；主通道修复不承诺同步。这是双壳维护费的真正大头——发版承诺从「一套构件」变「两套」，CI 矩阵×2（契约测试闸门本已按双壳设计，边际=构件上传与体积：Electron 包 ~90MB 级 vs Tauri ~10MB，beta 社区可接受）。
+  - **升级 vs 参考实现的区别**：参考实现=可跑即可不承诺发版；兜底通道=发版矩阵含它、issue 标签分轨（`shell:electron`）、已知问题清单独立。若发版负担超预期，降回「仅 Win7 备档、随版本滚动停更」也留了退路（构件仍在 releases，只是不再跟发）。
+  - **游戏侧无关约束**：发行版架构 ≠ 游戏 JVM 架构——远古版本要 32 位 x86 JRE（Zulu 归档 x86 有、arm64 无 JRE 8 老构建则另议），壳的 arm64 发行不能替玩家解决 JVM 供给，安装器文档需说明（风险 #7 同族）。WoA 补充：arm64 Win 设备跑 x86/x64 JRE 靠 Prism 模拟（对玩家无感，但远古 Java8 无 arm64 构建 = 只能走模拟，性能可接受——远古版本本就低负载）。
+
+**多架构维护方案与发行数定稿（2026-10-21）**：
+- **戒律**：架构数 = 设备存量 × 无替代品，两个因子缺一个就不发——架构是用户设备问题不是技术虚荣，矩阵宁小勿大（首发总额 **6 个安装包**）。
+- **两架构总方针（用户拍板 2026-10-21）**：**持续发行线严格 x86_64 + arm64 一路走**——所有跟版本迭代的构件（主通道全量、updater 轨、未来新增面）不引入第三架构，与上游收线节奏同向（Electron 44 砍 ia32、Tauri 无 i686、armv7l 天花板锁死）。唯一例外 = 兜底 `win-ia32`：它不属于"持续线"，是 Electron 22.x EOL 钉死线**同次构建多开一个 target 的一次性构件**（零后续维护，拍板保留），服务的恰是 32 位 Win7/8.1 无替代存量。心智模型：持续线两架构 = 承诺面；一次性构件 = 覆盖面，两者分开记账。
+- **首发清单**：
+  - 主通道 Tauri（4）：`win-x64` NSIS（绝对主力）；`win-arm64` NSIS（Copilot+ 世代保有量上升，构建成本≈0，见下交叉注记）；`mac-universal` dmg（**定稿采 universal 单包**：`lipo` 合并 arm64+x86_64，体积 ×~1.8 换「玩家无需自辨架构」的引导简化——远古 MC 玩家 Intel Mac 存量大，双包制选择成本高于体积成本）；`linux-x86_64` deb+rpm+AppImage（一架构三格式）。
+  - 兜底 Electron 22.x（2）：`win-x64` + `win-ia32`（32 位 Win7/8.1 存量面，修正见上）。
+- **明确暂缓（含翻案条件）**：`linux-arm64`（SBC×远古 MC 重叠未验证，社区信号出现即翻案——GH arm64 Linux runner 原生构建，边际成本低）；`armv7l`（Chromium/Electron 官方砍线在前，天花板锁死）；Tauri `i686`（32 位需求已由兜底 ia32 承接，主通道不做）；electron mac/linux（超兜底定位）。
+- **CI 编排**：一条 release workflow，jobs = 目标矩阵——`windows-latest`（x64 原生 + arm64 交叉：cargo/aarch64-msvc target + VS ARM64 库；NSIS 打包 stub 仍 x86 无所谓）、`macos-latest`（ARM runner 上 `--target aarch64,x86_64` 直出 universal）、`ubuntu-24.04`（x64；arm64 暂缓故不用 ARM runner）。**契约测试只在原生 arch runner 跑**，交叉构件 = 构建+打包+冒烟启动（`--version` 级），不做全量测试；构件统一命名 `attic-<tauri|electron>-<os>-<arch>-<ver>.<ext>`（ia32 面用户群不会自辨，命名即文档）。
+- **Updater 分轨**：Tauri updater `manifest.json` 平台键全量维护（`windows-x86_64`/`windows-aarch64`/`darwin-aarch64`+`darwin-x86_64` 两键同指 universal 构件/`linux-x86_64`）——发版 SOP 步骤化：**缺键 = 该架构用户静默收不到更新（fail 比静默好，SOP 加脚本核对清单对账）**；兜底通道无自动更新（钉 EOL 线，手动下，运维面天然归零）。
+- **防错装**：NSIS customInit 加架构 guard（x64 机误下 arm64 包、arm64 机误下 ia32 包 → 提示正确构件；与 WebView2 检测提示同一钩子位，一套模板维护）。
+- **portable 形态定稿（2026-10-21）= 目录构件，不做单文件自解压 exe**：win `zip` / linux `tar.xz`（mac `.app` 打 tar 优先级低）随 release 挂出，CI 成本一条压缩命令。**否单文件 exe 的四条理由**：① electron-builder `portable` 默认每次启动全量解包到 `%TEMP%`（~90MB 级，老机器惩罚最重），cache 模式则退化为目录包换壳；② 自解压单文件是杀软启发式误报重灾区，服务老系统反添开机拦截；③ 供给通道错位——Tauri 无 portable 官方 target（硬做=自写外挂，违「官方通道零维护」戒律），linux 单文件免装需求已被 **AppImage 满足**，真剩的只有 win/electron 面；④ portable 目标人群（U 盘/机房/无管理员权）解 zip 零门槛，且数据根外置 + `rootDir` 可配置 = 解压目录 + 指定数据根即干净 portable 语义。**升级语义**：portable 无 updater 通道，重新解压即升级（文档写明）；构件命名并入统一规范 `attic-<shell>-<os>-<arch>-<ver>-portable.<ext>`。
+- **退役纪律**：撤架构 = 公告 + 末版构件保留在 releases 永不删（历史版本可回溯）；加架构走翻案条件，不进「全矩阵齐了才体面」的心智。
 
 ## 7. Phase 6 — 后置（不承诺时间）
 
