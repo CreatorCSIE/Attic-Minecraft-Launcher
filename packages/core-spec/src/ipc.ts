@@ -7,6 +7,7 @@ import type { AccountView } from './account';
 import type { CustomInfoView, CustomVersionView } from './custom';
 import type { GameExit, GameSession, GameStatus, LaunchConfig } from './launch';
 import type { JavaDetectionReport } from './java';
+import type { ModCategoryView, ModInstallRequest } from './mods';
 import type { AppSettings, InstanceView } from './settings';
 import type { VersionJson, VersionRef } from './version';
 
@@ -72,6 +73,10 @@ export const IPC_CHANNELS = {
   CUSTOM_IMPORT_JAR: 'attic:custom:import-jar',
   /** 删除自定义版本（jar 与 .info 一并移除；官方版本拒绝）。 */
   CUSTOM_REMOVE: 'attic:custom:remove',
+  /** Mod 仓库列表（一期 = Betacraft 单源；每次全量拉取上游 JSON，宿主附 installed 标记；失败=错误，UI 空态+重试）。 */
+  MODS_LIST: 'attic:mods:list',
+  /** 安装 mod = GET info_file_url 原子落 versions/jsons/<full_name>.info + 登记 launcher/mods.json（jar 与基座合成延迟到启动）。 */
+  MODS_INSTALL: 'attic:mods:install',
   /** 系统/宿主快照（设置页一次性取：启动器版本/平台/数据根/日志目录/总内存/可用内存）。 */
   SYS_INFO: 'attic:sys:info',
   /** 打开特殊目录（数据根/日志目录；枚举参数，渲染侧不传任意路径——openPath 面收紧到白名单目标）。 */
@@ -163,6 +168,7 @@ export type DownloadItem =
   | 'version-manifest'
   | 'version-json'
   | 'client-jar'
+  | 'mod-jar'
   | 'asset-index'
   | 'asset'
   | 'library'
@@ -210,6 +216,11 @@ export interface LaunchRequest {
    * 落盘 `<root>/launcher/logs/test-launch-<ISO>.log`，并自动唤起独立控制台窗口。
    */
   testLaunch?: boolean;
+  /**
+   * 一次性以无限地图可视化器启动（启动页「≡」菜单动作项，探针命中才可发）：
+   * 注入 `-Dlf.visualizer`（与 addons 同位，§2.6），**不写实例档案**、本次启动后不留痕。
+   */
+  visualizer?: boolean;
 }
 
 /** preload/桥面：渲染进程看到的全部能力面。 */
@@ -248,8 +259,12 @@ export interface RendererBridge {
   saveCustomVersionInfo(id: string, props: Record<string, string>): Promise<IpcResult<CustomVersionView>>;
   /** 导入自定义版本 jar：宿主弹文件对话框，取消返回 ok(null)。 */
   importCustomJar(): Promise<IpcResult<CustomVersionView | null>>;
-  /** 删除自定义版本（jar + .info 一并移除；官方版本/不存在报错）。 */
+  /** 删除自定义版本（jar + .info 一并移除，mod 项联动清 mods.json 登记；官方版本/不存在报错）。 */
   removeCustomVersion(id: string): Promise<IpcResult<void>>;
+  /** Mod 仓库列表（Betacraft 单源；宿主每次全量重拉，无进程内缓存残留——v1 loadMods 追加不清空缺陷的结构性修复）。 */
+  listMods(): Promise<IpcResult<ModCategoryView[]>>;
+  /** 安装 mod（只落 .info + 登记；full_name 非法或与官方清单同名 = 宿主显式拒绝）。 */
+  installMod(request: ModInstallRequest): Promise<IpcResult<void>>;
   /** 宿主环境快照（版本/数据根/日志目录/内存——设置页多栏共用）。 */
   getSystemInfo(): Promise<IpcResult<SystemInfo>>;
   /** 在系统文件管理器打开特殊目录（白名单枚举，路径宿主解析）。 */

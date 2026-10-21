@@ -11,6 +11,7 @@ import type {
   InstanceView,
   JavaDetectionReport,
   JavaInstall,
+  ModCategoryView,
   SystemInfo,
   VersionRef,
 } from '@attic/core-spec';
@@ -120,6 +121,63 @@ export const demoSysInfo: SystemInfo = {
   totalMemMb: 16384,
   freeMemMb: 8192,
 };
+
+/** 假 Mods 仓库（形状对齐 ModCategoryView；getmods.jsp 生态的示意排布：分类→条目、installed 两态）。 */
+export const demoModCategories: ModCategoryView[] = [
+  {
+    name: 'APIs & Core',
+    mods: [
+      {
+        fullName: 'WorldAPI',
+        version: 'WorldAPI Beta 5',
+        infoFileUrl: 'http://files.betacraft.uk/repository/WorldAPI.info',
+        website: 'http://betacraft.uk/forum/index.php?threads/worldapi.42/',
+        autoupdate: true,
+        installed: true,
+      },
+      {
+        fullName: 'ModLoaderBE',
+        version: 'ModLoaderBE 1.2',
+        infoFileUrl: 'http://files.betacraft.uk/repository/ModLoaderBE.info',
+        autoupdate: false,
+        installed: false,
+      },
+    ],
+  },
+  {
+    name: 'Gameplay',
+    mods: [
+      {
+        fullName: 'Damage Indicators',
+        version: 'DI 1.0 for b1.7.3',
+        infoFileUrl: 'http://files.betacraft.uk/repository/DamageIndicators.info',
+        website: 'http://betacraft.uk/forum/index.php?threads/damage-indicators.88/',
+        autoupdate: false,
+        installed: false,
+      },
+      {
+        fullName: 'More Skins',
+        version: 'MoreSkins b1.7',
+        infoFileUrl: 'http://files.betacraft.uk/repository/MoreSkins.info',
+        autoupdate: true,
+        installed: false,
+      },
+    ],
+  },
+  {
+    name: 'Misc',
+    mods: [
+      {
+        fullName: 'Furniture Extra',
+        version: 'Furniture Extra 1.1',
+        infoFileUrl: 'http://files.betacraft.uk/repository/FurnitureExtra.info',
+        website: 'http://betacraft.uk/forum/index.php?threads/furniture-mod.103/',
+        autoupdate: false,
+        installed: false,
+      },
+    ],
+  },
+];
 
 /** 假控制台输出行（useConsole 的 demo 分支灌入，模拟远古版本启动日志）。 */
 export const demoConsoleLines: ReadonlyArray<{ stream: 'stdout' | 'stderr'; text: string }> = [

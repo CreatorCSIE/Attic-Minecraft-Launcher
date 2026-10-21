@@ -204,7 +204,7 @@ test('实例 launchArgs 紧随固定 -Xmx 注入；Applet 容器 gameArgs 末尾
 test('addons 注入：档案三态 + 勾选/取消按目录映射 -Dlf.*', () => {
   const versionJson = { id: 'b1.7.3', mainClass: 'net.minecraft.client.Minecraft' };
   // 属性表钉死 legacyfix 契约（不引目录常量，防"测试跟着实现一起写错"）
-  const ENABLE = ['vsync', 'visualizer', 'modloader', 'beta-forge', 'bouncycastle', 'showNotice'];
+  const ENABLE = ['vsync', 'visualizer', 'modloader', 'beta-forge', 'bouncycastle', 'showNotice', 'demo'];
   const DISABLE = ['skin.disable', 'proxy.disable', 'auth-on-server-join.disable'];
   const has = (c, p) => c.jvmArgs.includes(`-Dlf.${p}`);
   // 态一：老档案无 addons 键（undefined）→ 零注入，行为 = legacyfix 自身缺省
@@ -218,8 +218,9 @@ test('addons 注入：档案三态 + 勾选/取消按目录映射 -Dlf.*', () =>
   for (const p of DISABLE) assert.ok(has(allOff, p), `[] 应注入 ${p}`);
   for (const p of ENABLE) assert.ok(!has(allOff, p), `[] 不应注入 ${p}`);
   // 勾选 enable 族 = 注入正开关；disable 族保持勾选 = 不注入 .disable
-  const mixed = assembleLaunchConfig(versionJson, { ...baseContext(), addons: ['vsync', 'skins'] });
+  const mixed = assembleLaunchConfig(versionJson, { ...baseContext(), addons: ['vsync', 'skins', 'demo'] });
   assert.ok(has(mixed, 'vsync'));
+  assert.ok(has(mixed, 'demo')); // v1 Demo addon 转正项：-Dlf.demo（legacyfix 原生开关）
   assert.ok(!has(mixed, 'skin.disable'));
   assert.ok(has(mixed, 'proxy.disable'));
   // 占位项（v1 fullscreen/game-mode-switch/quit-game）勾选也不产生空属性开关
@@ -229,6 +230,26 @@ test('addons 注入：档案三态 + 勾选/取消按目录映射 -Dlf.*', () =>
   const pos = assembleLaunchConfig(versionJson, { ...baseContext(), launchArgs: '-XX:+UseG1GC', addons: ['vsync'] });
   assert.ok(pos.jvmArgs.indexOf('-XX:+UseG1GC') < pos.jvmArgs.indexOf('-Dlf.vsync'));
   assert.ok(pos.jvmArgs.indexOf('-Dlf.vsync') < pos.jvmArgs.indexOf('-Djava.util.Arrays.useLegacyMergeSort=true'));
+});
+
+test('一次性 visualizer：LaunchRequest 透传注入 -Dlf.visualizer（同 addons 位），档案携带时去重不双注', () => {
+  const versionJson = { id: 'b1.7.3', mainClass: 'net.minecraft.client.Minecraft' };
+  const count = (c) => c.jvmArgs.filter((a) => a === '-Dlf.visualizer').length;
+  // 缺省不带键 = 不注入（老行为零回归）
+  const off = assembleLaunchConfig(versionJson, baseContext());
+  assert.equal(count(off), 0);
+  // 一次性：老档案（addons undefined）也注入，位置 = addons 族后、固定收尾属性前
+  const on = assembleLaunchConfig(versionJson, { ...baseContext(), launchArgs: '-XX:+UseG1GC', visualizer: true });
+  assert.equal(count(on), 1);
+  assert.ok(on.jvmArgs.indexOf('-XX:+UseG1GC') < on.jvmArgs.indexOf('-Dlf.visualizer'));
+  assert.ok(on.jvmArgs.indexOf('-Dlf.visualizer') < on.jvmArgs.indexOf('-Djava.util.Arrays.useLegacyMergeSort=true'));
+  // 显式全关档案（[]）不挡一次性启动；disable 族照常按档案语义注入
+  const allOff = assembleLaunchConfig(versionJson, { ...baseContext(), addons: [], visualizer: true });
+  assert.equal(count(allOff), 1);
+  assert.ok(allOff.jvmArgs.includes('-Dlf.proxy.disable'));
+  // 档案已含 visualizer（常开）+ 一次性再带 = 去重不双注
+  const dup = assembleLaunchConfig(versionJson, { ...baseContext(), addons: ['visualizer'], visualizer: true });
+  assert.equal(count(dup), 1);
 });
 
 test('intelFix：true = -XX:HeapDumpPath 置 jvmArgs 首位（v1 javapath 后首位语义），false/缺省不注入', () => {

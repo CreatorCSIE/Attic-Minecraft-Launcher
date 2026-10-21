@@ -6,6 +6,7 @@
 import { computed, ref, type ComputedRef } from 'vue';
 import { IPC_EVENTS, type CustomInfoView, type CustomVersionView } from '@attic/core-spec';
 import { useBridge } from './useBridge';
+import { useMods } from './useMods';
 import { useVersions } from './useVersions';
 
 const versions = ref<CustomVersionView[]>([]);
@@ -114,9 +115,11 @@ async function importJar(): Promise<void> {
   await useVersions().load();
 }
 
-/** 删除自定义版本（jar+.info 一并移除，UI 侧已经确认弹窗把关）。成功刷新两页列表。 */
+/** 删除自定义版本（jar+.info 一并移除，UI 侧已经确认弹窗把关）。成功刷新相关页列表。 */
 async function remove(id: string): Promise<boolean> {
   saveError.value = null;
+  // mod 判定须在重拉列表前取（删除后该项已不在列表）
+  const wasMod = versions.value.some((v) => v.id === id && v.mod === true);
   selfWrites.set(id, Date.now()); // 删除同样触发监视器回声
   const res = await bridge.removeCustomVersion(id);
   if (!res.ok) {
@@ -130,6 +133,8 @@ async function remove(id: string): Promise<boolean> {
   await load();
   // 启动页版本列表同步失去该项 → 联动刷新。
   await useVersions().load();
+  // mod 卸载 = Mods 页 installed 真相源（.info 实存）已在宿主侧翻转 → 联动重拉徽标。
+  if (wasMod) await useMods().load();
   return true;
 }
 

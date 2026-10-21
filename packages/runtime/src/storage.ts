@@ -66,8 +66,13 @@ export const binDir = (root: string): string => path.join(root, 'bin');
 export const nativesDir = (root: string): string => path.join(binDir(root), 'natives');
 export const versionsDir = (root: string): string => path.join(root, 'versions');
 export const jsonsDir = (root: string): string => path.join(versionsDir(root), 'jsons');
+/** mod jar 暂存区（v1 readyVersion L796-800 同位：合成前原料，不进 versions/ 顶层）。 */
+export const modsDir = (root: string): string => path.join(versionsDir(root), 'mods');
+export const modJarFile = (root: string, id: string): string => path.join(modsDir(root), `${id}.jar`);
 export const infoFile = (root: string, id: string): string => path.join(jsonsDir(root), `${id}.info`);
 export const clientJarFile = (root: string, id: string): string => path.join(versionsDir(root), `${id}.jar`);
+/** mod 安装登记（id → infoUrl/autoupdate；启动期刷新与误路由防护的持久真相——v1 靠进程内静态列表，离线即失效）。 */
+export const modRegistryFile = (root: string): string => path.join(launcherDir(root), 'mods.json');
 export const assetsDir = (root: string): string => path.join(root, 'assets');
 export const assetIndexFile = (root: string, id: string): string =>
   path.join(assetsDir(root), 'indexes', `${id}.json`);
@@ -82,6 +87,7 @@ export function ensureLayout(root: string): void {
     launchMethodsDir(root),
     nativesDir(root),
     jsonsDir(root),
+    modsDir(root),
     assetsDir(root),
   ]) {
     fs.mkdirSync(dir, { recursive: true });

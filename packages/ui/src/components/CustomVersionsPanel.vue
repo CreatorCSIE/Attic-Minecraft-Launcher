@@ -4,11 +4,13 @@
  * 左 = 搜索框 + 「导入 jar」按钮 + custom 版本列表（名称 + 已配置/未配置徽标）；
  * 右 = 选中版本的 .info 编辑表单（launch-method 下拉 + 其余字段文本输入）。
  * Betacraft 官方版本不落入本页（runtime 已过滤）；launch-method 合法键集由契约随数据下发（detail.launchMethods），零硬编码。
+ * Mods 仓库托管的模组版本（detail.mod）也落入本页 = 用户拍板的删除途径：右栏只读（props 表），编辑/保存禁用。
  */
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useI18n } from '../i18n';
 import { useCustomVersions } from '../composables/useCustomVersions';
 import { useBridge } from '../composables/useBridge';
+import { isDemo } from '../dev/demo';
 import ConfirmDialog from './ConfirmDialog.vue';
 import AppSelect from './AppSelect.vue';
 
@@ -29,6 +31,9 @@ const {
   setDirtyProbe,
 } = useCustomVersions();
 const { hasBridge } = useBridge();
+// 删除钮在 demo 模式放行（Mods 页 canInstall 同配方，假桥 removeCustomVersion 已实现卸载链路）；
+// 「导入 jar」维持真桥门禁——宿主文件对话框无演示语义。
+const canRemove = computed(() => hasBridge.value || isDemo());
 
 const search = ref('');
 const saved = ref(false);
@@ -51,7 +56,10 @@ async function onConfirmRemove(): Promise<void> {
   if (ok) removeOpen.value = false;
 }
 
-/** .info 可编辑文本字段（键即标签，保持与 properties 一致；launch-method 单独走下拉）。 */
+/**
+ * .info 可编辑文本字段（键即标签，保持与 properties 一致；launch-method 单独走下拉）。
+ * base-version 不在列：Mods 托管判型键，runtime 保存门禁拒写（mod 项本就整体只读，不受影响）。
+ */
 const TEXT_FIELDS = [
   'main-class',
   'launch-method-link',
@@ -59,7 +67,6 @@ const TEXT_FIELDS = [
   'assets',
   'type',
   'protocolVersion',
-  'base-version',
   'url',
   'sha1',
   'proxy-args',
@@ -162,14 +169,15 @@ async function onSave(): Promise<void> {
             @click="select(v.id)"
           >
             <span class="mi-name">{{ v.id }}</span>
-            <span class="badge" :class="v.configured ? 'badge--ok' : 'badge--warn'">
+            <span v-if="v.mod" class="badge badge--mod">Mod</span>
+            <span v-else class="badge" :class="v.configured ? 'badge--ok' : 'badge--warn'">
               {{ v.configured ? t('custom.configured') : t('custom.unconfigured') }}
             </span>
           </button>
           <button
             class="mi-del"
             type="button"
-            :disabled="!hasBridge"
+            :disabled="!canRemove"
             :title="t('custom.remove')"
             @click.stop="askRemove(v.id)"
           >
@@ -197,7 +205,8 @@ async function onSave(): Promise<void> {
         <div class="editor-head">
           <div class="head-main">
             <h3 class="id">{{ selected.id }}</h3>
-            <span class="badge" :class="detail.configured ? 'badge--ok' : 'badge--warn'">
+            <span v-if="detail.mod" class="badge badge--mod">Mod</span>
+            <span v-else class="badge" :class="detail.configured ? 'badge--ok' : 'badge--warn'">
               {{ detail.configured ? t('custom.configured') : t('custom.unconfigured') }}
             </span>
           </div>
@@ -217,6 +226,17 @@ async function onSave(): Promise<void> {
           </button>
         </div>
 
+        <!-- 模组版本只读态：props 原样展示（编辑被 runtime 门禁拒绝，autoupdate 会整文件重写） -->
+        <template v-if="detail.mod">
+          <p class="detected">{{ t('custom.modHint') }}</p>
+          <dl class="mod-props">
+            <template v-for="(value, key) in detail.props" :key="key">
+              <dt class="label label--mono">{{ key }}</dt>
+              <dd class="mod-prop-value">{{ value }}</dd>
+            </template>
+          </dl>
+        </template>
+        <template v-else>
         <div class="field">
           <label class="label" for="cv-launch">
             {{ t('custom.launchMethod') }}
@@ -251,6 +271,7 @@ async function onSave(): Promise<void> {
           </button>
           <span v-if="saved" class="saved">{{ t('custom.saved') }}</span>
         </div>
+        </template>
         <p v-if="saveError" class="save-error">{{ saveError }}</p>
       </div>
 
@@ -481,6 +502,25 @@ async function onSave(): Promise<void> {
 .badge--warn {
   background: var(--warn-soft);
   color: var(--warn);
+}
+/* 模组托管标：accent 软底（与已配置/未配置两态区分开） */
+.badge--mod {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+/* 模组只读 props 表：键列窄等宽、值列可换行 */
+.mod-props {
+  display: grid;
+  grid-template-columns: minmax(0, 200px) minmax(0, 1fr);
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+}
+.mod-prop-value {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
 }
 /* —— 右栏：info 编辑器 —— */
 .detail {

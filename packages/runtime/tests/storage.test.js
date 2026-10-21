@@ -241,6 +241,21 @@ test('intelFix/forceUpdate：档案回环 + 视图透传 + win32 门控注入/�
   assert.ok(!cfgLx.jvmArgs.some((a) => a.includes('HeapDumpPath')));
 });
 
+test('LaunchRequest.visualizer：dryRun 链路注入 -Dlf.visualizer 且不写实例档案', async (t) => {
+  const root = tempRoot(t);
+  ensureLayout(root);
+  fs.writeFileSync(path.join(jsonsDir(root), 'b1.7.3.info'), 'launch-method=indev\n');
+  const rt = new AtticRuntime({ rootDir: root, fetchImpl: () => Promise.reject(new Error('offline')) });
+  rt.addAccount('Tester');
+  const cfg = await rt.dryRunLaunch({ versionId: 'b1.7.3', instanceId: 'iv', javaPath: '/usr/bin/java', visualizer: true });
+  assert.ok(cfg.jvmArgs.includes('-Dlf.visualizer'));
+  // 一次性语义：dryRun 不落 addons 键（档案压根没建 = 无键）
+  rt.saveInstance({ name: 'iv', version: 'b1.7.3' });
+  const cfg2 = await rt.dryRunLaunch({ versionId: 'b1.7.3', instanceId: 'iv', javaPath: '/usr/bin/java' });
+  assert.ok(!cfg2.jvmArgs.includes('-Dlf.visualizer'), '不带键 = 不注入');
+  assert.equal(loadInstance(root, 'iv').addons, undefined, 'visualizer 启动请求不得写档案 addons');
+});
+
 test('probeVersionClass：jar 条目探测 + 未安装=false + mtime 换代缓存失效', (t) => {
   const root = tempRoot(t);
   ensureLayout(root);

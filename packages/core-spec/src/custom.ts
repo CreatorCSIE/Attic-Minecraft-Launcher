@@ -15,6 +15,8 @@ export interface CustomVersionView {
   launchMethod?: string;
   /** 生效主类：显式 main-class 优先，否则按 launch-method 数据表推导（已配置时）。 */
   mainClass?: string;
+  /** Mods 仓库托管的模组版本（.info 含 base-version）：列表打标，编辑禁用、删除联动清登记。 */
+  mod?: boolean;
 }
 
 /** 右栏编辑器视图：原始属性 + 检测建议 + launch-method 合法键集（数据驱动下发，UI 零硬编码）。 */
@@ -27,4 +29,6 @@ export interface CustomInfoView {
   detectedMethod?: string;
   /** launch-method 合法键集（runtime 主类数据表的键；下拉选项来源）。 */
   launchMethods: string[];
+  /** 模组版本（.info 含 base-version）：右栏只读展示，保存被 runtime 拒绝。 */
+  mod?: boolean;
 }

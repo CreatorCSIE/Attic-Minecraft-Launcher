@@ -13,6 +13,7 @@ import {
   type InstanceView,
   type IpcResult,
   type LaunchRequest,
+  type ModInstallRequest,
   type PickTarget,
   type SpecialDir,
   type WindowAction,
@@ -264,6 +265,10 @@ app.whenReady().then(() => {
       return { ok: false, error: error instanceof Error ? error.message : String(error) };
     }
   });
+  // Mods 页（Betacraft 单源）：列表现拉现发（runtime 无进程内缓存）；安装 = 只落 .info，
+  // jar 与基座合成延迟到启动期（点 Play 才补全）。
+  handle(IPC_CHANNELS.MODS_LIST, () => runtime.listMods());
+  handle(IPC_CHANNELS.MODS_INSTALL, (request: ModInstallRequest) => runtime.installMod(request));
   // —— 设置页宿主能力面（SYS_INFO/目录/日志/对话框/外链）——
   handle(IPC_CHANNELS.SYS_INFO, () => runtime.getSystemInfo());
   // 打开特殊目录：白名单枚举、路径宿主解析（渲染侧给不出任意路径）；logs 未生成时先建再开。

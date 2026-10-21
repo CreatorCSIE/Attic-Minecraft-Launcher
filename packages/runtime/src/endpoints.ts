@@ -18,6 +18,8 @@ export interface Endpoints {
   zuluMetadata: string;
   /** Mojang 官方版本清单（v2）。用途：BC `.info` 无 libraries 字段时，按重发布 JSON 回填库池（bin/）。 */
   mojangManifest: string;
+  /** Betacraft mod 仓库列表（JSON `ModCategory[]`，v1 ModsRepository.java L41 同源端点）。 */
+  modsList: string;
 }
 
 const FILES_BASE = 'http://files.betacraft.uk/launcher/assets';
@@ -29,6 +31,7 @@ export const DEFAULT_ENDPOINTS: Endpoints = {
   legacyfixRelease: 'https://api.github.com/repos/betacraftuk/legacyfix/releases/latest',
   zuluMetadata: 'https://api.azul.com/metadata/v1/zulu/packages/',
   mojangManifest: 'https://piston-meta.mojang.com/mc/game/version_manifest_v2.json',
+  modsList: 'http://api.betacraft.uk/getmods.jsp',
 };
 
 /** 部分覆盖：只替换给出的字段，其余保持默认。 */
@@ -50,5 +53,6 @@ export function endpointsFromOverrides(overrides: EndpointOverrides = {}): Endpo
     legacyfixRelease: overrides.legacyfixRelease ?? DEFAULT_ENDPOINTS.legacyfixRelease,
     zuluMetadata: overrides.zuluMetadata ?? DEFAULT_ENDPOINTS.zuluMetadata,
     mojangManifest: overrides.mojangManifest ?? DEFAULT_ENDPOINTS.mojangManifest,
+    modsList: overrides.modsList ?? DEFAULT_ENDPOINTS.modsList,
   };
 }

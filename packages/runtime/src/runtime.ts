@@ -26,6 +26,8 @@ import {
   type JavaDetectionReport,
   type LaunchConfig,
   type LaunchRequest,
+  type ModCategoryView,
+  type ModInstallRequest,
   type VersionJson,
   type VersionManifest,
   type VersionRef,
@@ -37,6 +39,16 @@ import { endpointsFromOverrides, resolveEndpoints, type Endpoints } from './endp
 import { infoToVersionJson, LAUNCH_METHOD_MAIN_CLASS } from './info';
 import { detectJavaRuntime } from './java/detect';
 import { APPLET_LAUNCHER_CLASS, assembleLaunchConfig, type LaunchContext } from './launch';
+import {
+  composeModJars,
+  downloadInfoAtomic,
+  isModVersionJson,
+  readModRegistry,
+  refreshModInfo,
+  removeModRegistry,
+  upsertModRegistry,
+  type ModRegistryEntry,
+} from './mods';
 import { GameProcessManager } from './process';
 import { parseProperties } from './properties';
 import { DEFAULT_AGENT_MOUNTS } from './quirks';
@@ -335,8 +347,12 @@ export class AtticRuntime {
   /**
    * 每次启动重下 .info（v2 已知坑：元数据陈旧）；网络失败退本地。
    * v1 豁免（Launcher.java L412/L432）：custom=true 的 .info 归用户所有，跳过重下/覆盖。
+   * Mods 安装器登记的 mod 走独立通道：按 launcher/mods.json 登记的直链刷新（autoupdate/缺失才拉），
+   * 绝不回落官方默认 versionJson(id) URL——v1 Launcher.java L410-414「离线误路由官方 URL」的结构性修复。
    */
   private async refreshVersionInfo(versionId: string): Promise<VersionJson> {
+    const modEntry = readModRegistry(this.root)[versionId];
+    if (modEntry) return this.refreshRegisteredModInfo(versionId, modEntry);
     const localText = readTextIfPresent(infoFile(this.root, versionId));
     if (localText !== null) {
       const props = parseProperties(localText);
@@ -352,6 +368,25 @@ export class AtticRuntime {
       if (custom) return custom;
       throw error;
     }
+  }
+
+  /**
+   * 已登记 mod 的 .info 刷新（v1 Launcher.java L417-426 语义 + 两处修复）：
+   * - autoupdate=false 且本地在位 → 直接用本地，不联网；
+   * - 刷新失败但本地在位 → 留旧文件离线启动（原子写保证旧文件未被破坏）；
+   * - 刷新失败且本地缺失 → 显式报错（v1「静默假可用」修复：绝不带残缺进 spawn）。
+   */
+  private async refreshRegisteredModInfo(versionId: string, entry: ModRegistryEntry): Promise<VersionJson> {
+    const localText = readTextIfPresent(infoFile(this.root, versionId));
+    try {
+      await refreshModInfo(this.client, this.root, versionId, entry);
+    } catch (error) {
+      if (localText !== null) return this.withAgentMounts(infoToVersionJson(versionId, parseProperties(localText)));
+      throw new Error(`Mod ${versionId} 的 .info 本地缺失，且从登记地址刷新失败：${messageOf(error)}`);
+    }
+    const text = readTextIfPresent(infoFile(this.root, versionId)) ?? localText;
+    if (text === null) throw new Error(`Mod ${versionId} 的 .info 未正确落位`);
+    return this.withAgentMounts(infoToVersionJson(versionId, parseProperties(text)));
   }
 
   /**
@@ -425,21 +460,47 @@ export class AtticRuntime {
       // 「已存在即复用」检查重下。.info 的 custom 豁免不动（v1 同义：用户所有的配置不被覆盖）。
       const forceUpdate = this.resolveInstance(request.instanceId ?? DEFAULT_INSTANCE_NAME).forceUpdate === true;
       let json = await this.refreshVersionInfo(request.versionId);
+      // mod 判型（`.info` base-version 键，v1 readyVersion 语义）：libraries/jar/资产口径全部
+      // 跟随基座——mod `.info` 只有 url/sha1/base-version，没有可独立启动的元数据。
+      const baseId = isModVersionJson(json);
+      const metaJson = baseId ? await this.refreshVersionInfo(baseId) : json;
+      if (baseId && isModVersionJson(metaJson)) {
+        throw new Error(`Mod ${json.id} 的基座 ${baseId} 本身也是 mod（v1 getReleaseByName 递归语义），一期不支持嵌套 mod`);
+      }
       // BC `.info` 无 libraries → 从 Mojang 重发布 JSON 回填库池（classic 等不在清单：BC jar 自捆绑依赖，静默跳过）。
-      if (!json.libraries || json.libraries.length === 0) {
+      if (!metaJson.libraries || metaJson.libraries.length === 0) {
         try {
-          json.libraries = await this.client.fetchMojangLibraries(request.versionId, this.platform);
+          metaJson.libraries = await this.client.fetchMojangLibraries(metaJson.id, this.platform);
         } catch {
           /* 无重发布数据 */
         }
       }
-      // 裸 jar custom 合成元数据无下载地址：jar 本体已在位，跳过下载（v1 downloadJson 豁免）
-      if (json.jar?.url || json.downloads?.client?.url) {
-        await this.client.downloadClientJar(json, this.root, {
+      // 裸 jar custom 合成元数据无下载地址：jar 本体已在位，跳过下载（v1 downloadJson 豁免）。
+      // mod 通道的 versions/<id>.jar 是合成产物，不走本下载（基座 jar 由 metaJson 走齐）。
+      if (metaJson.jar?.url || metaJson.downloads?.client?.url) {
+        await this.client.downloadClientJar(metaJson, this.root, {
           verify: settings['checkIntegrity'] !== 'false',
           repair: settings['fixMissing'] !== 'false',
           force: forceUpdate,
         });
+      }
+      if (baseId) {
+        // v1 readyVersion + assembleWithBaseVersion 一期复刻（用户拍板「每次启动重合成」——
+        // 修 v1 hasJar 判定的陈旧合成 jar 失配）：mod jar 补全（sha1 强制）→ 基座在前、mod 同名
+        // 覆盖、剥签名 → 原子落 versions/<id>.jar（launch.ts classpath[0] 天然命中，组装面不动）。
+        const modJar = await this.client.ensureModJar(json, this.root, {
+          verify: settings['checkIntegrity'] !== 'false',
+          force: forceUpdate,
+        });
+        composeModJars(clientJarFile(this.root, baseId), modJar, clientJarFile(this.root, json.id));
+        // 字段继承：mod 自带键胜出，缺失回落基座（mainClass/assets/betacraft.launchMethod 等；
+        // betacraft 段显式合并——spread 整段覆盖会把基座 launchMethod 弄丢，agentMount 区间判定
+        // 与 Applet 容器路径都靠它）。
+        json = {
+          ...metaJson,
+          ...json,
+          betacraft: { ...metaJson.betacraft, ...json.betacraft },
+        };
       }
       json = this.resolveIndevMainClass(json);
       await this.client.downloadLibrariesToBin(json, this.root, { force: forceUpdate });
@@ -551,9 +612,10 @@ export class AtticRuntime {
   // ---------- 自定义版本配置页（CUSTOM_* 四通道） ----------
 
   /**
-   * 自定义版本列表：仅 custom 项（与 listVersions 的 isCustom 判定同源）——
+   * 自定义版本列表：custom 项 + Mods 仓库托管项（用户拍板：mod 的删除途径 = 本页，
+   * 故 .info 含 base-version 的模组版本也落入，打 mod 标、编辑禁用）——
    * `.info` custom=true = 已配置；裸 jar（有 jar 无 .info 且不在官方清单）= 未配置。
-   * Betacraft 官方版本不落入本页：含 .info 无 custom=true 的，也含 **官方清单 id 的裸 jar**
+   * Betacraft 官方版本不落入本页：含 .info 无 custom=true/base-version 的，也含 **官方清单 id 的裸 jar**
    * （inf-20100227-1433 实案修复：BC 版本地 .info 缺失 ≠ 用户导入）。官方集取版本清单缓存
    * （仅 fetchVersionList 成功时写入=纯 BC 列表；缓存缺席=还没联网拉过，维持 v1 裸 jar 语义）。
    * 列表不跑 jar 检测（zip 开销留给按需 get）。
@@ -567,13 +629,15 @@ export class AtticRuntime {
       // 官方清单命中即官方（> 本地 custom=true 残留声明，inf-20100227-1433 实案）
       if (official.has(id)) continue;
       const props = readPropertiesFile(infoFile(this.root, id));
-      if (props['custom']?.toLowerCase() !== 'true') continue;
+      const isMod = Boolean(props['base-version']?.trim());
+      if (!isMod && props['custom']?.toLowerCase() !== 'true') continue;
       const launchMethod = props['launch-method'];
       const mainClass = props['main-class'] ?? (launchMethod ? LAUNCH_METHOD_MAIN_CLASS[launchMethod] : undefined);
       out.push({
         id,
         installed: jars.has(id),
         configured: true,
+        ...(isMod ? { mod: true } : {}),
         ...(launchMethod ? { launchMethod } : {}),
         ...(mainClass ? { mainClass } : {}),
       });
@@ -611,10 +675,12 @@ export class AtticRuntime {
     const launchMethods = Object.keys(LAUNCH_METHOD_MAIN_CLASS);
     if (hasInfo) {
       const props = readPropertiesFile(info);
-      if (props['custom']?.toLowerCase() !== 'true') {
+      // mod 的 .info 无 custom=true（base-version 判型）：可查看不可编辑（右栏据此走只读态）
+      const isMod = Boolean(props['base-version']?.trim());
+      if (!isMod && props['custom']?.toLowerCase() !== 'true') {
         throw new Error(`${id} 不是自定义版本（Betacraft 官方版本不落入本页）`);
       }
-      return { id, configured: true, props, launchMethods };
+      return { id, configured: true, props, launchMethods, ...(isMod ? { mod: true } : {}) };
     }
     // 预填建议：归一后仍不在主类表内的（'custom' 全不中、'1.6' 超 BC 清单范围）不给——
     // 保证 UI 下拉必命中，不会预填一个存不进去的名字。
@@ -639,6 +705,15 @@ export class AtticRuntime {
     const jar = clientJarFile(this.root, id);
     const info = infoFile(this.root, id);
     if (!fs.existsSync(jar) && !fs.existsSync(info)) throw new Error(`自定义版本不存在：${id}`);
+    // mod 的 .info 由 Mods 仓库托管（autoupdate 会整文件重写，编辑必丢）：显式拒绝，删除不受限
+    if (fs.existsSync(info) && readPropertiesFile(info)['base-version']?.trim()) {
+      throw new Error(`${id} 是 Mods 仓库托管的模组版本：编辑已禁用（删除可在本页执行）`);
+    }
+    // base-version = mod 判型托管键：禁经编辑器写入——误填会把普通自定义版本永久打成 Mod 只读态，
+    // 且启动期按 mod 合成链处理必缺料（v1 同款键，非用户可配置面）。
+    if (props['base-version']?.trim()) {
+      throw new Error('base-version 是 Mods 仓库托管键，不能经编辑器写入');
+    }
     const launchMethod = props['launch-method']?.trim();
     const mainClass = props['main-class']?.trim();
     if (!launchMethod) throw new Error('launch-method 为必填项');
@@ -686,8 +761,9 @@ export class AtticRuntime {
   }
 
   /**
-   * 删除自定义版本：versions/<id>.jar 与 versions/jsons/<id>.info 一并移除（缺哪个跳哪个）。
-   * 门禁 = listCustomVersions 成员判定（与列表页同源）：官方版本（.info 无 custom=true）拒绝，
+   * 删除自定义版本：versions/<id>.jar 与 versions/jsons/<id>.info 一并移除（缺哪个跳哪个）；
+   * mod 项联动清 launcher/mods.json 登记（防幽灵条目：登记在 = 启动期仍会按登记 URL 复活 .info）。
+   * 门禁 = listCustomVersions 成员判定（与列表页同源）：官方版本（.info 无 custom=true/base-version）拒绝，
    * 从入口排除误删 BC 文件；不存在/非 custom 均显式报错。
    */
   removeCustomVersion(id: string): void {
@@ -697,6 +773,67 @@ export class AtticRuntime {
     }
     fs.rmSync(clientJarFile(this.root, id), { force: true });
     fs.rmSync(infoFile(this.root, id), { force: true });
+    removeModRegistry(this.root, id);
+  }
+
+  // ---------- Mods 页（MODS_* 两通道；Betacraft 单源，一期不引入多源） ----------
+
+  /**
+   * 仓库列表 = 每次调用现拉（v1 ModsRepository「进程级追加不清空、永不刷新」的结构性修复——
+   * 无进程内缓存）。installed = versions/jsons/<full_name>.info 在位；上游脏 id（路径穿越等）
+   * 不触文件系统，按未安装处理。
+   */
+  async listMods(): Promise<ModCategoryView[]> {
+    const categories = await this.client.fetchModCategories();
+    return categories.map((cat) => ({
+      name: cat.name,
+      mods: cat.mods.map((mod) => ({ ...mod, installed: this.modInfoPresent(mod.fullName) })),
+    }));
+  }
+
+  private modInfoPresent(fullName: string): boolean {
+    try {
+      assertSafeVersionId(fullName);
+    } catch {
+      return false;
+    }
+    return fs.existsSync(infoFile(this.root, fullName));
+  }
+
+  /**
+   * 安装 = 只下 .info（jar 在启动期补全；用户拍板「只安装不动实例」——v1 Load 顺带写
+   * currentInstance.version 的行为不照抄）。门禁三道：id 安全、http(s) 协议白名单、同名拒绝
+   * （用户拍板：先 await listVersions 尝试刷新官方清单缓存，官方清单命中即拒，网络失败按现有缓存判）。
+   * 落位后写 launcher/mods.json 登记 {infoUrl, autoupdate}——启动期刷新的唯一来源（v1 离线
+   * 误路由官方 URL 的修复）；.info watcher 会自动发 CUSTOM_INFO_CHANGED，无需新增事件。
+   */
+  async installMod(request: ModInstallRequest): Promise<void> {
+    const id = request.fullName.trim();
+    assertSafeVersionId(id);
+    const infoFileUrl = request.infoFileUrl.trim();
+    let url: URL;
+    try {
+      url = new URL(infoFileUrl);
+    } catch {
+      throw new Error(`.info 下载地址不是合法 URL：${infoFileUrl}`);
+    }
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      throw new Error(`拒绝非 HTTP(S) 下载地址：${url.protocol}`);
+    }
+    try {
+      await this.listVersions(); // 尽力刷新官方清单缓存（成功即最新）
+    } catch {
+      /* 网络失败：按现有缓存判定 */
+    }
+    if (this.cachedOfficialVersionIds().has(id)) {
+      throw new Error(`${id} 与 Betacraft 官方版本同名，拒绝安装（.info/jar 会覆盖官方版本文件）`);
+    }
+    await downloadInfoAtomic(this.client, this.root, id, infoFileUrl);
+    upsertModRegistry(this.root, id, {
+      infoUrl: infoFileUrl,
+      autoupdate: request.autoupdate === true,
+      installedAt: Date.now(),
+    });
   }
 
   getSettings(): AppSettings {
@@ -911,6 +1048,8 @@ export class AtticRuntime {
       addons: instance.addons?.split(',').map((s) => s.trim()).filter(Boolean),
       // v1 intelFix 缺键 = true（Instance.java newInstance 缺省）；win32 门控在此（launch.ts 保持平台中性）
       intelFix: this.platform === 'win32' && instance.intelFix !== false,
+      // 一次性可视化器（「≡」菜单动作项）：true 才带键，false/缺省不落（dryRun/launch 同走此路）
+      visualizer: request.visualizer === true ? true : undefined,
       width: instance.width,
       height: instance.height,
       assetsDir: path.join(this.root, 'assets'),

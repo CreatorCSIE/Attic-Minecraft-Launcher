@@ -29,6 +29,9 @@ export {
   jsonsDir,
   infoFile,
   clientJarFile,
+  modsDir,
+  modJarFile,
+  modRegistryFile,
   assetsDir,
   assetIndexFile,
   zuluJavaDir,
@@ -101,6 +104,20 @@ export {
   type AssetIndexEntry,
   type AssetObjectPlan,
 } from './legacyAssets';
+export {
+  parseModCategories,
+  readModRegistry,
+  upsertModRegistry,
+  removeModRegistry,
+  downloadInfoAtomic,
+  refreshModInfo,
+  isModVersionJson,
+  composeModJars,
+  modMissingMessage,
+  type Downloader,
+  type ModRegistryEntry,
+  type ModRegistry,
+} from './mods';
 export { AtticRuntime, maskSecrets, type AtticRuntimeOptions } from './runtime';
 
 // 契约面透传：壳层只 import 本包即可拿到全部通道常量与类型。

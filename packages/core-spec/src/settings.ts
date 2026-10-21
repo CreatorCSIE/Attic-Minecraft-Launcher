@@ -27,6 +27,8 @@ export interface EndpointOverrides {
   zuluMetadata?: string;
   /** Mojang 版本清单（库池回填）。 */
   mojangManifest?: string;
+  /** Betacraft mod 仓库列表（getmods.jsp JSON）；缺省 = `http://api.betacraft.uk/getmods.jsp`。 */
+  modsList?: string;
 }
 
 /** 全局应用设置（`launcher.settings` 的渲染侧视图；缺省字段 = 沿用宿主默认）。 */
@@ -115,8 +117,9 @@ export interface InstanceView {
  * mode=enable：勾选才注入 prop；mode=disable：取消才注入（功能默认开，如皮肤/代理）。
  * placeholder：v1 addons 有、legacyfix 无对应开关 → UI 占位禁用，不参与装配。
  * uiSection：渲染归属——'basic'=实例页基本设置 card，'launchmenu'=启动页「≡」菜单
- * （随激活实例 addons 读写），缺省 'addons'=Addons card。仅影响 UI 布局，数据模型不变。
- * probeClass：launchmenu 项的启用前置探测（选中版本 client jar 需含此 class 条目才可勾选）。
+ * （动作项：点击 = `LaunchRequest.visualizer` 一次性启动，不读写档案），缺省 'addons'=Addons card。
+ * 仅影响 UI 布局，数据模型不变。
+ * probeClass：launchmenu 项的启用前置探测（选中版本 client jar 需含此 class 条目才可点击）。
  */
 export interface AddonDef {
   id: string;
@@ -140,11 +143,15 @@ export const INSTANCE_ADDONS: AddonDef[] = [
   { id: 'beta-forge', prop: 'beta-forge', mode: 'enable' },
   { id: 'bouncycastle', prop: 'bouncycastle', mode: 'enable' },
   { id: 'show-notice', prop: 'showNotice', mode: 'enable' },
+  // v1 Demo addon 转正：legacyfix 原生 -Dlf.demo 即等价开关（GameArgs.isDemo），无需 wrapper；
+  // v1 官方生效区间 12w16a–1.5.2，区间外该属性无感
+  { id: 'demo', prop: 'demo', mode: 'enable' },
   // v1 addons 清单占位（legacyfix 无对应开关，接入后转正）
   { id: 'fullscreen', prop: '', mode: 'enable', placeholder: true },
   { id: 'game-mode-switch', prop: '', mode: 'enable', placeholder: true },
   { id: 'quit-game', prop: '', mode: 'enable', placeholder: true },
-  // 启动页「≡」菜单（infdev-20100617 同 jar 并存类，探测到才启用；JVM 注入链保留但生效待 legacyfix nightly）
+  // 启动页「≡」菜单动作项（探测到类才可点击；点击 = LaunchRequest.visualizer 一次性注入，
+  // 档案 addons 仍可携带同 id = 常开语义，装配器去重不双注；生效待 legacyfix nightly）
   {
     id: 'visualizer',
     prop: 'visualizer',

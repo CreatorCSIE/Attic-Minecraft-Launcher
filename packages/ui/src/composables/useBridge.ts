@@ -21,11 +21,13 @@ import type {
   IpcResult,
   JavaDetectionReport,
   LaunchConfig,
+  ModCategoryView,
+  ModInstallRequest,
   RendererBridge,
   SystemInfo,
   VersionJson,
 } from '@attic/core-spec';
-import { demoInstances, demoJavaReport, demoSettings, demoSysInfo, demoVersions, isDemo } from '../dev/demo';
+import { demoInstances, demoJavaReport, demoModCategories, demoSettings, demoSysInfo, demoVersions, isDemo } from '../dev/demo';
 
 const NO_BRIDGE = 'no-bridge';
 
@@ -81,6 +83,9 @@ const mockBridge: RendererBridge = {
   saveCustomVersionInfo: async () => err<CustomVersionView>(NO_BRIDGE),
   importCustomJar: async () => err<CustomVersionView | null>(NO_BRIDGE),
   removeCustomVersion: async () => err<void>(NO_BRIDGE),
+  // Mods 仓库属网络 + fs 宿主语义：mock 列表回空（空态分支可排），安装可见失败。
+  listMods: async () => ok<ModCategoryView[]>([]),
+  installMod: async () => err<void>(NO_BRIDGE),
   // —— 设置页宿主能力面：fs/对话框/内存属宿主语义，浏览器无真值（err 可见失败）——
   getSystemInfo: async () => err<SystemInfo>(NO_BRIDGE),
   openSpecialDir: async () => err<void>(NO_BRIDGE),
@@ -119,6 +124,59 @@ function demoBridge(): RendererBridge {
     detectJava: async () => ok<JavaDetectionReport>(demoJavaReport),
     // 假宿主快照：让设置页通用/内存/关于栏在浏览器里排出真稿（动作类仍走 mock err）。
     getSystemInfo: async () => ok<SystemInfo>(demoSysInfo),
+    // Mods 页演示：假仓库「现拉现发」= 每次深拷贝返回（与真宿主语义一致——直接回原数组引用时，
+    // installMod 的原地改写落在 raw 对象上、绕过 Vue reactive 代理，installed 徽标不刷新）。
+    listMods: async () => ok<ModCategoryView[]>(structuredClone(demoModCategories)),
+    installMod: async (request: ModInstallRequest) => {
+      for (const cat of demoModCategories) {
+        for (const mod of cat.mods) {
+          if (mod.fullName === request.fullName) mod.installed = true;
+        }
+      }
+      return ok<void>(undefined);
+    },
+    // 自定义页演示：mod 托管项随假仓库派生（installed 即入列，jar 恒未合成）；
+    // 删除联动翻回未安装 → Mods 页徽标恢复「下载」，卸载链路可演练。
+    listCustomVersions: async () =>
+      ok<CustomVersionView[]>(
+        demoModCategories
+          .flatMap((c) => c.mods)
+          .filter((m) => m.installed)
+          .map((m) => ({ id: m.fullName, installed: false, configured: true, mod: true })),
+      ),
+    removeCustomVersion: async (id: string) => {
+      let hit = false;
+      for (const cat of demoModCategories) {
+        for (const mod of cat.mods) {
+          if (mod.fullName === id) {
+            mod.installed = false;
+            hit = true;
+          }
+        }
+      }
+      return hit ? ok<void>(undefined) : err<void>(NO_BRIDGE);
+    },
+    // 已安装 mod 的详情 = 托管只读态演示（props 为假 .info 形状）；其余 id 维持 mock err。
+    getCustomVersionInfo: async (id: string) => {
+      for (const cat of demoModCategories) {
+        for (const mod of cat.mods) {
+          if (mod.fullName === id && mod.installed) {
+            return ok<CustomInfoView>({
+              id,
+              configured: true,
+              mod: true,
+              launchMethods: [],
+              props: {
+                'base-version': 'b1.7.3',
+                url: `http://files.betacraft.uk/repository/${encodeURIComponent(mod.fullName)}.jar`,
+                sha1: '0'.repeat(40),
+              },
+            });
+          }
+        }
+      }
+      return err<CustomInfoView>(NO_BRIDGE);
+    },
   };
 }
 

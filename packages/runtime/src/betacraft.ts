@@ -10,12 +10,13 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import type { DownloadItem, DownloadProgressEvent, LibraryInfo, VersionEra, VersionJson, VersionRef } from '@attic/core-spec';
+import type { DownloadItem, DownloadProgressEvent, LibraryInfo, ModCategoryRaw, VersionEra, VersionJson, VersionRef } from '@attic/core-spec';
 
 import { resolveEndpoints, type Endpoints } from './endpoints';
 import { applyLegacyfixDeawtPatch, reportLegacyfixDeawtPatch } from './legacyfixPatch';
 import { ASSET_INDEXES, planAssetObjects, resolveLaunchAssetIndexId } from './legacyAssets';
-import { assetIndexFile, assetsDir, binDir, clientJarFile, infoFile } from './storage';
+import { modMissingMessage, parseModCategories } from './mods';
+import { assetIndexFile, assetsDir, binDir, clientJarFile, infoFile, modJarFile } from './storage';
 
 export type FetchImpl = (url: string, init?: RequestInit) => Promise<Response>;
 
@@ -232,6 +233,40 @@ export class BetacraftClient {
       throw new Error(`版本 ${json.id} 的 jar 缺失，自动补全已禁用——请开启补全开关或手动放入 versions/${json.id}.jar`);
     }
     await this.download(url, dest, 'client-jar', json.id, sha1 ? { algo: 'sha1', value: sha1 } : undefined);
+  }
+
+  /** Mods 仓库列表（Betacraft 单源，getmods.jsp）；解析防御见 mods.ts parseModCategories。 */
+  async fetchModCategories(): Promise<ModCategoryRaw[]> {
+    const res = await this.get(this.endpoints.modsList);
+    return parseModCategories(await res.text());
+  }
+
+  /**
+   * mod jar 补全 → versions/mods/<id>.jar（v1 readyVersion 的下载段，修 hash_sha1 死代码缺陷）：
+   * - sha1 强制：`.info` 缺 sha1 且完整性校验开启 = 显式拒绝无锚点下载（v1 下载后从不复验的反面）；
+   * - 本地命中 sha1 即复用；复核不符直接带哈希重下（mods/ 下是纯缓存产物，重取无用户数据风险，
+   *   不套用 client jar 的 fixMissing 拦截面）；
+   * - force=true（实例强更）旁路复用检查恒重下。
+   */
+  async ensureModJar(
+    json: VersionJson,
+    root: string,
+    opts: { verify?: boolean; force?: boolean } = {},
+  ): Promise<string> {
+    const baseId = json.betacraft?.baseVersion ?? '?';
+    const url = json.jar?.url;
+    if (!url) throw new Error(modMissingMessage(json, baseId, '.info 缺少 jar 下载地址（url 键）'));
+    const sha1 = json.jar?.sha1;
+    if (!sha1 && opts.verify !== false) {
+      throw new Error(modMissingMessage(json, baseId, '.info 缺少 sha1，完整性校验开启时拒绝无锚点下载'));
+    }
+    const dest = modJarFile(root, json.id);
+    if (!opts.force && fs.existsSync(dest)) {
+      if (!sha1 || opts.verify === false) return dest;
+      if ((await hashFile(dest, 'sha1')) === sha1.toLowerCase()) return dest;
+    }
+    await this.download(url, dest, 'mod-jar', json.id, sha1 ? { algo: 'sha1', value: sha1 } : undefined);
+    return dest;
   }
 
   /**

@@ -46,6 +46,9 @@ export interface LaunchContext {
   /** 实例勾选的 addon id 集（宿主从档案透传）；按目录映射注入 -Dlf.* 开关。
    * undefined = 档案无 addons 键（老档案）→ 零注入，行为与 legacyfix 自身缺省一致。 */
   addons?: string[];
+  /** 一次性无限地图可视化器（LaunchRequest.visualizer 透传，不写档案）：
+   * true = addons 目录映射之后补注 `-Dlf.visualizer`（档案已含 visualizer 时不重复）。 */
+  visualizer?: boolean;
 }
 
 export interface AssembleOptions {
@@ -180,6 +183,8 @@ export function assembleLaunchConfig(
       if ((def.mode === 'enable') === on) jvmArgs.push(`-Dlf.${def.prop}`);
     }
   }
+  // 一次性可视化器（LaunchRequest.visualizer，菜单动作项）：同位补注；档案已含则上面已注入，不重复。
+  if (context.visualizer && !context.addons?.includes('visualizer')) jvmArgs.push('-Dlf.visualizer');
   jvmArgs.push('-Djava.util.Arrays.useLegacyMergeSort=true');
   // （历史注）曾注入 -Dsun.java2d.dpiaware=false 试图对症 applet 容器高 DPI 窗口右下偏移——
   // 实机+对照实验双重证伪：该 Oracle JDK8 扩展属性只影响 Java2D 字体/渲染缩放，不影响 LWJGL

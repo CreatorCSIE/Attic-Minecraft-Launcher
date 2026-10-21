@@ -17,6 +17,7 @@ import ConsolePanel from './components/ConsolePanel.vue';
 import InstanceList from './components/InstanceList.vue';
 import AccountsPanel from './components/AccountsPanel.vue';
 import CustomVersionsPanel from './components/CustomVersionsPanel.vue';
+import ModsPanel from './components/ModsPanel.vue';
 import SettingsPanel from './components/SettingsPanel.vue';
 import { goSection } from './composables/useSettingsNav';
 
@@ -25,12 +26,12 @@ const isConsoleWindow =
   typeof window !== 'undefined' &&
   new URLSearchParams(window.location.search).get('window') === 'console';
 
-type View = 'launch' | 'instances' | 'accounts' | 'custom' | 'settings';
+type View = 'launch' | 'instances' | 'accounts' | 'custom' | 'mods' | 'settings';
 const view = ref<View>('launch');
 
 // —— 页面切换方向（BlockHelm GetTransitionStartOffset 实测配方，用户指定）：
 //    按导航序前进 → 新页自下方 +22px 浮现；后退 → 自上方 -22px。 ——
-const VIEW_ORDER: readonly View[] = ['launch', 'instances', 'accounts', 'custom', 'settings'];
+const VIEW_ORDER: readonly View[] = ['launch', 'instances', 'accounts', 'custom', 'mods', 'settings'];
 const pageDy = ref('22px');
 watch(view, (next, prev) => {
   pageDy.value = VIEW_ORDER.indexOf(next) >= VIEW_ORDER.indexOf(prev) ? '22px' : '-22px';
@@ -226,6 +227,31 @@ onMounted(() => {
 
         <button
           class="nav-item"
+          :class="{ 'nav-item--active': view === 'mods' }"
+          :aria-current="view === 'mods' ? 'page' : undefined"
+          :title="t('nav.mods')"
+          @click="view = 'mods'"
+        >
+          <!-- lucide: download -->
+          <svg
+            class="nav-icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" x2="12" y1="15" y2="3" />
+          </svg>
+          <span class="nav-label">{{ t('nav.mods') }}</span>
+        </button>
+
+        <button
+          class="nav-item"
           :class="{ 'nav-item--active': view === 'settings' }"
           :aria-current="view === 'settings' ? 'page' : undefined"
           :title="t('nav.settings')"
@@ -282,6 +308,7 @@ onMounted(() => {
             <InstanceList v-if="view === 'instances'" />
             <AccountsPanel v-else-if="view === 'accounts'" />
             <CustomVersionsPanel v-else-if="view === 'custom'" />
+            <ModsPanel v-else-if="view === 'mods'" />
             <SettingsPanel v-else />
           </div>
         </Transition>
