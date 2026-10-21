@@ -24,10 +24,17 @@ function select(id: string | null): void {
 }
 
 // 激活实例 → 版本联动（immediate 覆盖"激活名已从 localStorage 恢复"的同步场景）。
+// 只在"切换激活实例"或"档案版本变化"（启动回写/改名）时跟随；
+// 保存实例（如「≡」菜单勾 addons）产生的同 (name, version) 新对象不得拽回用户手选版本。
+let lastFollowed: string | null = null;
 watch(
   active,
   (inst) => {
-    if (inst && inst.version !== selectedId.value) selectedId.value = inst.version;
+    if (!inst) return;
+    const tag = `${inst.name}\u0000${inst.version}`;
+    if (tag === lastFollowed) return;
+    lastFollowed = tag;
+    if (inst.version !== selectedId.value) selectedId.value = inst.version;
   },
   { immediate: true },
 );

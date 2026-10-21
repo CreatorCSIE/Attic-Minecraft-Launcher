@@ -41,6 +41,8 @@ const mockBridge: RendererBridge = {
   ping: async () => ok<string>('mock'),
   listVersions: async () => ok([]),
   getVersionJson: async () => err<VersionJson>(NO_BRIDGE),
+  // 降级 mock 无本地 jar 可言：探测恒 false（菜单项禁用 = 可见降级语义）。
+  probeVersionClass: async () => ok(false),
   dryRunLaunch: async () => err<LaunchConfig>(NO_BRIDGE),
   launch: async () => err<GameSession>(NO_BRIDGE),
   kill: async () => err<GameExit>(NO_BRIDGE),
@@ -109,6 +111,9 @@ function demoBridge(): RendererBridge {
   return {
     ...mockBridge,
     listVersions: async () => ok(demoVersions),
+    // 演示假探测：infdev 行（in-20100223）视为含 isom 类，让「≡」菜单的 visualizer 项可演练；
+    // 其余版本 false，展示"探测不中即禁用"两态。
+    probeVersionClass: async (versionId) => ok(versionId === 'in-20100223'),
     listInstances: async () => ok(demoInstances),
     getSettings: async () => ok<AppSettings>(demoSettings),
     detectJava: async () => ok<JavaDetectionReport>(demoJavaReport),

@@ -209,6 +209,58 @@ test('实例解耦（v1 语义）：gameDir=root/<实例名>，首启自动建 d
   assert.equal(mine.launchArgs, '-Xmx2G');
 });
 
+test('intelFix/forceUpdate：档案回环 + 视图透传 + win32 门控注入/非 Windows 恒不注入', async (t) => {
+  const root = tempRoot(t);
+  ensureLayout(root);
+  fs.writeFileSync(path.join(jsonsDir(root), 'b1.7.3.info'), 'launch-method=indev\n');
+  const rt = new AtticRuntime({ rootDir: root, platform: 'win32', fetchImpl: () => Promise.reject(new Error('offline')) });
+  rt.addAccount('Tester');
+  const java = 'C:\\Java\\jdk1.8\\bin\\java.exe';
+
+  // v1 缺键缺省=开：新建实例无 intelFix 键 → win32 下 jvmArgs 首位注入（v1 Launcher.java 语义）
+  const cfgDef = await rt.dryRunLaunch({ versionId: 'b1.7.3', instanceId: 'iw', javaPath: java });
+  assert.equal(cfgDef.jvmArgs[0], '-XX:HeapDumpPath=java.exe_minecraft.exe.heapdump');
+
+  // 显式关：视图 → 档案 → 上下文链路上键即停注入；forceUpdate=true 落档案
+  rt.saveInstance({ name: 'iw', version: 'b1.7.3', intelFix: false, forceUpdate: true });
+  const view = rt.listInstances().find((i) => i.name === 'iw');
+  assert.equal(view.intelFix, false);
+  assert.equal(view.forceUpdate, true);
+  const cfgOff = await rt.dryRunLaunch({ versionId: 'b1.7.3', instanceId: 'iw', javaPath: java });
+  assert.ok(!cfgOff.jvmArgs.some((a) => a.includes('HeapDumpPath')));
+  assert.equal(loadInstance(root, 'iw').forceUpdate, true, 'forceUpdate 应落档案键');
+  // 只关 intelFix 不写 forceUpdate：缺键回落视图（UI 按缺省关展示）
+  rt.saveInstance({ name: 'iw2', version: 'b1.7.3', intelFix: false });
+  const v2 = rt.listInstances().find((i) => i.name === 'iw2');
+  assert.equal(v2.intelFix, false);
+  assert.equal(v2.forceUpdate, undefined);
+
+  // 非 win32 宿主：intelFix 缺键（=v1 开）也恒不注入（v1 OS.isWindows 门控）
+  const rtLx = new AtticRuntime({ rootDir: root, platform: 'linux', fetchImpl: () => Promise.reject(new Error('offline')) });
+  const cfgLx = await rtLx.dryRunLaunch({ versionId: 'b1.7.3', instanceId: 'iw3', javaPath: '/usr/bin/java' });
+  assert.ok(!cfgLx.jvmArgs.some((a) => a.includes('HeapDumpPath')));
+});
+
+test('probeVersionClass：jar 条目探测 + 未安装=false + mtime 换代缓存失效', (t) => {
+  const root = tempRoot(t);
+  ensureLayout(root);
+  const rt = new AtticRuntime({ rootDir: root, fetchImpl: () => Promise.reject(new Error('offline')) });
+  const ISOM = 'net/minecraft/isom/IsomPreviewApplet.class';
+  assert.equal(rt.probeVersionClass('pv', ISOM), false, 'jar 不在 = false');
+  fs.writeFileSync(
+    path.join(versionsDir(root), 'pv.jar'),
+    buildJarBuffer(['net.minecraft.isom.IsomPreviewApplet', 'net.minecraft.client.MinecraftApplet']),
+  );
+  assert.equal(rt.probeVersionClass('pv', ISOM), true);
+  assert.equal(rt.probeVersionClass('pv', 'net/minecraft/client/Minecraft.class'), false);
+  // 换 jar（forceUpdate 重下/修复场景）：mtime 前移逼缓存失效，不得读到旧条目清单
+  const jar = path.join(versionsDir(root), 'pv.jar');
+  fs.writeFileSync(jar, buildJarBuffer(['net.minecraft.client.MinecraftApplet']));
+  const st = fs.statSync(jar);
+  fs.utimesSync(jar, st.atime, new Date(st.mtimeMs + 10_000));
+  assert.equal(rt.probeVersionClass('pv', ISOM), false);
+});
+
 test('扫描：bin 库池与已安装版本并集', (t) => {
   const root = tempRoot(t);
   ensureLayout(root);

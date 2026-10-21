@@ -118,6 +118,8 @@ export function instanceViewFromConfig(config: {
   height?: number;
   javaPath?: string;
   addons?: string;
+  intelFix?: boolean;
+  forceUpdate?: boolean;
 }): InstanceView {
   const view: InstanceView = { name: config.name, version: config.version };
   if (config.gameDir) view.gameDir = config.gameDir;
@@ -129,5 +131,7 @@ export function instanceViewFromConfig(config: {
   if (config.addons !== undefined) {
     view.addons = config.addons.split(',').map((s) => s.trim()).filter(Boolean);
   }
+  if (config.intelFix !== undefined) view.intelFix = config.intelFix;
+  if (config.forceUpdate !== undefined) view.forceUpdate = config.forceUpdate;
   return view;
 }

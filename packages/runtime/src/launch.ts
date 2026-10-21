@@ -37,6 +37,12 @@ export interface LaunchContext {
    * 仅此通道可起——候选表两个 MinecraftApplet 名在 jar 中皆不存在）；优先于方法数据表。
    */
   appletClass?: string;
+  /**
+   * Intel 显卡修复（v1 `intelFix` 键语义；win32 门控归宿主 buildContext——非 Windows 恒不注入）。
+   * true = jvmArgs 首位 `-XX:HeapDumpPath=java.exe_minecraft.exe.heapdump`（v1 Launcher.java
+   * L576-578 紧跟 javapath 之后的首位语义）。
+   */
+  intelFix?: boolean;
   /** 实例勾选的 addon id 集（宿主从档案透传）；按目录映射注入 -Dlf.* 开关。
    * undefined = 档案无 addons 键（老档案）→ 零注入，行为与 legacyfix 自身缺省一致。 */
   addons?: string[];
@@ -151,7 +157,11 @@ export function assembleLaunchConfig(
   );
 
   // ---------- jvmArgs 固定组（顺序即契约） ----------
-  const jvmArgs: string[] = [`-Xmx${context.maxMemoryMb}m`];
+  const jvmArgs: string[] = [];
+  // v1 intelFix（Launcher.java L576-578）：win32 门控已在宿主 buildContext 完成（非 Windows 恒 false），
+  // 注入位 = 固定组最前（v1「紧跟 javapath」首位语义）。
+  if (context.intelFix) jvmArgs.push('-XX:HeapDumpPath=java.exe_minecraft.exe.heapdump');
+  jvmArgs.push(`-Xmx${context.maxMemoryMb}m`);
   if (context.minMemoryMb !== undefined) jvmArgs.push(`-Xms${context.minMemoryMb}m`);
   // 组序契约：固定堆参数 → 全局 JVM 参数（settings.jvmArgs）→ 实例 launchArgs。
   for (const token of (context.globalJvmArgs ?? '').trim().split(/\s+/)) {

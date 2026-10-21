@@ -163,10 +163,10 @@
 - [ ] 复刻时修 v1 三缺陷：`loadMods()` 追加不清空静态 list、Load 按钮文案笔误、mod jar 下载无 sha1 前置校验（.info 层）
 
 **Force Update → 进实例设置（搬语义不搬缺陷）**：v1 实况 = 会话级全局静态字段（不持久化、放在实例设置对话框属 UI 错位、`readyAddons` 收参未用）；有效覆盖仅 libs/natives 重装 + 无 sha1 版本 jar 强下。
-- [ ] 实例级持久布尔键 + **一次性生效**：勾选 → 下次启动跳过"本地存在即复用"（libs/natives/版本 jar 强制重下重解压）→ 启动后自动复位取消；落基本设置 card
+- [x] 实例级持久布尔键（2026-10-21 实现，用户口径改为常开开关、取消"一次性复位"）：`InstanceView.forceUpdate`（缺键=false，Attic 扩展键，非缺省才落档）→ launch() 编排读取，`{force:true}` 旁路四下载（client jar/libs/assets index/objects）的"已存在即复用"与 repair=false 缺失抛错；落基本设置 card
 
 **Intel 双件套（调研澄清：v1 开关与 legacyfix 是两码事，都收）**
-- [ ] v1 "Apply performance trick for Intel Graphics" = `-XX:HeapDumpPath=java.exe_minecraft.exe.heapdump`（仅 Windows，Java 5u7 时代驱动 workaround，v1 默认开）→ 忠实搬进基本设置（实例级布尔，成本一条 JVM 参数，现代驱动无害）
+- [x] v1 "Apply performance trick for Intel Graphics" = `-XX:HeapDumpPath=java.exe_minecraft.exe.heapdump`（仅 Windows，Java 5u7 时代驱动 workaround，v1 默认开）→ 已实现（2026-10-21）：实例级布尔 `intelFix`（缺键=true），宿主 buildContext win32 门控注入 **jvmArgs 首位**（对齐 v1 Launcher.java L576-578 javapath 后首位语义），落基本设置 card
 - [ ] legacyfix `-Dlf.intel`（`IntelGraphicsPatch`：glActiveTexture 前补 glClientActiveTexture，修老 Intel GPU 多纹理渲染错乱 b1.9–1.7.10，opt-in 默认关）→ 作 **addons 目录第 10 个实装项**（enable 族，现有注入链零改造）
 
 **Discord RPC → 暂不实现（挂 Phase 6 愿望池）**：v1 = 游戏子进程 JVM 内 discord-rpc native 连本机 Discord IPC，展示"User/Version"；app id `939918927989973052` 为 Betacraft 注册物不可复用（需自注册开发者门户+传图）。若未来做：electron 主进程直连 `discord-ipc` 命名管道（纯 WebSocket，无需游戏侧注入），实例档案加 `RPC` 布尔键（v1 键集本有）即可。
@@ -180,6 +180,12 @@
 - [ ] 契约测试双绿进 CI（TS 跑 Node、Rust 跑 `cargo test`，同一 fixture）
 - [ ] **里程碑 M2**：Tauri 壳达到与 Electron 壳相同的游戏可启动面
 
+**WebView 最低版本支持做法（2026-10-21 调研，来源 tauri.app distribute/windows-installer + reference/webview-versions + 2.12 release notes）**：
+- **Windows（WebView2，自更新 Chromium）**：官方做法 = `bundle.windows.minimumWebview2Version`（如 `"110.0.1531.0"`）——安装器检测本机 WebView2 版本，不达标即按 `webviewInstallMode` 拉起运行时安装，五档：`downloadBootstrapper`（缺省，~0MB 需联网）/ `embedBootstrapper`（+1.8MB，内置引导器，Win7 msi 兼容路径）/ `offlineInstaller`（+127MB 全离线）/ `fixedVersion|fixedRuntime`（+180MB 自带固定运行时，体积大且安全补丁自担）/ `skip`（不推荐）。**决策建议**：NSIS + `embedBootstrapper` + 钉一个满足前端特性的最低版本；Win10 1803+/Win11 预装 Evergreen 基本免装。
+- **Win7 红线**：Tauri 2.12（2026-09-26）官宣放弃 Win7——新版 WebView2 installer 在 Win7 崩于 `GetPackagesByPackageFamily` 入口点缺失；MSRV 同步提至 Rust 1.90（stable-3 政策）。我们的 Win7 老玩家需求由 **Electron 壳兜底**（Electron 最后支持 Win7 的版本仍可发布）或旧版安装包，不在 Tauri 壳上追。
+- **macOS（WKWebView，随系统）**：10.10 起系统内置、随 OS 更新，**不受支持版本不再更新 WebKit** → 没有"装 WebView"这回事，只能钉 OS 下限：`bundle.macOS.minimumSystemVersion`（Tauri 官方支持面 10.15+，对应 WebKit 608/Safari 13 等价基线）。CSS/JS 保守基线按 Safari 13 划线。
+- **Linux（webkit2gtk-4.1，发行版决定）**：无法自带运行时，最低版本 = **构建基线发行版决定**：官方口径"用最旧的受支持且仓库提供 `libwebkit2gtk-4.1-dev` 的系统构建"——Ubuntu 22.04 / Debian 12 为合格基线（webkit 2.36 ≈ Safari 16 等价）；deb 包自动声明依赖 `libwebkit2gtk-4.1-0` + `libgtk-3-0`，老发行版（如 Ubuntu 20.04 初始 2.28）装得上但 WebView 漂移——与风险 #4 缓解一致，Tier-2 定位不变。
+
 ## 6. Phase 5 — 分发
 
 - [ ] Windows：Tauri NSIS 主发布；Electron 版走 electron-builder 作参考实现
@@ -189,9 +195,21 @@
 - [ ] 更新通知：GitHub Releases 轮询（照抄 v2 的做法）
 - [ ] README 补免责声明显眼位 + 品牌写法 "Attic Launcher for Minecraft: Java Edition"（风险 #6）
 
+**安装包选型 + 架构矩阵早期调研（2026-10-21，来源 tauri.app distribute 文档 + tauri-bundler changelog）**：
+- **格式支持面**：Tauri bundler 原生 targets 仅 `["deb","rpm","appimage","nsis","msi","app","dmg"]` 或 `"all"`——**Inno Setup 无官方通道**（需社区外挂自写 .iss），排除；结论：Windows 不引入 Inno，维持 NSIS 主发布。
+- **Windows NSIS vs MSI**：NSIS 出 `*-setup.exe`，可 Linux/macOS 上 `cargo-xwin` 交叉构建，且 updater 直接复用 setup 包；MSI 走 WiX v3，**只能在 Windows 上构建**（.NET 3.5 依赖需装 VBSCRIPT 可选功能），价值在企业/GPO 静默分发场景——按需后置（`targets` 加一项即可，不费力）。双轨发：NSIS 必发，MSI 可选附件。
+- **Linux 三发**：deb（Debian/Ubuntu 系）+ rpm（Fedora/openSUSE 系）+ AppImage（免 root 兜底）全发——bundler 一次构建各格式自动产出，边际成本低；AppImage 运行仍需 FUSE（Ubuntu 24.04 只带 fuse3 的发行版给 `--appimage-extract-and-run` 逃生舱，进已知问题清单）；pacman 等社区需求出现再加。
+- **macOS**：`app`（.app 目录）+ `dmg`（分发容器）两个都发，未签名 + 右键打开教程（承接上条）。
+- **架构矩阵（arm64 / x86 早期结论）**：
+  - Windows：`x86_64-pc-windows-msvc` 必发；**arm64（`aarch64-pc-windows-msvc`）值得做**——需 VS C++ ARM64 build tools，注意 NSIS 安装器 stub 本身仍是 x86（靠 Prism 模拟运行，装在 ARM64 机器上无感），包内应用为原生 arm64；Win-on-ARM 设备保有量上升（Copilot+ PC），供给成本低。i686 32 位（`i686-pc-windows-msvc` 可构建）暂缓——仅服务 32 位老系统，而那批用户已被分流到 Electron 兜底壳（见 Phase 4 Win7 红线）。
+  - macOS：ARM（Apple Silicon）为主已定；x86_64 版本靠 Rosetta 2 过渡，或 CI 加一条 `--target x86_64-apple-darwin` 发 universal dmg（`lipo` 合并，成本低，发版前决策）。
+  - Linux：`x86_64` 必发；`aarch64-unknown-linux-gnu` 用 Ubuntu 22.04 arm64 runner 原生构建即可（webkit2gtk-4.1 在 arm64 仓库同源），面向树莓派 OS 64 位等 SBC 玩家——老 Minecraft 与 SBC 重叠度待社区验证，Tier-2/3。
+  - Electron 对照（同一矩阵口径）：electron-builder 支持 win x64/arm64/ia32、linux x64/arm64/armv7l、mac x64/arm64——我们的发版面：win x64（主）+ arm64（次），linux x64 + arm64（deb/rpm/AppImage），mac arm64 主 x64 次；ia32/armv7l 均暂缓。
+  - **游戏侧无关约束**：发行版架构 ≠ 游戏 JVM 架构——远古版本要 32 位 x86 JRE（Zulu 归档 x86 有、arm64 无 JRE 8 老构建则另议），壳的 arm64 发行不能替玩家解决 JVM 供给，安装器文档需说明（风险 #7 同族）。
+
 ## 7. Phase 6 — 后置（不承诺时间）
 
-- [ ] **Infdev 地图预览器（legacyfix VisualizerPatch，方案已调研定稿，用户决策：暂不实现）**：
+- [ ] **Infdev 地图预览器（legacyfix VisualizerPatch，方案已调研定稿；2026-10-21 UI 先行落地：开关移至启动页「≡」菜单勾选项 + 激活实例 jar 类探测启用（`probeVersionClass`，`net/minecraft/isom/IsomPreviewApplet.class`，mtime 缓存），勾选写激活实例 addons；`-Dlf.visualizer` 注入链保留，实际生效仍等 legacyfix 换 nightly 后实测）**：
   - 上游依据：`6ed9e82`（2026-10-13，v3 HEAD）新增 `VisualizerPatch`——opt-in 补丁，`-Dlf.visualizer` 存在即生效（`Patch.shouldApply` 走 Agent SETTINGS 的 `lf.*` 通道，与 `-Dlf.assetsDir` 等同源），把启动主类 `main()` 替换为反射调用 `VisualizerLauncher.launchPreviewApplet("net.minecraft.isom.IsomPreviewApplet")`；`VisualizerLauncher` 自建 AWT 窗口「Minecraft Infinite Map Visualizer」854×480，关窗 `System.exit(0)` 进程自退（**无需窗口看门狗**）。`reference/legacyfix` 已同步至 `6ed9e82`（顺带含 c0.0.15a 非 5565 端口补丁、LWJGL 3.1.3 方法补丁、ProxyPatch 增强 + version_data.json 新行）。
   - jar 供给：**免自编译**——CI nightly 构件 `https://nightly.link/betacraftuk/legacyfix/workflows/gradle/v3`（最新 `legacyfix-nightly-<run_id>.zip`，内含 shadow 胖 jar，version=`nightly-<run_id>`）；Release 26.8（2026-08-23）不含 visualizer，走 nightly 才有。落地通道二选一：① 端点/设置增 legacyfix 渠道（release/nightly），nightly 先经 GitHub API `actions/workflows/gradle.yml/runs?branch=v3&status=success` 解析最新 run → 构件名拼 `nightly.link/.../<name>.zip`（构件名含 run 号、每次 push 变化，索引页 `workflows/gradle/v3` 亦可解析）；② 手动把 nightly jar 覆盖数据根 `launcher/legacyfix-*.jar`（`ensureLegacyfix` 见文件已存在即跳过，零代码改动，先验证用）。
   - **2026-10-18 全链路实测（run `38431103449`，head=`6ed9e82`，最新成功 nightly）**：

@@ -57,7 +57,7 @@
 5. `gameArgs[0]` 是用户名；
 6. `betacraft.proxyArgs` 全量进 `jvmArgs`。
 
-`jvmArgs` 固定组（顺序即拼装顺序）：`-Xmx`（+可选 `-Xms`）→ 全局 `jvmArgs`（`AppSettings.jvmArgs` 空白分隔逐 token）→ 实例 `launchArgs` 空白分隔逐 token 注入（v1 语义：重复 `-Xmx` JVM 取后者，实例覆盖全局，全局居中）→ `-Djava.util.Arrays.useLegacyMergeSort=true` → `-Dhttp.nonProxyHosts=api.betacraft.uk|files.betacraft.uk|checkip.amazonaws.com|textures.minecraft.net` → LWJGL2 natives 两参（`org.lwjgl.librarypath`/`net.java.games.input.librarypath` = `<dataDir>/bin/natives`）→ `proxyArgs` → `-Dlf.proxy.levelServer=<AppSettings.levelServer>`（仅设置里有值时注入，覆盖 `gameDir/legacyfix/level-server.txt`）→ `javaagent` 展开 → 请求侧 `extraJvmArgs`。（曾有的 `-Dsun.java2d.dpiaware=false` 已证伪摘除——该 Oracle JDK8 扩展属性只影响 Java2D 渲染缩放，对 LWJGL 原生窗坐标无作用。）
+`jvmArgs` 固定组（顺序即拼装顺序）：intelFix `-XX:HeapDumpPath=java.exe_minecraft.exe.heapdump`（仅 `context.intelFix=true`，即 win32 门控 + 实例键非 false——v1 Launcher.java L576-578 紧跟 javapath 的首位语义）→ `-Xmx`（+可选 `-Xms`）→ 全局 `jvmArgs`（`AppSettings.jvmArgs` 空白分隔逐 token）→ 实例 `launchArgs` 空白分隔逐 token 注入（v1 语义：重复 `-Xmx` JVM 取后者，实例覆盖全局，全局居中）→ 实例 addons `-Dlf.*` 目录映射 → `-Djava.util.Arrays.useLegacyMergeSort=true` → `-Dhttp.nonProxyHosts=api.betacraft.uk|files.betacraft.uk|checkip.amazonaws.com|textures.minecraft.net` → LWJGL2 natives 两参（`org.lwjgl.librarypath`/`net.java.games.input.librarypath` = `<dataDir>/bin/natives`）→ `proxyArgs` → `-Dlf.proxy.levelServer=<AppSettings.levelServer>`（仅设置里有值时注入，覆盖 `gameDir/legacyfix/level-server.txt`）→ `javaagent` 展开 → 请求侧 `extraJvmArgs`。（曾有的 `-Dsun.java2d.dpiaware=false` 已证伪摘除——该 Oracle JDK8 扩展属性只影响 Java2D 渲染缩放，对 LWJGL 原生窗坐标无作用。）
 
 Applet 容器（主类 `AppletLauncher`）的 `gameArgs` 末尾追加 `--width <w> --height <h>`（实例值，v1 缺省 854×480；`AppletFrame.java` 读取，缺省兜底 640×480）。非 Applet 版本窗口由 LWJGL/DeAwt 自管，不注入。
 
@@ -74,7 +74,9 @@ legacyfix jar 原位补丁（窗口偏右下最小修复，不属启动命令行
 - `AppSettings`：`javaPath?`、`maxMemoryMb?`、`memoryMode?`（`auto|manual`，缺省 manual）、`username?`、`theme?`（`dark|light|system`）、`language?`（i18n locale 键，渲染侧热切换，单一真相；localStorage 仅 bootstrap 缓存）、`jvmArgs?`（全局 JVM 参数，组序见 §2.6）、`checkIntegrity?`/`fixMissing?`/`minimizeOnLaunch?`/`diagnosticLog?`/`consoleOnLaunch?`（布尔三态：落盘 `'true'/'false'`，缺键 = undefined = 消费端缺省——`checkIntegrity`/`fixMissing`/`consoleOnLaunch` 缺省 true，`minimizeOnLaunch`/`diagnosticLog` 缺省 false；`consoleOnLaunch` = 启动成功后自动唤起独立控制台窗（v1「Game log」开关的全局化转置，testLaunch 不受约束恒弹））、`rootOverride?`（数据根更换：下次启动应用后由宿主从平台默认根 peek，portable/env 优先）、`levelServer?`（LegacyFix 关卡存档模式：`local`/URL；有值时直通 `-Dlf.proxy.levelServer`，抑制一次性对话框并覆盖陈旧 txt）、`endpoints?`。落盘键同名 + `endpoint.*`；`setSettings` 合并写回、未知键保留（v1 遗留键不丢）。
 - 派生语义（无独立契约键）：Java 模式 = `javaPath` 有值为手动、空为自动（自动 → 手动由 UI 固化当前选中项）；堆内存三级优先 = `LaunchRequest.maxMemoryMb` > `memoryMode=auto` 宿主估算（`round(总×0.4)` 取 128 步长夹 `[512,2048]`，取不到回落 1024）> `maxMemoryMb` 定值 > 1024；UI 展示拷贝与宿主估算公式改动须双侧同步。
 - `EndpointOverrides`：全为可序列化的纯字符串（`versionList`/`filesBase`/`legacyfixRelease`/`zuluMetadata`/`mojangManifest`）。函数形态的 `versionJson(id)`/`assetIndex(id)` 由 `filesBase` 在 runtime 侧派生（`endpointsFromOverrides`），契约层不携带可调用形状。端点属构造级配置——改动在下次启动应用后生效。
-- `InstanceView`：对齐 v1 Instance Settings 可编辑集 `{ name, version, gameDir?, launchArgs?, width?, height?, javaPath? }`。`gameDir` 缺省 = 宿主派生 `root/<实例名>`（v1 `Instance.newInstance`；已存在实例保留其落位）；`launchArgs`/`width`/`height` 缺省 = v1 `newInstance` 值（`-Xmx1G`、854×480，`loadInstance` 以缺省为底、属性覆盖）。版本是实例属性——launch 时选中版本写回实例（v1 `InstanceSettings` 语义：同实例切版本存档共享）。`LaunchRequest.instanceId?` 缺省 = `default instance`（v1 首启自动建档）。
+- `InstanceView`：对齐 v1 Instance Settings 可编辑集 `{ name, version, gameDir?, launchArgs?, width?, height?, javaPath?, addons?, intelFix?, forceUpdate? }`。`gameDir` 缺省 = 宿主派生 `root/<实例名>`（v1 `Instance.newInstance`；已存在实例保留其落位）；`launchArgs`/`width`/`height` 缺省 = v1 `newInstance` 值（`-Xmx1G`、854×480，`loadInstance` 以缺省为底、属性覆盖）。版本是实例属性——launch 时选中版本写回实例（v1 `InstanceSettings` 语义：同实例切版本存档共享）。`LaunchRequest.instanceId?` 缺省 = `default instance`（v1 首启自动建档）。
+- `addons`（v1 同名档案键 = 逗号分隔；视图数组、宿主序列化）：目录 `INSTANCE_ADDONS` 数据驱动，`prop/mode` 映射 legacyfix `-Dlf.*`（enable=勾选注入 / disable=取消注入）。三态：无键（老档案）= 零注入（legacyfix 自身缺省）；空串 = 显式全关；数组 = 勾选集。`uiSection` 仅决定渲染归属（`basic`=实例页基本设置 card：vsync/proxy/skins/server-auth；缺省 `addons`=Addons card；`launchmenu`=启动页「≡」菜单：visualizer——勾选随激活实例读写、数据模型同链），注入顺序按目录序。`probeClass`（launchmenu 项）= 启用前置：`attic:version:probe-class` 探测选中版本本地 jar 条目。visualizer 的 legacyfix 侧生效待 nightly（用户拍板：注入链保留、功能暂缓）。
+- `intelFix`（v1 同名键，缺键 = true）：Windows 启动注入 `-XX:HeapDumpPath=java.exe_minecraft.exe.heapdump`（v1 首位语义，§2.6）；非 win32 恒不注入（门控在宿主 buildContext，拼装器保持平台中性）。`forceUpdate`（Attic 扩展键，v1 为全局 static 不落档案；缺键 = false）：启动下载编排旁路 jar/库/资产的「已存在即复用」检查重下（`.info` 的 custom 豁免不动）。两键均只在偏离缺省时落档案键。
 
 ## 3. IPC 通道与事件
 
@@ -85,6 +87,7 @@ legacyfix jar 原位补丁（窗口偏右下最小修复，不属启动命令行
 | `attic:ping` | — | `IpcResult<string>` |
 | `attic:versions:list` | — | `IpcResult<VersionRef[]>` |
 | `attic:versions:json` | `versionId: string` | `IpcResult<VersionJson>` |
+| `attic:version:probe-class` | `versionId: string, className: string` | `IpcResult<boolean>`（本地 client jar zip 条目探测（如 `net/minecraft/isom/IsomPreviewApplet.class`）：启动页「≡」菜单 launchmenu 项启用判定。jar 未下载/损坏/无条目=false；宿主按 jar 路径+mtime 缓存条目清单。Rust 侧镜像：`versions/<id>.jar` 中央目录读条目名，同一语义） |
 | `attic:launch:dry-run` | `LaunchRequest` | `IpcResult<LaunchConfig>` |
 | `attic:launch` | `LaunchRequest` | `IpcResult<GameSession>` |
 | `attic:kill` | — | `IpcResult<GameExit>` |

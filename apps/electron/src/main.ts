@@ -213,6 +213,9 @@ app.whenReady().then(() => {
   handle(IPC_CHANNELS.PING, () => runtime.ping());
   handle(IPC_CHANNELS.VERSIONS_LIST, () => runtime.listVersions());
   handle(IPC_CHANNELS.VERSIONS_JSON, (versionId: string) => runtime.getVersionJson(versionId));
+  handle(IPC_CHANNELS.VERSION_PROBE_CLASS, (versionId: string, className: string) =>
+    runtime.probeVersionClass(versionId, className),
+  );
   handle(IPC_CHANNELS.LAUNCH_DRY_RUN, (request: LaunchRequest) => runtime.dryRunLaunch(request));
   handle(IPC_CHANNELS.LAUNCH, async (request: LaunchRequest) => {
     const session = await runtime.launch(request);

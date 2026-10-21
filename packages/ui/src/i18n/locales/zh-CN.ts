@@ -171,6 +171,8 @@ export const zhCN: Record<string, unknown> = {
     },
     javaPath: 'Java 路径',
     javaPathPlaceholder: '留空 = 全局自动检测',
+    intelFix: { name: 'Intel 显卡修复', desc: 'Windows 下注入 -XX:HeapDumpPath 堆快照路径（v1 intelFix，默认开）。' },
+    forceUpdate: { name: '强制更新', desc: '启动时重新下载版本文件（jar/库/资产），即使本地已存在（v1 Force Update）。' },
     exists: '该名称的实例已存在，请直接编辑或换一个名称。',
     saved: '已保存',
   },
@@ -188,6 +190,7 @@ export const zhCN: Record<string, unknown> = {
     menu: '更多操作',
     instanceSettings: '实例设置',
     testLaunch: '测试启动',
+    visualizerOff: '选中版本的本地 jar 不含无限地图预览类（或未下载），暂不可用',
     downloadFailed: '下载失败',
     stage: {
       'version-manifest': '正在获取版本列表…',

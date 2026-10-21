@@ -96,6 +96,17 @@ export interface InstanceView {
   javaPath?: string;
   /** 勾选的 addon id 集（v1 `addons` 档案键 = 逗号分隔；视图用数组，宿主序列化）。 */
   addons?: string[];
+  /**
+   * Intel 显卡修复（v1 `intelFix` 档案键，同名；v1 缺省 true）。Windows 上注入
+   * `-XX:HeapDumpPath=java.exe_minecraft.exe.heapdump`（v1 Launcher.java L576-578 原样），
+   * 其余平台宿主不注入。缺键 = true（v1 语义）。
+   */
+  intelFix?: boolean;
+  /**
+   * 强制更新（Attic 扩展键；v1 是全局 static `Launcher.forceUpdate`，不落实例档案——
+   * Attic 判定为实例属性放基本设置）。true = 启动时旁路 jar/库/资产的「已存在即复用」检查重下。
+   */
+  forceUpdate?: boolean;
 }
 
 /**
@@ -103,6 +114,9 @@ export interface InstanceView {
  * prop/mode 映射 legacyfix 的 -Dlf.* 开关（事实源：legacyfix docs/Additional settings.md）。
  * mode=enable：勾选才注入 prop；mode=disable：取消才注入（功能默认开，如皮肤/代理）。
  * placeholder：v1 addons 有、legacyfix 无对应开关 → UI 占位禁用，不参与装配。
+ * uiSection：渲染归属——'basic'=实例页基本设置 card，'launchmenu'=启动页「≡」菜单
+ * （随激活实例 addons 读写），缺省 'addons'=Addons card。仅影响 UI 布局，数据模型不变。
+ * probeClass：launchmenu 项的启用前置探测（选中版本 client jar 需含此 class 条目才可勾选）。
  */
 export interface AddonDef {
   id: string;
@@ -110,22 +124,34 @@ export interface AddonDef {
   prop: string;
   mode: 'enable' | 'disable';
   placeholder?: boolean;
+  uiSection?: 'basic' | 'addons' | 'launchmenu';
+  /** jar 内条目路径（如 `net/minecraft/isom/IsomPreviewApplet.class`）；uiSection=launchmenu 时提供。 */
+  probeClass?: string;
 }
 
 export const INSTANCE_ADDONS: AddonDef[] = [
-  { id: 'vsync', prop: 'vsync', mode: 'enable' },
-  { id: 'visualizer', prop: 'visualizer', mode: 'enable' },
+  // 基本设置 card（v1 实例对话框常用项，用户指定迁出 Addons 列表）
+  { id: 'vsync', prop: 'vsync', mode: 'enable', uiSection: 'basic' },
+  { id: 'proxy', prop: 'proxy.disable', mode: 'disable', uiSection: 'basic' },
+  { id: 'skins', prop: 'skin.disable', mode: 'disable', uiSection: 'basic' },
+  { id: 'server-auth', prop: 'auth-on-server-join.disable', mode: 'disable', uiSection: 'basic' },
+  // Addons card
   { id: 'modloader', prop: 'modloader', mode: 'enable' },
   { id: 'beta-forge', prop: 'beta-forge', mode: 'enable' },
   { id: 'bouncycastle', prop: 'bouncycastle', mode: 'enable' },
   { id: 'show-notice', prop: 'showNotice', mode: 'enable' },
-  { id: 'skins', prop: 'skin.disable', mode: 'disable' },
-  { id: 'proxy', prop: 'proxy.disable', mode: 'disable' },
-  { id: 'server-auth', prop: 'auth-on-server-join.disable', mode: 'disable' },
   // v1 addons 清单占位（legacyfix 无对应开关，接入后转正）
   { id: 'fullscreen', prop: '', mode: 'enable', placeholder: true },
   { id: 'game-mode-switch', prop: '', mode: 'enable', placeholder: true },
   { id: 'quit-game', prop: '', mode: 'enable', placeholder: true },
+  // 启动页「≡」菜单（infdev-20100617 同 jar 并存类，探测到才启用；JVM 注入链保留但生效待 legacyfix nightly）
+  {
+    id: 'visualizer',
+    prop: 'visualizer',
+    mode: 'enable',
+    uiSection: 'launchmenu',
+    probeClass: 'net/minecraft/isom/IsomPreviewApplet.class',
+  },
 ];
 
 /** 新建实例的默认勾选集 = 默认开功能全开（与 legacyfix 自身缺省一致）。 */

@@ -21,6 +21,8 @@ export const IPC_CHANNELS = {
   VERSIONS_LIST: 'attic:versions:list',
   /** 单个版本的解析后 JSON（含 Betacraft 扩展）。 */
   VERSIONS_JSON: 'attic:versions:json',
+  /** 探测本地 client jar 是否含指定 class 条目（启动页「≡」菜单项启用判定；jar 未下载 = false）。 */
+  VERSION_PROBE_CLASS: 'attic:version:probe-class',
   /** 干跑：返回拼装好的 LaunchConfig，不启动进程（契约测试与排障面板共用）。 */
   LAUNCH_DRY_RUN: 'attic:launch:dry-run',
   /** 启动游戏进程。 */
@@ -215,6 +217,8 @@ export interface RendererBridge {
   ping(): Promise<IpcResult<string>>;
   listVersions(): Promise<IpcResult<VersionRef[]>>;
   getVersionJson(versionId: string): Promise<IpcResult<VersionJson>>;
+  /** 本地 jar class 条目探测（VERSION_PROBE_CLASS）：条目路径如 `net/minecraft/isom/IsomPreviewApplet.class`。 */
+  probeVersionClass(versionId: string, className: string): Promise<IpcResult<boolean>>;
   dryRunLaunch(request: LaunchRequest): Promise<IpcResult<LaunchConfig>>;
   launch(request: LaunchRequest): Promise<IpcResult<GameSession>>;
   kill(): Promise<IpcResult<GameExit>>;

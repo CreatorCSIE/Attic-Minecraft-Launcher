@@ -33,6 +33,9 @@ const launchArgs = ref('');
 const javaPath = ref('');
 const width = ref<number | ''>(854);
 const height = ref<number | ''>(480);
+// v1 intelFix 缺键 = 开（v1 语义）；forceUpdate（Attic 扩展键）缺省 = 关
+const intelFix = ref(true);
+const forceUpdate = ref(false);
 const newName = ref('');
 const saving = ref(false);
 const savedFlash = ref(false);
@@ -40,7 +43,11 @@ let savedTimer: ReturnType<typeof setTimeout> | undefined;
 const dirError = ref<string | null>(null);
 
 // —— Addons（目录驱动：INSTANCE_ADDONS ↔ legacyfix -Dlf.* 开关；占位项禁用） ——
+// uiSection 分区：'basic'=基本设置 card，缺省 'addons'=Addons card，'launchmenu'=启动页菜单（本页不渲染）。
 const addonDefs = INSTANCE_ADDONS;
+const sectionOf = (def: (typeof INSTANCE_ADDONS)[number]) => def.uiSection ?? 'addons';
+const basicAddons = computed(() => addonDefs.filter((d) => sectionOf(d) === 'basic'));
+const addonCardDefs = computed(() => addonDefs.filter((d) => sectionOf(d) === 'addons'));
 const addonsSel = ref<string[]>([...DEFAULT_ADDONS]);
 
 function toggleAddon(id: string): void {
@@ -70,6 +77,9 @@ function loadForm(inst: InstanceView): void {
   height.value = inst.height ?? 480;
   // 无 addons 键的老档案：展示按默认开集（与 legacyfix 缺省行为一致，保存时显式落键）
   addonsSel.value = inst.addons ? [...inst.addons] : [...DEFAULT_ADDONS];
+  // v1 缺键语义：intelFix 缺省开、forceUpdate 缺省关
+  intelFix.value = inst.intelFix !== false;
+  forceUpdate.value = inst.forceUpdate === true;
   dirError.value = null;
   flashSaved(false);
 }
@@ -164,6 +174,8 @@ function onNew(): void {
   width.value = 854;
   height.value = 480;
   addonsSel.value = [...DEFAULT_ADDONS];
+  intelFix.value = true;
+  forceUpdate.value = false;
   dirError.value = null;
   flashSaved(false);
 }
@@ -199,6 +211,9 @@ async function onSave(): Promise<void> {
     version: creating.value ? (selectedId.value as string) : (selected.value as InstanceView).version,
     // addons 恒发送当前勾选集（保存即显式落键；老档案首保语义不变——默认开集=legacyfix 缺省）
     addons: [...addonsSel.value],
+    // 双开关仅在偏离缺省时落键（intelFix 缺省开、forceUpdate 缺省关；缺键 = 宿主补默认）
+    ...(intelFix.value ? {} : { intelFix: false }),
+    ...(forceUpdate.value ? { forceUpdate: true } : {}),
   };
   if (gameDir.value.trim()) inst.gameDir = gameDir.value.trim();
   if (launchArgs.value.trim()) inst.launchArgs = launchArgs.value.trim();
@@ -449,6 +464,45 @@ async function onConfirmRemove(): Promise<void> {
             <label class="label" for="inst-h">{{ t('instance.height') }}</label>
             <input id="inst-h" v-model.number="height" class="input" type="number" min="1" step="1" />
           </div>
+          <!-- 开关组（用户指定归置）：v1 两开关（Intel 修复/强制更新）+ 高频 addon 四项。
+               addon 项数据仍是 addonsSel 数组（-Dlf.* 注入链不动），仅渲染归属换到基本设置。 -->
+          <div class="toggles">
+            <div class="addon-row">
+              <div class="addon-info">
+                <span class="addon-name">{{ t('instance.intelFix.name') }}</span>
+                <p class="addon-desc">{{ t('instance.intelFix.desc') }}</p>
+              </div>
+              <label class="switch">
+                <input v-model="intelFix" type="checkbox" :disabled="!hasBridge" />
+                <span class="track" />
+              </label>
+            </div>
+            <div class="addon-row">
+              <div class="addon-info">
+                <span class="addon-name">{{ t('instance.forceUpdate.name') }}</span>
+                <p class="addon-desc">{{ t('instance.forceUpdate.desc') }}</p>
+              </div>
+              <label class="switch">
+                <input v-model="forceUpdate" type="checkbox" :disabled="!hasBridge" />
+                <span class="track" />
+              </label>
+            </div>
+            <div v-for="def in basicAddons" :key="def.id" class="addon-row">
+              <div class="addon-info">
+                <span class="addon-name">{{ t(`instance.addonList.${def.id}.name`) }}</span>
+                <p class="addon-desc">{{ t(`instance.addonList.${def.id}.desc`) }}</p>
+              </div>
+              <label class="switch">
+                <input
+                  type="checkbox"
+                  :checked="addonsSel.includes(def.id)"
+                  :disabled="!hasBridge"
+                  @change="toggleAddon(def.id)"
+                />
+                <span class="track" />
+              </label>
+            </div>
+          </div>
           <div class="actions">
             <button class="primary" type="submit" :disabled="!canSave">
               {{ creating ? t('instance.create') : t('instance.saveChanges') }}
@@ -458,10 +512,11 @@ async function onConfirmRemove(): Promise<void> {
           <p v-if="dirError" class="field-err">{{ dirError }}</p>
         </form>
 
-        <!-- Addons 栏：目录驱动（INSTANCE_ADDONS）；已接入项开关映射 legacyfix -Dlf.*，占位项禁用 -->
+        <!-- Addons 栏：目录驱动（INSTANCE_ADDONS 中 uiSection 缺省项）；已接入项开关映射 legacyfix -Dlf.*，占位项禁用。
+             高频四项归基本设置 card、visualizer 归启动页「≡」菜单（uiSection 分区，数据模型不分家）。 -->
         <section class="card addons">
           <h4 class="card-title">{{ t('instance.addons') }}</h4>
-          <div v-for="def in addonDefs" :key="def.id" class="addon-row">
+          <div v-for="def in addonCardDefs" :key="def.id" class="addon-row">
             <div class="addon-info">
               <span class="addon-name">
                 {{ t(`instance.addonList.${def.id}.name`) }}
@@ -801,6 +856,10 @@ async function onConfirmRemove(): Promise<void> {
 }
 .field--num {
   min-width: 96px;
+}
+/* 基本设置内开关组：独占整行，行样式与 Addons card 共用（addon-row 配方） */
+.toggles {
+  flex: 1 1 100%;
 }
 .label {
   font-size: var(--fs-xs);

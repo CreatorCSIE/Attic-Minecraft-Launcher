@@ -181,6 +181,8 @@ export const en = {
     },
     javaPath: 'Java path',
     javaPathPlaceholder: 'Empty = global auto-detect',
+    intelFix: { name: 'Intel Graphics Fix', desc: 'Injects -XX:HeapDumpPath on Windows to guard against Intel GPU heap-dump failures (v1 intelFix, on by default).' },
+    forceUpdate: { name: 'Force Update', desc: 'Re-download version files (jar/libraries/assets) on launch even when already present locally (v1 Force Update).' },
     exists: 'An instance with this name already exists. Edit it or choose another name.',
     saved: 'Saved',
   },
@@ -198,6 +200,7 @@ export const en = {
     menu: 'More actions',
     instanceSettings: 'Instance settings',
     testLaunch: 'Test launch',
+    visualizerOff: 'The selected version jar does not contain the visualizer class (or is not downloaded yet)',
     downloadFailed: 'Download failed',
     stage: {
       'version-manifest': 'Fetching version list…',

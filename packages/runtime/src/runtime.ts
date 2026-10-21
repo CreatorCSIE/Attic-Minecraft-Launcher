@@ -70,7 +70,7 @@ import {
   zuluJavaDir,
 } from './storage';
 import { canonicalLaunchMethod, detectLaunchMethod, probeIndevEntry, probePreclassicEntry } from './wrapperDetector';
-import { extractZipTo } from './zip';
+import { extractZipTo, listZipEntryNames } from './zip';
 import { installZuluPackage, queryZuluPackages } from './zulu';
 
 export interface AtticRuntimeOptions {
@@ -305,6 +305,34 @@ export class AtticRuntime {
   }
 
   /**
+   * 本地 client jar class 条目探测（VERSION_PROBE_CLASS）：启动页「≡」菜单项启用判定
+   * （visualizer → `net/minecraft/isom/IsomPreviewApplet.class`，infdev-20100617 同 jar 并存类）。
+   * jar 未下载/损坏/条目缺失 = false（菜单项禁用，不报错——可见降级）。
+   * 条目清单按 jar 路径+mtime 缓存，避免每次开菜单都重读 zip 中央目录。
+   */
+  private readonly classProbeCache = new Map<string, { mtimeMs: number; entries: string[] }>();
+
+  probeVersionClass(versionId: string, className: string): boolean {
+    const jar = clientJarFile(this.root, versionId);
+    let mtimeMs: number;
+    try {
+      mtimeMs = fs.statSync(jar).mtimeMs;
+    } catch {
+      return false;
+    }
+    let cached = this.classProbeCache.get(jar);
+    if (!cached || cached.mtimeMs !== mtimeMs) {
+      try {
+        cached = { mtimeMs, entries: listZipEntryNames(jar) };
+      } catch {
+        cached = { mtimeMs, entries: [] };
+      }
+      this.classProbeCache.set(jar, cached);
+    }
+    return cached.entries.includes(className);
+  }
+
+  /**
    * 每次启动重下 .info（v2 已知坑：元数据陈旧）；网络失败退本地。
    * v1 豁免（Launcher.java L412/L432）：custom=true 的 .info 归用户所有，跳过重下/覆盖。
    */
@@ -393,6 +421,9 @@ export class AtticRuntime {
       if (this.processes.running) throw new Error('游戏进程已在运行');
       // 设置页开关的消费点（properties 三态：缺键=缺省开/关按各键注释）
       const settings = loadSettings(this.root);
+      // 实例「强制更新」（v1 Launcher.forceUpdate 语义，Attic 实例化）：旁路 jar/库/资产的
+      // 「已存在即复用」检查重下。.info 的 custom 豁免不动（v1 同义：用户所有的配置不被覆盖）。
+      const forceUpdate = this.resolveInstance(request.instanceId ?? DEFAULT_INSTANCE_NAME).forceUpdate === true;
       let json = await this.refreshVersionInfo(request.versionId);
       // BC `.info` 无 libraries → 从 Mojang 重发布 JSON 回填库池（classic 等不在清单：BC jar 自捆绑依赖，静默跳过）。
       if (!json.libraries || json.libraries.length === 0) {
@@ -407,15 +438,16 @@ export class AtticRuntime {
         await this.client.downloadClientJar(json, this.root, {
           verify: settings['checkIntegrity'] !== 'false',
           repair: settings['fixMissing'] !== 'false',
+          force: forceUpdate,
         });
       }
       json = this.resolveIndevMainClass(json);
-      await this.client.downloadLibrariesToBin(json, this.root);
+      await this.client.downloadLibrariesToBin(json, this.root, { force: forceUpdate });
       this.extractNatives();
       // 资产补全（v2 语义）：索引 + objects 全体由启动器预置——legacyfix 只自动补 custom 段，
       // objects 缺失即游戏内 CodecJOrbis/OpenAL 声音 NPE（用户实测 c0.0.22a）。
-      const assetIndexId = await this.client.downloadAssetIndex(json, this.root);
-      if (assetIndexId) await this.client.downloadAssetObjects(this.root, assetIndexId);
+      const assetIndexId = await this.client.downloadAssetIndex(json, this.root, { force: forceUpdate });
+      if (assetIndexId) await this.client.downloadAssetObjects(this.root, assetIndexId, { force: forceUpdate });
 
       const context = await this.buildContext(request);
       context.appletClass = this.resolvePreclassicAppletClass(json);
@@ -733,6 +765,9 @@ export class AtticRuntime {
       javaPath: view.javaPath,
       // v1 `addons` 键 = 逗号分隔；[] → 空串 = 显式全关（区别于无键的 legacyfix 缺省）
       addons: view.addons?.join(','),
+      // v1 同名键 intelFix（缺键 = v1 缺省 true，视图 undefined 不落键）；forceUpdate = Attic 扩展键
+      intelFix: view.intelFix,
+      forceUpdate: view.forceUpdate,
     });
     return view;
   }
@@ -874,6 +909,8 @@ export class AtticRuntime {
       globalJvmArgs: settings['jvmArgs'],
       // 档案 addons 逗号串 → 数组透传（undefined 保持 = 老档案零注入；空串 = 显式全关）
       addons: instance.addons?.split(',').map((s) => s.trim()).filter(Boolean),
+      // v1 intelFix 缺键 = true（Instance.java newInstance 缺省）；win32 门控在此（launch.ts 保持平台中性）
+      intelFix: this.platform === 'win32' && instance.intelFix !== false,
       width: instance.width,
       height: instance.height,
       assetsDir: path.join(this.root, 'assets'),

@@ -8,6 +8,7 @@
  * 请求形状全走契约（LaunchRequest），UI 不拼参数（戒律 #1）。
  */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { DEFAULT_ADDONS, INSTANCE_ADDONS, type AddonDef } from '@attic/core-spec';
 import { useI18n } from '../i18n';
 import { useSelection } from '../composables/useSelection';
 import { useGame } from '../composables/useGame';
@@ -28,7 +29,7 @@ const { settings } = useSettings();
 const { current } = useAccounts();
 const { bridge, hasBridge } = useBridge();
 const { percent, rateBps, stage, active, failed, reset: resetDownloads } = useDownloads();
-const { activeName } = useInstances();
+const { activeName, instances, save: saveInstance } = useInstances();
 
 const running = computed(() => status.value.running);
 /* 聚合进度区可见性（BlockHelm 配方）：启动中展示；下载失败则常驻红态直到下次启动。 */
@@ -59,6 +60,48 @@ function onDocClick(e: MouseEvent): void {
 
 onMounted(() => document.addEventListener('click', onDocClick, true));
 onBeforeUnmount(() => document.removeEventListener('click', onDocClick, true));
+
+// —— 「≡」菜单 addon 项（INSTANCE_ADDONS 中 uiSection='launchmenu' 目录驱动；当前仅 visualizer）——
+// 启用条件 = 启动页选中版本的本地 client jar 含 probeClass 条目（每次开菜单重探测）；
+// 勾选态 = 激活实例 addons 是否含该 id（老档案无键按 DEFAULT_ADDONS 基线）。
+// 注入链与实例页 addons 同语义（-Dlf.visualizer 恒发；legacyfix 侧生效待 nightly——用户拍板暂缓实现）。
+const menuAddonDefs = INSTANCE_ADDONS.filter((d) => d.uiSection === 'launchmenu');
+const probeResults = ref<Record<string, boolean>>({});
+const activeInstance = computed(() => instances.value.find((i) => i.name === activeName.value) ?? null);
+
+async function probeMenuAddons(): Promise<void> {
+  const v = selected.value;
+  if (!v) {
+    probeResults.value = {};
+    return;
+  }
+  const next = { ...probeResults.value };
+  for (const def of menuAddonDefs) {
+    if (!def.probeClass) continue;
+    const res = await bridge.probeVersionClass(v.id, def.probeClass);
+    next[def.id] = res.ok ? res.value : false;
+  }
+  probeResults.value = next;
+}
+
+function menuAddonOn(id: string): boolean {
+  return (activeInstance.value?.addons ?? DEFAULT_ADDONS).includes(id);
+}
+
+async function toggleMenuAddon(def: AddonDef): Promise<void> {
+  const inst = activeInstance.value;
+  if (!inst) return;
+  // 老档案无 addons 键：以默认开集为基线增删（误把 undefined 写成「除该项外全关」会翻转 disable 族语义）
+  const next = new Set(inst.addons ?? DEFAULT_ADDONS);
+  if (next.has(def.id)) next.delete(def.id);
+  else next.add(def.id);
+  await saveInstance({ ...inst, addons: [...next] });
+}
+
+function onMenuToggle(): void {
+  menuOpen.value = !menuOpen.value;
+  if (menuOpen.value) void probeMenuAddons();
+}
 
 /**
  * 启动编排：accountId = 当前账户（契约可选字段，缺省回落宿主首个账户）；
@@ -148,7 +191,7 @@ function mb(bytes: number): string {
           :aria-label="t('launch.menu')"
           :title="t('launch.menu')"
           :aria-expanded="menuOpen"
-          @click="menuOpen = !menuOpen"
+          @click="onMenuToggle"
         >
           <!-- lucide: align-left（≡） -->
           <svg
@@ -178,6 +221,26 @@ function mb(bytes: number): string {
             @click="onTestLaunch"
           >
             {{ t('launch.testLaunch') }}
+          </button>
+          <!-- addon 菜单项（目录驱动）：jar 探测不含 probeClass = 禁用；勾选即写激活实例 addons -->
+          <button
+            v-for="def in menuAddonDefs"
+            :key="def.id"
+            class="menu-item menu-item--check"
+            type="button"
+            role="menuitemcheckbox"
+            :aria-checked="menuAddonOn(def.id)"
+            :disabled="!probeResults[def.id] || !activeInstance"
+            :title="probeResults[def.id] ? t(`instance.addonList.${def.id}.desc`) : t('launch.visualizerOff')"
+            @click="toggleMenuAddon(def)"
+          >
+            <span class="mi-box" :class="{ 'mi-box--on': menuAddonOn(def.id) }" aria-hidden="true">
+              <!-- lucide: check -->
+              <svg v-if="menuAddonOn(def.id)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 6 9 17l-5-5" />
+              </svg>
+            </span>
+            {{ t(`instance.addonList.${def.id}.name`) }}
           </button>
         </div>
       </div>
@@ -392,5 +455,33 @@ function mb(bytes: number): string {
 .menu-item:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+/* addon 勾选菜单项（visualizer 等 launchmenu 目录项）：15px 勾框 + accent 选中态 */
+.menu-item--check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.mi-box {
+  flex: 0 0 15px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 4px;
+  color: var(--accent-ink);
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
+}
+.mi-box svg {
+  width: 11px;
+  height: 11px;
+}
+.mi-box--on {
+  background: var(--accent);
+  border-color: var(--accent);
 }
 </style>

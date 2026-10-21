@@ -183,6 +183,51 @@ test('downloadClientJar：缺省行为损坏时自动重下修复', async (t) =>
   assert.equal(fs.readFileSync(path.join(root, 'versions', 'c2.0.jar'), 'utf8'), 'GOOD');
 });
 
+test('downloadClientJar：force=true 旁路「存在即复用」重下（实例 forceUpdate 语义）', async (t) => {
+  const root = tempRoot(t);
+  fs.mkdirSync(path.join(root, 'versions'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'versions', 'c2.0.jar'), 'FRESH');
+  let fetched = 0;
+  const client = new BetacraftClient({
+    fetchImpl: async (url) => {
+      fetched++;
+      return fakeFetch({ [url]: 'FRESH' })(url);
+    },
+  });
+  const json = { id: 'c2.0', jar: { url: 'http://x/c2.0.jar', sha1: sha1('FRESH') } };
+  // 基线：sha1 相符 → 不重下
+  await client.downloadClientJar(json, root);
+  assert.equal(fetched, 0);
+  // force：相符也重下（覆盖本地文件）
+  await client.downloadClientJar(json, root, { force: true });
+  assert.equal(fetched, 1);
+  assert.equal(fs.readFileSync(path.join(root, 'versions', 'c2.0.jar'), 'utf8'), 'FRESH');
+  // force 压过 repair=false 的「缺失抛错」（强制更新场景直接补下）
+  fs.rmSync(path.join(root, 'versions', 'c2.0.jar'));
+  await client.downloadClientJar(json, root, { repair: false, force: true });
+  assert.equal(fetched, 2);
+  assert.equal(fs.readFileSync(path.join(root, 'versions', 'c2.0.jar'), 'utf8'), 'FRESH');
+});
+
+test('downloadLibrariesToBin：force=true 覆盖已存在库（缺失才下基线不回归）', async (t) => {
+  const root = tempRoot(t);
+  fs.mkdirSync(path.join(root, 'bin'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'bin', 'lwjgl-2.9.4.jar'), 'OLD');
+  let fetched = 0;
+  const client = new BetacraftClient({
+    fetchImpl: async (url) => {
+      fetched++;
+      return fakeFetch({ [url]: 'NEW' })(url);
+    },
+  });
+  const json = { id: 'x', libraries: [{ name: 'org.lwjgl:lwjgl:2.9.4', url: 'http://x/lwjgl-2.9.4.jar' }] };
+  await client.downloadLibrariesToBin(json, root);
+  assert.equal(fetched, 0, '已存在默认不重下');
+  await client.downloadLibrariesToBin(json, root, { force: true });
+  assert.equal(fetched, 1);
+  assert.equal(fs.readFileSync(path.join(root, 'bin', 'lwjgl-2.9.4.jar'), 'utf8'), 'NEW');
+});
+
 test('ensureLegacyfix：GitHub Release 构件匹配 + 下载落位', async (t) => {
   const root = tempRoot(t);
   const jar = 'LEGACYFIX';

@@ -17,6 +17,7 @@ const bridge: RendererBridge = {
   ping: () => invoke(IPC_CHANNELS.PING),
   listVersions: () => invoke(IPC_CHANNELS.VERSIONS_LIST),
   getVersionJson: (versionId) => invoke(IPC_CHANNELS.VERSIONS_JSON, versionId),
+  probeVersionClass: (versionId, className) => invoke(IPC_CHANNELS.VERSION_PROBE_CLASS, versionId, className),
   dryRunLaunch: (request: LaunchRequest) => invoke(IPC_CHANNELS.LAUNCH_DRY_RUN, request),
   launch: (request: LaunchRequest) => invoke(IPC_CHANNELS.LAUNCH, request),
   kill: () => invoke(IPC_CHANNELS.KILL),

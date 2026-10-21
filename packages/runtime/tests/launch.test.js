@@ -231,6 +231,18 @@ test('addons 注入：档案三态 + 勾选/取消按目录映射 -Dlf.*', () =>
   assert.ok(pos.jvmArgs.indexOf('-Dlf.vsync') < pos.jvmArgs.indexOf('-Djava.util.Arrays.useLegacyMergeSort=true'));
 });
 
+test('intelFix：true = -XX:HeapDumpPath 置 jvmArgs 首位（v1 javapath 后首位语义），false/缺省不注入', () => {
+  const versionJson = { id: 'b1.7.3', mainClass: 'net.minecraft.client.Minecraft' };
+  const on = assembleLaunchConfig(versionJson, { ...baseContext(), intelFix: true });
+  assert.equal(on.jvmArgs[0], '-XX:HeapDumpPath=java.exe_minecraft.exe.heapdump');
+  assert.equal(on.jvmArgs[1], '-Xmx1024m');
+  for (const ctx of [{}, { intelFix: false }]) {
+    const off = assembleLaunchConfig(versionJson, { ...baseContext(), ...ctx });
+    assert.ok(!off.jvmArgs.some((a) => a.includes('HeapDumpPath')));
+    assert.equal(off.jvmArgs[0], '-Xmx1024m');
+  }
+});
+
 function baseContext() {
   return {
     javaPath: '/opt/java/zulu8/bin/java',

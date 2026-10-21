@@ -125,6 +125,8 @@ export interface InstanceConfig {
   javaPath?: string;
   isJavaPathNew?: boolean;
   addons?: string;
+  /** Attic 扩展键（v1 无对应物——v1 是全局 static）：启动时旁路「已存在即复用」强制重下。 */
+  forceUpdate?: boolean;
 }
 
 const INSTANCE_FILE = (root: string, name: string): string => path.join(instancesDir(root), `${name}.txt`);
@@ -186,7 +188,7 @@ export function loadInstance(root: string, name: string): InstanceConfig | null 
   for (const key of ['javaPath', 'addons'] as const) {
     if (props[key] !== undefined) config[key] = props[key];
   }
-  for (const key of ['proxy', 'keepopen', 'RPC', 'intelFix', 'console', 'isJavaPathNew'] as const) {
+  for (const key of ['proxy', 'keepopen', 'RPC', 'intelFix', 'console', 'isJavaPathNew', 'forceUpdate'] as const) {
     const b = toBool(props[key]);
     if (b !== undefined) config[key] = b;
   }
@@ -245,7 +247,7 @@ export function saveInstance(root: string, config: InstanceConfig): void {
   }
   if (config.width !== undefined) props['width'] = String(config.width);
   if (config.height !== undefined) props['height'] = String(config.height);
-  for (const key of ['proxy', 'keepopen', 'RPC', 'intelFix', 'console', 'isJavaPathNew'] as const) {
+  for (const key of ['proxy', 'keepopen', 'RPC', 'intelFix', 'console', 'isJavaPathNew', 'forceUpdate'] as const) {
     const b = config[key];
     if (b !== undefined) props[key] = String(b);
   }
