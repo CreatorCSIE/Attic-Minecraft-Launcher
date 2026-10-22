@@ -151,7 +151,8 @@ export const INSTANCE_ADDONS: AddonDef[] = [
   { id: 'game-mode-switch', prop: '', mode: 'enable', placeholder: true },
   { id: 'quit-game', prop: '', mode: 'enable', placeholder: true },
   // 启动页「≡」菜单动作项（探测到类才可点击；点击 = LaunchRequest.visualizer 一次性注入，
-  // 档案 addons 仍可携带同 id = 常开语义，装配器去重不双注；生效待 legacyfix nightly）
+  // 档案 addons 仍可携带同 id = 常开语义，装配器去重不双注；legacyfix 26.10 Release
+  // 已含 VisualizerPatch/VisualizerLauncher（nightly 依赖废除，生效条件满足））
   {
     id: 'visualizer',
     prop: 'visualizer',

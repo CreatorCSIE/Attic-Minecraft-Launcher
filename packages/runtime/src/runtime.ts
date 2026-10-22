@@ -454,6 +454,12 @@ export class AtticRuntime {
   async launch(request: LaunchRequest): Promise<GameSession> {
     try {
       if (this.processes.running) throw new Error('游戏进程已在运行');
+      // v1 语义（InstanceSettings.java L556）：选中版本写回实例属性——同实例切版本 gameDir 不变、存档共享。
+      // 时序前移（2026-10-21 修复「点启动后实例列表迟迟不出现」）：建档+回写必须落在 launch 的
+      // **首个 await 之前的同步段**——UI 在发起 launch IPC 后立即重拉实例清单，Electron IPC 消息
+      // FIFO 保证本同步段先于清单 IPC 执行，新实例点击即得见；旧时序里回写在全部下载/启动之后，
+      // 列表要等游戏真起来才动。
+      this.persistInstanceVersion(request);
       // 设置页开关的消费点（properties 三态：缺键=缺省开/关按各键注释）
       const settings = loadSettings(this.root);
       // 实例「强制更新」（v1 Launcher.forceUpdate 语义，Attic 实例化）：旁路 jar/库/资产的
@@ -538,8 +544,6 @@ export class AtticRuntime {
           context.accessToken,
         );
       }
-      // v1 语义（InstanceSettings.java L556）：选中版本写回实例属性——同实例切版本 gameDir 不变、存档共享。
-      this.persistInstanceVersion(request);
       this.lastLaunchError = null;
       return session;
     } catch (error) {

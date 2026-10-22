@@ -199,6 +199,12 @@ export function assembleLaunchConfig(
   // 属性优先于 gameDir/legacyfix/level-server.txt（LevelProxyConfig 源码实锤）：
   // 设置里有值即直通覆盖，用户无需删 txt 重触发一次性对话框；缺省不传，保留 LegacyFix 原行为。
   if (context.levelServer) jvmArgs.push(`-Dlf.proxy.levelServer=${context.levelServer}`);
+  // 版本钉（c0.0.15a 服务器端口补丁事故根因，2026-10-21）：legacyfix 的按版本等值补丁
+  // （Classic15aServerPortPatch.shouldApply 判 lf.version=="c0.0.15a"）在 Agent.premain 的
+  // Patcher.apply 决策——早于 main 的 --version 解析与游戏窗口标题探测（两条晚到的注入通道
+  // 都追不上决策点）。-Dlf.* 走 Agent 静态块系统属性收集（Agent.java L237-242），premain 前
+  // 即入 SETTINGS = 唯一确定通道。数据表键控戒律不破：值取 versionJson.id，无版本判断代码。
+  jvmArgs.push(`-Dlf.version=${versionJson.id}`);
   // legacyfix GameArgs.getAssetsDir() 缺省回退 = cwd 相对 "assets"（即 gameDir/assets），读不到启动器共享资产根
   // （c0.0.22a 声音 NPE 根因之一）。官方提示通道 -Dlf.assetsDir 显式钉死共享根，initAssets 的 objects 路径随之前移。
   jvmArgs.push(`-Dlf.assetsDir=${context.assetsDir.replace(/\\/g, '/')}`);

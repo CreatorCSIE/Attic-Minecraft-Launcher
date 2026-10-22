@@ -64,7 +64,7 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick, true));
 // —— 「≡」菜单 addon 动作项（INSTANCE_ADDONS 中 uiSection='launchmenu' 目录驱动；当前仅 visualizer）——
 // 可点前置 = 启动页选中版本的本地 client jar 含 probeClass 条目（每次开菜单重探测）+ 常规可启动（canPlay）；
 // 点击 = 一次性带 `-Dlf.visualizer` 启动（LaunchRequest.visualizer，不写实例档案）。
-// legacyfix 侧生效待 nightly（用户拍板暂缓实现）；档案 addons 仍可携带同 id = 常开语义。
+// legacyfix 26.10 Release 已含 VisualizerPatch（生效条件满足，nightly 依赖废除）；档案 addons 仍可携带同 id = 常开语义。
 const menuAddonDefs = INSTANCE_ADDONS.filter((d) => d.uiSection === 'launchmenu');
 const probeResults = ref<Record<string, boolean>>({});
 

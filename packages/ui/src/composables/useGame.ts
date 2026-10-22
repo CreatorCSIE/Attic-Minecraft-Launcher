@@ -6,6 +6,7 @@
 import { ref } from 'vue';
 import { IPC_EVENTS, type GameStatus, type LaunchConfig, type LaunchRequest } from '@attic/core-spec';
 import { useBridge } from './useBridge';
+import { useInstances } from './useInstances';
 
 const status = ref<GameStatus>({ running: false, session: null, lastExit: null, lastError: null });
 const busy = ref(false);
@@ -34,9 +35,15 @@ async function refresh(): Promise<void> {
 async function launch(req: LaunchRequest): Promise<boolean> {
   busy.value = true;
   lastError.value = null;
-  const res = await bridge.launch(req);
+  const resPromise = bridge.launch(req);
+  // 点启动即刷新实例列表：宿主 launch() 在首个 await 前的同步段完成建档+版本回写
+  // （runtime.ts 时序注释），IPC 消息 FIFO 保证该同步段先于本条清单查询执行——新实例
+  // 不再等下载/游戏进程起来才出现。fire-and-forget：结果由 launch resolve 后的刷新兜底。
+  void useInstances().load();
+  const res = await resPromise;
   if (!res.ok) lastError.value = res.error;
   await refresh();
+  void useInstances().load();
   busy.value = false;
   return res.ok;
 }

@@ -3,8 +3,13 @@
  * 真实 betacraft `.info` 不含 agentMount——本表在 runtime 装配时并入 VersionJson.betacraft，
  * 区间判定仍走 launch.filterAgentMounts（versionOrder 来自版本清单缓存）。
  * 形态判定事实：legacyfix README——Vanilla/ModLoader/Forge ≤1.3 → javaagent；
- * Forge 1.4 → coremod；Forge ≥1.5 / Fabric 系 → mod。jar 本体统一落 `<root>/legacyfix/legacyfix.jar`
- * （数据供给面从 GitHub Release 下载，path 相对数据根）。
+ * Forge 1.4 → coremod；Forge ≥1.5 / Fabric 系 → mod。jar 本体统一落
+ * `<root>/legacyfix/legacyfix-26.10.jar`（数据供给面从 GitHub Release 下载，path 相对数据根）。
+ * 文件名钉版 = 显式升级通道：旧版构件名不同 → `ensureLegacyfix` 的「存在即复用」自然失配
+ * 重下新版；且与 Release asset 名精确同名，命中构件匹配主支（非 legacyfix* 前缀兜底）。
+ * 26.10（2026-10-19 发布）要点：c0.0.15a 非 5565 端口补丁/DemoPatch/Infdev visualizer
+ * 重实现全部进入 Release——nightly 供给路线随之废除；DeAwtPatch.class 哈希漂移已实测
+ * 补入 legacyfixPatch.ts 钉版表（窗口位置补丁对 26.10 依旧必要且兼容）。
  */
 
 import type { AgentMount } from '@attic/core-spec';
@@ -17,21 +22,21 @@ import type { AgentMount } from '@attic/core-spec';
 export const DEFAULT_AGENT_MOUNTS: AgentMount[] = [
   {
     form: 'javaagent',
-    path: 'legacyfix/legacyfix.jar',
+    path: 'legacyfix/legacyfix-26.10.jar',
     appliesFrom: 'c0.0.13a',
     appliesTo: '1.3.2',
     quirk: 'legacyfix',
   },
   {
     form: 'coremod',
-    path: 'legacyfix/legacyfix.jar',
+    path: 'legacyfix/legacyfix-26.10.jar',
     appliesFrom: '1.4-pre',
     appliesTo: '1.4.7',
     quirk: 'legacyfix',
   },
   {
     form: 'mod',
-    path: 'legacyfix/legacyfix.jar',
+    path: 'legacyfix/legacyfix-26.10.jar',
     appliesFrom: '1.5',
     appliesTo: '1.5.2',
     quirk: 'legacyfix',

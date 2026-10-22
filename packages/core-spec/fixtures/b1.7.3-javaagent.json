@@ -46,7 +46,7 @@
       "agentMount": [
         {
           "form": "javaagent",
-          "path": "legacyfix/legacyfix-3.6.0.jar",
+          "path": "legacyfix/legacyfix-26.10.jar",
           "appliesFrom": "c0.0.13a",
           "appliesTo": "1.8.9",
           "quirk": "legacyfix"
@@ -71,9 +71,10 @@
       "-Dorg.lwjgl.librarypath=/data/bin/natives",
       "-Dnet.java.games.input.librarypath=/data/bin/natives",
       "-Dhttp.proxyHost=betacraft.uk",
+      "-Dlf.version=b1.7.3",
       "-Dlf.assetsDir=/game/assets",
       "-Dlf.assetIndex=beta",
-      "-javaagent:/data/legacyfix/legacyfix-3.6.0.jar=/game/b1.7.3"
+      "-javaagent:/data/legacyfix/legacyfix-26.10.jar=/game/b1.7.3"
     ],
     "gameArgs": [
       "steve",
@@ -90,7 +91,7 @@
     "agentMount": [
       {
         "form": "javaagent",
-        "path": "legacyfix/legacyfix-3.6.0.jar",
+        "path": "legacyfix/legacyfix-26.10.jar",
         "appliesFrom": "c0.0.13a",
         "appliesTo": "1.8.9",
         "quirk": "legacyfix"

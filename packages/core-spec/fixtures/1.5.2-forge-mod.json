@@ -43,7 +43,7 @@
       "agentMount": [
         {
           "form": "mod",
-          "path": "legacyfix/legacyfix-3.6.0.jar",
+          "path": "legacyfix/legacyfix-26.10.jar",
           "appliesFrom": "1.5",
           "appliesTo": "1.7.10",
           "quirk": "intel"
@@ -68,6 +68,7 @@
       "-Dorg.lwjgl.librarypath=/data/bin/natives",
       "-Dnet.java.games.input.librarypath=/data/bin/natives",
       "-Dhttp.proxyHost=betacraft.uk",
+      "-Dlf.version=1.5.2-Forge-7.8.0.0",
       "-Dlf.assetsDir=/game/assets"
     ],
     "gameArgs": [
@@ -83,7 +84,7 @@
     "agentMount": [
       {
         "form": "mod",
-        "path": "legacyfix/legacyfix-3.6.0.jar",
+        "path": "legacyfix/legacyfix-26.10.jar",
         "appliesFrom": "1.5",
         "appliesTo": "1.7.10",
         "quirk": "intel"

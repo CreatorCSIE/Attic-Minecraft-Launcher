@@ -241,6 +241,27 @@ test('intelFix/forceUpdate：档案回环 + 视图透传 + win32 门控注入/�
   assert.ok(!cfgLx.jvmArgs.some((a) => a.includes('HeapDumpPath')));
 });
 
+test('launch() 入口回写：启动失败也已落盘建档+版本（实例列表延迟修复的宿主侧契约）', async (t) => {
+  const root = tempRoot(t);
+  ensureLayout(root);
+  const rt = new AtticRuntime({ rootDir: root, platform: 'win32', fetchImpl: () => Promise.reject(new Error('offline')) });
+  rt.addAccount('Tester');
+  const java = 'C:\\Java\\jdk1.8\\bin\\java.exe';
+  // 离线 fetch 使 refreshVersionInfo（launch 首个 await）抛错——但回写落在其前的同步段，
+  // UI 端点启动后立即可见新实例（IPC FIFO），不必等下载/游戏进程起来。
+  await assert.rejects(rt.launch({ versionId: 'c0.0.15a', javaPath: java }), /offline/);
+  assert.equal(loadInstance(root, 'default instance').version, 'c0.0.15a', '新档案版本=启动请求（非建档缺省 b1.7.3）');
+  assert.ok(rt.listInstances().some((i) => i.name === 'default instance'));
+  // 既有实例切版本：gameDir 不变（存档共享），可编辑字段不被回写抹掉
+  rt.saveInstance({ name: 'fast', version: 'b1.7.3', width: 640 });
+  const gameDirBefore = loadInstance(root, 'fast').gameDir;
+  await assert.rejects(rt.launch({ versionId: 'c2.0', instanceId: 'fast', javaPath: java }), /offline/);
+  const switched = loadInstance(root, 'fast');
+  assert.equal(switched.version, 'c2.0');
+  assert.equal(switched.gameDir, gameDirBefore);
+  assert.equal(switched.width, 640);
+});
+
 test('LaunchRequest.visualizer：dryRun 链路注入 -Dlf.visualizer 且不写实例档案', async (t) => {
   const root = tempRoot(t);
   ensureLayout(root);

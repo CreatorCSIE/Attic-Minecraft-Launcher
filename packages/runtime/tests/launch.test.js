@@ -160,6 +160,27 @@ test('levelServer：proxyArgs 后、javaagent 前注入 -Dlf.proxy.levelServer�
   assert.ok(!without.jvmArgs.some((a) => a.includes('lf.proxy.levelServer')));
 });
 
+test('版本钉 -Dlf.version：全版本无条件注入（premain 等值补丁的唯一确定通道）', () => {
+  const versionJson = {
+    id: 'c0.0.15a',
+    mainClass: APPLET_LAUNCHER_CLASS,
+    betacraft: {
+      proxyArgs: ['-Dhttp.proxyHost=betacraft.uk'],
+      agentMount: [{ form: 'javaagent', path: 'legacyfix/lf.jar' }],
+    },
+  };
+  const config = assembleLaunchConfig(versionJson, { ...baseContext(), levelServer: 'local' });
+  const idxLs = config.jvmArgs.indexOf('-Dlf.proxy.levelServer=local');
+  const idxVer = config.jvmArgs.indexOf('-Dlf.version=c0.0.15a');
+  const idxDir = config.jvmArgs.indexOf('-Dlf.assetsDir=/game/assets');
+  const idxAgent = config.jvmArgs.findIndex((a) => a.startsWith('-javaagent:'));
+  // 位置钉：levelServer 之后、assetsDir/javaagent 之前（Agent 静态块收集须在 premain 前就位）
+  assert.ok(idxLs >= 0 && idxVer === idxLs + 1 && idxVer < idxDir && idxDir < idxAgent);
+  // 数据表键戒律：无版本判断代码——普通非 Applet 版本同样注入
+  const beta = assembleLaunchConfig({ id: 'b1.7.3', mainClass: 'net.minecraft.client.Minecraft' }, baseContext());
+  assert.ok(beta.jvmArgs.includes('-Dlf.version=b1.7.3'));
+});
+
 test('资产索引钉死：assetsDir 后、javaagent 前注入 -Dlf.assetIndex（0130 → 权威 20100124）', () => {
   const versionJson = {
     id: 'in-20100130',

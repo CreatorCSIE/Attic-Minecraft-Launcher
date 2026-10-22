@@ -48,6 +48,9 @@ const PATCHED = Buffer.from(
 /** 已实机验证过锚点语义的 DeAwtPatch.class 明文 SHA256（hex 小写）。 */
 const PINNED_DEAWT_CLASS_SHA256 = new Set([
   'bcf09fe03447d04fdd5c047e5b1954ec2021eb2957c8f12012f7a79496331b0e', // 2026-10 实测 legacyfix.jar（本机）
+  // 26.10 Release（2026-10-22 实测构件）：锚点恰 1 次、无补丁串（upstream 未合 setLocation，
+  // 窗口补丁仍必要）；哈希与 2026-10-18 nightly 实测同值（0394721 起 DeAwtPatch.java 的漂移形态）。
+  'd1003d49a286c48696992427f63ac9d4efa105700c4fbf3b3d0d0156ece3b7ef',
 ]);
 
 export type LfPatchOutcome =
