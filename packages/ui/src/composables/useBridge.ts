@@ -97,7 +97,8 @@ const mockBridge: RendererBridge = {
     try {
       const parsed = new URL(url);
       if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') throw new Error(`仅允许 http/https：${parsed.protocol}`);
-      window.open(url, '_blank', 'noopener');
+      // 弹窗被拦截时 window.open 返回 null：如实报失败（与宿主无浏览器 reject 同弹窗呈现）
+      if (!window.open(url, '_blank', 'noopener')) throw new Error('弹窗被浏览器拦截（popup blocked）');
       return ok<void>(undefined);
     } catch (error) {
       return err<void>(error instanceof Error ? error.message : String(error));

@@ -99,6 +99,7 @@ function setMemoryMode(mode: 'auto' | 'manual'): void {
           type="text"
           :placeholder="t('settings.launch.serverPlaceholder')"
         />
+        <span v-if="serverLocal.savedFlash.value" class="saved-flash">{{ t('settings.saved') }}</span>
         <p class="desc">{{ t('settings.launch.serverDesc') }}</p>
       </div>
     </div>
@@ -147,6 +148,7 @@ function setMemoryMode(mode: 'auto' | 'manual'): void {
           type="text"
           :placeholder="t('settings.launch.jvmGlobalPlaceholder')"
         />
+        <span v-if="jvmLocal.savedFlash.value" class="saved-flash">{{ t('settings.saved') }}</span>
         <p class="desc">{{ t('settings.launch.jvmGlobalDesc') }}</p>
       </div>
     </div>
@@ -175,9 +177,29 @@ function setMemoryMode(mode: 'auto' | 'manual'): void {
   box-shadow: var(--shadow-card);
 }
 .field {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+}
+/* 即改即存回执徽标（与 SettingsPanel 开发页同款；label 行右侧绝对定位零抖动） */
+.saved-flash {
+  position: absolute;
+  top: 0;
+  right: 0;
+  font-size: var(--fs-xs);
+  color: var(--ok);
+  animation: saved-in var(--dur-fast) var(--ease-out);
+}
+@keyframes saved-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 .label {
   font-size: var(--fs-sm);

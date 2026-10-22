@@ -107,7 +107,6 @@ export const demoSettings: AppSettings = {
   theme: 'dark',
   memoryMode: 'manual',
   maxMemoryMb: 1024,
-  username: 'DemoPlayer',
   language: 'zh-CN',
   jvmArgs: '-XX:+UseSerialGC',
 };

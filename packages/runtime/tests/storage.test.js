@@ -395,3 +395,41 @@ test('offlineUuid：确定性 + MC 离线格式（version 3 / variant 2）', () 
   assert.equal(a, offlineUuid('steve'));
   assert.match(a, /^[0-9a-f]{8}-[0-9a-f]{4}-3[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
 });
+
+test('listVersions SWR（首帧空窗修复）：缓存在即返回不等网络，后台刷新落新缓存', async (t) => {
+  const root = tempRoot(t);
+  ensureLayout(root);
+  fs.writeFileSync(
+    versionListCacheFile(root),
+    JSON.stringify({ generatedAt: 1, versions: [{ id: 'b1.7.3', repository: 'betacraft', installed: false }] }),
+  );
+  // 手动闸门的 fetch：网络永不自动返回——旧策略（永远 await 网络）下本测试会挂死；
+  // SWR 下 listVersions 必须先 resolve（= 首帧不等网络的语义断言）
+  let releaseFetch;
+  const fetchImpl = () =>
+    new Promise((resolve) => {
+      releaseFetch = () =>
+        resolve({
+          ok: true,
+          status: 200,
+          text: () => Promise.resolve('b1.7.3``1310110334000`1310110334000\nb2.0``1310110334001`1310110334001\n'),
+        });
+    });
+  const rt = new AtticRuntime({ rootDir: root, platform: 'win32', fetchImpl });
+
+  const list = await rt.listVersions();
+  assert.ok(
+    list.some((v) => v.id === 'b1.7.3'),
+    '缓存版本即时可见',
+  );
+  assert.ok(!list.some((v) => v.id === 'b2.0'), '未释放网络前返回的是旧缓存');
+
+  releaseFetch();
+  await new Promise((r) => setTimeout(r, 25));
+  const cache = JSON.parse(fs.readFileSync(versionListCacheFile(root), 'utf8'));
+  assert.ok(cache.generatedAt > 1, '后台刷新已落新缓存');
+  assert.ok(
+    cache.versions.some((v) => v.id === 'b2.0'),
+    '新清单项在下一次拉取生效（最终一致）',
+  );
+});

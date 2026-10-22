@@ -262,17 +262,50 @@ export class AtticRuntime {
     return 'pong';
   }
 
-  /** 网络优先（并落缓存）；失败退本地缓存；再失败退本地扫描。installed 以 versions/ 实存为准。 */
-  async listVersions(): Promise<VersionRef[]> {
-    let refs: VersionRef[] | null = null;
-    try {
-      refs = await this.client.fetchVersionList();
+  /**
+   * 清单刷新的在途合并（listVersions 后台刷新面与 installMod 门禁同步面共用）。
+   * 网络取回 + 落缓存文件；失败原样抛出（调用方面对）。
+   */
+  private versionListRefresh: Promise<VersionRef[]> | null = null;
+
+  private refreshVersionListCache(): Promise<VersionRef[]> {
+    if (this.versionListRefresh) return this.versionListRefresh;
+    this.versionListRefresh = (async () => {
+      const refs = await this.client.fetchVersionList();
       const cache: VersionManifest = { generatedAt: Date.now(), versions: refs };
       fs.mkdirSync(launcherDir(this.root), { recursive: true });
       fs.writeFileSync(versionListCacheFile(this.root), JSON.stringify(cache), 'utf8');
-    } catch {
-      const cache = readJsonIfPresent<VersionManifest>(versionListCacheFile(this.root));
-      if (cache?.versions) refs = cache.versions;
+      return refs;
+    })().finally(() => {
+      this.versionListRefresh = null;
+    });
+    return this.versionListRefresh;
+  }
+
+  /**
+   * 缓存优先（stale-while-revalidate，2026-10-22 修「版本列表首帧空窗」纯视觉 bug）：
+   * 缓存即在 → 即返缓存 + fire-and-forget 后台刷新（最终一致：下一次拉取即新数据；
+   * UI 每次展开都重拉，钉开态滞留一帧可接受）。缓存缺席 → 等网络（首次运行的诚实等待），
+   * 再失败 → refs=null。旧策略「永远 await 网络、失败才看缓存」让 UI 每一帧都为网络
+   * 让路——缓存明明在场（versionListCacheFile 早已落盘）却从不作首帧数据源。
+   * installed/custom 判定面每次现扫磁盘 + 读缓存文件，不受本方法返回新鲜度影响。
+   * 注意：需要「刷新完成」语义的调用方（installMod 官方同名门禁，用户拍板）必须直接
+   * await refreshVersionListCache()——本方法缓存即在时不等网络。
+   */
+  async listVersions(): Promise<VersionRef[]> {
+    let refs: VersionRef[] | null = null;
+    const cached = readJsonIfPresent<VersionManifest>(versionListCacheFile(this.root));
+    if (cached?.versions?.length) {
+      refs = cached.versions;
+      void this.refreshVersionListCache().catch(() => {
+        /* 后台刷新失败：保留现缓存（=旧「网络失败退缓存」同语义） */
+      });
+    } else {
+      try {
+        refs = await this.refreshVersionListCache();
+      } catch {
+        /* 无缓存且网络失败：refs 保持 null，走本地扫描兜底 */
+      }
     }
 
     // "已安装"= jar 实存（用户指定）；jar∪info 并集仅用于离线兜底列出本地版本
@@ -825,7 +858,9 @@ export class AtticRuntime {
       throw new Error(`拒绝非 HTTP(S) 下载地址：${url.protocol}`);
     }
     try {
-      await this.listVersions(); // 尽力刷新官方清单缓存（成功即最新）
+      // 直网面（非 listVersions——SWR 下缓存即在即返不等网络，会破坏本门禁的「先刷新」拍板）：
+      // 刷新成功即最新、网络失败按现有缓存判。
+      await this.refreshVersionListCache();
     } catch {
       /* 网络失败：按现有缓存判定 */
     }

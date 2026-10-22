@@ -19,6 +19,7 @@ import AccountsPanel from './components/AccountsPanel.vue';
 import CustomVersionsPanel from './components/CustomVersionsPanel.vue';
 import ModsPanel from './components/ModsPanel.vue';
 import SettingsPanel from './components/SettingsPanel.vue';
+import ExternalLinkErrorDialog from './components/ExternalLinkErrorDialog.vue';
 import { goSection } from './composables/useSettingsNav';
 
 /** 独立控制台窗模式：主进程以 ?window=console 加载同一 UI，只渲染控制台。 */
@@ -314,6 +315,9 @@ onMounted(() => {
         </Transition>
       </main>
     </div>
+
+    <!-- 外链打开失败全局弹窗（useExternalLink 单例状态；Mods 页与关于页共用） -->
+    <ExternalLinkErrorDialog />
   </div>
 </template>
 

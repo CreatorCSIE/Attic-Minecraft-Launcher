@@ -102,7 +102,11 @@ export const zhCN: Record<string, unknown> = {
     installing: '下载中…',
     installed: '已安装',
     website: '项目主页',
-    autoupdate: '自动更新',
+  },
+  external: {
+    openError: '无法打开外部链接',
+    openErrorHint: '请检查系统是否配置了默认浏览器（未注册 http/https 关联时宿主会拒绝打开）。',
+    close: '关闭',
   },
   confirmDialog: {
     cancel: '取消',
@@ -262,6 +266,7 @@ export const zhCN: Record<string, unknown> = {
     sectionTheme: '外观',
     sectionAbout: '关于',
     sectionDeveloper: '开发者设置',
+    saved: '已保存',
     general: {
       dataRoot: '数据根目录',
       dataRootDesc: '所有游戏版本、实例与下载文件的存放位置。',
@@ -360,8 +365,6 @@ export const zhCN: Record<string, unknown> = {
       },
     },
     developer: {
-      username: '默认用户名',
-      usernameDesc: '离线启动使用的缺省玩家名。',
       endpoints: '下载端点覆盖',
       endpointsNote: '端点改动在下次启动应用后生效。',
     },

@@ -8,6 +8,7 @@
 import { computed, ref } from 'vue';
 import type { ModCategoryView, ModEntryView, ModInstallRequest } from '@attic/core-spec';
 import { useBridge } from './useBridge';
+import { useExternalLink } from './useExternalLink';
 import { useVersions } from './useVersions';
 
 const categories = ref<ModCategoryView[]>([]);
@@ -21,6 +22,7 @@ const openMap = ref<Record<string, boolean>>({});
 
 let started = false;
 const { bridge } = useBridge();
+const { openExternal } = useExternalLink();
 
 async function load(): Promise<void> {
   loading.value = true;
@@ -84,7 +86,8 @@ async function install(mod: ModEntryView): Promise<void> {
 }
 
 function openWebsite(url: string): void {
-  void bridge.openExternalUrl(url);
+  // 失败（无默认浏览器等）经 useExternalLink 全局弹窗显式报错（用户指定，不再静默）
+  openExternal(url);
 }
 
 export function useMods() {

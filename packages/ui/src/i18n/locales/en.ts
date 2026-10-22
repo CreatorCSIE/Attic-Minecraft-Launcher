@@ -102,7 +102,11 @@ export const en = {
     installing: 'Downloading…',
     installed: 'Installed',
     website: 'Project website',
-    autoupdate: 'Auto-update',
+  },
+  external: {
+    openError: 'Could not open external link',
+    openErrorHint: 'Check that a default browser is configured on your system (the host refuses to open when no http/https association is registered).',
+    close: 'Close',
   },
   confirmDialog: {
     cancel: 'Cancel',
@@ -272,6 +276,7 @@ export const en = {
     sectionTheme: 'Appearance',
     sectionAbout: 'About',
     sectionDeveloper: 'Developer Settings',
+    saved: 'Saved',
     general: {
       dataRoot: 'Data root',
       dataRootDesc: 'Where game versions, instances and downloads live.',
@@ -370,8 +375,6 @@ export const en = {
       },
     },
     developer: {
-      username: 'Default username',
-      usernameDesc: 'Player name used for offline launches.',
       endpoints: 'Download endpoint overrides',
       endpointsNote: 'Endpoint changes take effect on next app launch.',
     },

@@ -7,6 +7,7 @@
  * 列表每次进页现拉 + 手动刷新（无进程内缓存 = v1 陈旧列表缺陷的修复面）。
  */
 import { computed } from 'vue';
+import type { ModCategoryView } from '@attic/core-spec';
 import { useI18n } from '../i18n';
 import { useMods } from '../composables/useMods';
 import { useBridge } from '../composables/useBridge';
@@ -33,6 +34,12 @@ const { hasBridge } = useBridge();
 
 // 动作面门控与其他页一致（浏览器无桥 = 禁用）；demo 桥的假安装在 useBridge 里可演练，放行。
 const canInstall = computed(() => hasBridge.value || isDemo());
+
+/** 项目主页 = 工程级属性 → 挂组头折页行（用户指定：不再逐版本行放外链钮）。
+ * 组内各版本 website 通常同源，取首个非空；全无则不显示。 */
+function catWebsite(cat: ModCategoryView): string | undefined {
+  return cat.mods.find((m) => m.website)?.website;
+}
 </script>
 
 <template>
@@ -102,24 +109,41 @@ const canInstall = computed(() => hasBridge.value || isDemo());
         <p v-if="installError" class="install-error">{{ installError }}</p>
 
         <section v-for="cat in filtered" :key="cat.name" class="cat">
-          <button class="cat-head" type="button" :aria-expanded="isOpen(cat.name)" @click="toggle(cat.name)">
-            <!-- lucide: chevron-down（开合旋转） -->
-            <svg
-              class="chevron"
-              :class="{ 'chevron--open': isOpen(cat.name) }"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
+          <div class="cat-head-row">
+            <button class="cat-head" type="button" :aria-expanded="isOpen(cat.name)" @click="toggle(cat.name)">
+              <!-- lucide: chevron-down（开合旋转） -->
+              <svg
+                class="chevron"
+                :class="{ 'chevron--open': isOpen(cat.name) }"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="m6 9 6 6 6-6" />
+              </svg>
+              <span class="cat-name">{{ cat.name }}</span>
+              <span class="cat-count">{{ t('mods.count', { n: cat.mods.length }) }}</span>
+            </button>
+            <!-- 项目主页外链 = 组头工程级钮（HTML 禁 button 套 button，故并列于行内） -->
+            <button
+              v-if="catWebsite(cat)"
+              class="link-btn cat-link"
+              type="button"
+              :title="t('mods.website')"
+              @click="openWebsite(catWebsite(cat)!)"
             >
-              <path d="m6 9 6 6 6-6" />
-            </svg>
-            <span class="cat-name">{{ cat.name }}</span>
-            <span class="cat-count">{{ t('mods.count', { n: cat.mods.length }) }}</span>
-          </button>
+              <!-- lucide: external-link -->
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M15 3h6v6" />
+                <path d="M10 14 21 3" />
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+              </svg>
+            </button>
+          </div>
 
           <!-- animated 折页：grid-template-rows 0fr→1fr（内容免测高，BlockHelm 生长曲线同款 token） -->
           <div class="fold" :class="{ 'fold--open': isOpen(cat.name) }">
@@ -129,23 +153,8 @@ const canInstall = computed(() => hasBridge.value || isDemo());
                   <div class="mod-main">
                     <span class="mod-name" :title="mod.fullName">{{ mod.fullName }}</span>
                     <span class="mod-ver">{{ mod.version }}</span>
-                    <span v-if="mod.autoupdate" class="mod-au">{{ t('mods.autoupdate') }}</span>
                   </div>
                   <div class="mod-actions">
-                    <button
-                      v-if="mod.website"
-                      class="link-btn"
-                      type="button"
-                      :title="t('mods.website')"
-                      @click="openWebsite(mod.website)"
-                    >
-                      <!-- lucide: external-link -->
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M15 3h6v6" />
-                        <path d="M10 14 21 3" />
-                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                      </svg>
-                    </button>
                     <span v-if="mod.installed" class="badge badge--ok">{{ t('mods.installed') }}</span>
                     <button
                       v-else
@@ -366,11 +375,23 @@ const canInstall = computed(() => hasBridge.value || isDemo());
   border-radius: var(--radius-md);
   overflow: hidden;
 }
+/* 组头行 = 开合钮 + 工程级外链钮并列（hover 底色挂整行，两钮共享一条视觉带） */
+.cat-head-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding-right: var(--space-3);
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+.cat-head-row:hover {
+  background-color: var(--surface-3);
+}
 .cat-head {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   padding: var(--space-3) var(--space-4);
   background: transparent;
   border: none;
@@ -379,10 +400,9 @@ const canInstall = computed(() => hasBridge.value || isDemo());
   font-weight: 600;
   text-align: left;
   cursor: pointer;
-  transition: background-color var(--dur-fast) var(--ease-out);
 }
-.cat-head:hover {
-  background-color: var(--surface-3);
+.cat-link {
+  flex: 0 0 auto;
 }
 .chevron {
   flex: 0 0 16px;
@@ -457,11 +477,6 @@ const canInstall = computed(() => hasBridge.value || isDemo());
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
   color: var(--text-muted);
-}
-.mod-au {
-  flex: 0 0 auto;
-  font-size: var(--fs-xs);
-  color: var(--accent);
 }
 .mod-actions {
   display: flex;

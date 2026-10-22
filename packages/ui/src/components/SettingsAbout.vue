@@ -4,16 +4,17 @@
  * 头区（名称 + v版本号 + GitHub/检查更新按钮）→ 启动器更新（通道占位）→
  * 版权及法律声明（版权/开源协议/用户协议三行）→ 引用的项目列表。
  * 许可证均经实查不虚构：上游四项目 LICENSE 逐字为 GPL-3.0，Vue/Electron=MIT，Lucide=ISC。
- * 外链走 openExternalUrl（宿主白名单校验；浏览器 mock 直放 window.open，demo 可用）。
+ * 外链走 openExternalUrl（宿主白名单校验；浏览器 mock 直放 window.open，demo 可用）；
+ * 打开失败（无默认浏览器等）经 useExternalLink 全局弹窗显式报错，不再静默。
  */
 import { useI18n } from '../i18n';
-import { useBridge } from '../composables/useBridge';
+import { useExternalLink } from '../composables/useExternalLink';
 import { useSysInfo } from '../composables/useSysInfo';
 import { isDemo } from '../dev/demo';
 import AppSelect from './AppSelect.vue';
 
 const { t } = useI18n();
-const { bridge } = useBridge();
+const { openExternal } = useExternalLink();
 const { info } = useSysInfo();
 
 const REPO_URL = 'https://github.com/CreatorCSIE/Attic-Minecraft-Launcher';
@@ -43,7 +44,7 @@ const references: ReferenceProject[] = [
 ];
 
 function openUrl(url: string): void {
-  void bridge.openExternalUrl(url);
+  openExternal(url);
 }
 </script>
 

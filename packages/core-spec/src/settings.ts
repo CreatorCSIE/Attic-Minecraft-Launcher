@@ -39,8 +39,9 @@ export interface AppSettings {
   maxMemoryMb?: number;
   /** 内存分配模式；缺省 = manual（保持老用户/老档案既有的定值 1024 语义，auto 属 opt-in）。 */
   memoryMode?: MemoryMode;
-  /** 离线/默认用户名；缺省 = Player。 */
-  username?: string;
+  // （原 username 字段已删，2026-10-22 用户拍板：账户体系落地后零消费方的孤儿设置——
+  // 启动玩家名恒取所选账户 account.name；launcher.settings 里的 v1 遗留 username 键
+  // 按「未知键原样保留」纪律不再读写、不清除。）
   /** 主题；缺省 = system。 */
   theme?: ThemeMode;
   /** 启动器界面语言（i18n locale 键，如 `zh-CN`/`en`）；缺省 = 渲染侧默认。渲染侧热切换生效，无重启语义。 */

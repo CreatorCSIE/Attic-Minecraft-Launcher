@@ -37,10 +37,6 @@ const ENDPOINT_KEYS: (keyof EndpointOverrides)[] = [
   'mojangManifest',
 ];
 
-const usernameLocal = useDebouncedField(
-  () => settings.value.username ?? '',
-  (v) => void patch({ username: v.trim() || undefined }),
-);
 /** 端点逐键防抖合并写（undefined 键 = 回落内置缺省；下次启动应用后生效）。 */
 const endpointLocals = Object.fromEntries(
   ENDPOINT_KEYS.map((k) => [
@@ -50,7 +46,7 @@ const endpointLocals = Object.fromEntries(
       (v) => void patch({ endpoints: { ...settings.value.endpoints, [k]: v.trim() || undefined } }),
     ),
   ]),
-) as Record<keyof EndpointOverrides, { local: Ref<string> }>;
+) as Record<keyof EndpointOverrides, { local: Ref<string>; savedFlash: Ref<boolean> }>;
 
 // —— 通用栏：数据根（单根+更换/打开，重启生效）与日志（打开/清理/诊断开关） ——
 const dataRoot = computed(() => info.value?.dataRoot ?? '');
@@ -314,13 +310,6 @@ function feedback(url: string): void {
         <section v-else class="pane">
           <h3 class="pane-title">{{ t('settings.sectionDeveloper') }}</h3>
           <div class="card">
-            <div class="field">
-              <label class="label" for="dev-user">{{ t('settings.developer.username') }}</label>
-              <input id="dev-user" v-model="usernameLocal.local.value" class="input" type="text" placeholder="Player" />
-              <p class="row-desc">{{ t('settings.developer.usernameDesc') }}</p>
-            </div>
-          </div>
-          <div class="card">
             <div class="head-row">
               <h4 class="group-title">{{ t('settings.developer.endpoints') }}</h4>
               <span class="note">{{ t('settings.developer.endpointsNote') }}</span>
@@ -328,6 +317,8 @@ function feedback(url: string): void {
             <div v-for="k in ENDPOINT_KEYS" :key="k" class="field">
               <label class="label" :for="`ep-${k}`">{{ k }}</label>
               <input :id="`ep-${k}`" v-model="endpointLocals[k].local.value" class="input mono" type="text" />
+              <!-- 即改即存回执（400ms 防抖落盘后亮 1.5s；绝对定位零布局抖动） -->
+              <span v-if="endpointLocals[k].savedFlash.value" class="saved-flash">{{ t('settings.saved') }}</span>
             </div>
           </div>
         </section>
@@ -500,9 +491,29 @@ function feedback(url: string): void {
   gap: var(--space-3);
 }
 .field {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+}
+/* 即改即存回执徽标：label 行右侧绝对定位（出现/消失不推动布局） */
+.saved-flash {
+  position: absolute;
+  top: 0;
+  right: 0;
+  font-size: var(--fs-xs);
+  color: var(--ok);
+  animation: saved-in var(--dur-fast) var(--ease-out);
+}
+@keyframes saved-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 .label {
   font-size: var(--fs-sm);

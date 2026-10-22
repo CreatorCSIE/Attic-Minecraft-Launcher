@@ -11,7 +11,6 @@ test('AppSettings 新键回环：写入 launcher.settings 属性再读出形状�
     javaPath: 'C:/java/bin/java.exe',
     maxMemoryMb: 2048,
     memoryMode: 'auto',
-    username: 'steve',
     theme: 'dark',
     language: 'zh-CN',
     jvmArgs: '-XX:+UseSerialGC',
@@ -29,6 +28,13 @@ test('AppSettings 新键回环：写入 launcher.settings 属性再读出形状�
   assert.equal(props['consoleOnLaunch'], 'false');
   assert.equal(props['endpoint.versionList'], 'https://example.test/version_list.txt');
   assert.deepEqual(settingsFromProps(props), settings);
+});
+
+test('username 退出 managed 键集（2026-10-22 拍板）：v1 遗留键写回不清除、读出忽略', () => {
+  const existing = { username: 'Notch' };
+  const props = applySettingsToProps(existing, { theme: 'light' });
+  assert.equal(props['username'], 'Notch', '写回不得丢失 v1 的 username 键');
+  assert.equal(settingsFromProps(props).username, undefined, '读侧不再映射 username');
 });
 
 test('布尔三态：缺键=undefined（消费端缺省），true/false 显式保留', () => {

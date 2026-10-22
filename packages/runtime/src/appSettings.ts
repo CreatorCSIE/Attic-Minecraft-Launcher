@@ -42,7 +42,6 @@ export function settingsFromProps(props: Record<string, string>): AppSettings {
   const mem = Number(props['maxMemoryMb']);
   if (Number.isFinite(mem) && mem > 0) out.maxMemoryMb = mem;
   if (MEMORY_MODES.includes(props['memoryMode'] ?? '')) out.memoryMode = props['memoryMode'] as 'auto' | 'manual';
-  if (props['username']) out.username = props['username'];
   if (THEMES.includes(props['theme'] as ThemeMode)) out.theme = props['theme'] as ThemeMode;
   if (props['language']) out.language = props['language'];
   if (props['jvmArgs']) out.jvmArgs = props['jvmArgs'];
@@ -90,7 +89,8 @@ export function applySettingsToProps(
   put('javaPath', settings.javaPath);
   put('maxMemoryMb', settings.maxMemoryMb === undefined ? undefined : String(settings.maxMemoryMb));
   put('memoryMode', settings.memoryMode);
-  put('username', settings.username);
+  // username（v1 遗留键）已退出 managed 键集（2026-10-22 拍板）：本行不再出现 = 文件里
+  // 既有的 username 键按「未知键原样保留」纪律自然不动，v1 数据面零破坏。
   put('theme', settings.theme);
   put('language', settings.language);
   put('jvmArgs', settings.jvmArgs);
