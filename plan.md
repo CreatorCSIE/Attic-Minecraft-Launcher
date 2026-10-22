@@ -184,12 +184,14 @@
 
 **落实顺序（用户口径）**：设置页重写 → Force Update + Intel 双件套（蹭 addons 归置待办顺路做）→ Mods 页一期 → wrapper 二期 → Discord RPC 挂起。
 
-## 5. Phase 4 — Tauri 壳（Rust core 第二实现）
+## 5. Phase 4 — Tauri 壳（接入模型改口径：sidecar 承载，Rust 只做壳层）
 
-- [ ] `src-tauri`：core-spec 的 Rust 类型生成/手写对齐
-- [ ] Rust 实现：版本解析、Java 探测、参数拼装、进程管理（`std::process` / `tokio`）
-- [ ] 契约测试双绿进 CI（TS 跑 Node、Rust 跑 `cargo test`，同一 fixture）
-- [ ] **里程碑 M2**：Tauri 壳达到与 Electron 壳相同的游戏可启动面
+- [x] **接入模型定稿（2026-10-22 改口径）**：Rust **不再重实现**版本解析/Java 探测/参数拼装/进程管理——`@attic/runtime` 由 **Node sidecar 子进程**承载（stdio NDJSON RPC），Rust 面 = 窗口/宿主命令（窗控、对话框、外链、openPath）+ 转发白名单 + 事件桥。双壳漂移风险（#2）随之降维：启动核心单一承载，无第二拼装器可对撞。
+- [x] `src-tauri` 骨架（2026-10-22 落）：`Cargo.toml`/`main.rs`/`lib.rs`（Sidecar 进程监督 + `ipc_forward` + 7 宿主命令）/`tauri.conf.json`（WebView2 110 钉 + embedBootstrapper + nsis.installerHooks + updater 占位）/`capabilities/default.json`/`windows/attic-checks.nsh`
+- [x] `apps/tauri/sidecar`（2026-10-22 落）：runtime esbuild 单文件化 + NDJSON RPC 服务（方法面 = ipc.ts 白名单，backlog 归 sidecar）；本地 Node 握手测试 4 例（tests/rpc.test.js）
+- [x] 契约测试双绿进 CI（改口径后的形态）：TS 侧 `fixtures:check`（导出表→fixture 漂移闸门）+ Rust 侧 `cargo test`（fixture 镜像比对），ci.yml `rust-contract` job（Windows 原生 runner）
+- [ ] **里程碑 M2**：Tauri 壳达到与 Electron 壳相同的游戏可启动面（待本地 `tauri dev` 端到端联调；Rust 编译验证 = rustup 就位后 cargo check/test）
+- [ ] 联调遗留（脚手架注记）：①无边距窗拖拽——WebView2 不认 `-webkit-app-region`，UI 顶栏需补 `data-tauri-drag-region`（Electron 线零影响，条件注入或双属性并存）；②sidecar 便携 node 发行形态（随行 node.exe vs SEA 单文件）发版 SOP 定稿；③updater：密钥对已生成（2026-10-22，`tauri signer generate`）——公钥已入 `tauri.conf.json`，私钥+口令在 `apps/tauri/.secrets/`（已 gitignore；**GitHub Secrets 需登记 `TAURI_UPDATER_PRIVATE_KEY` / `TAURI_UPDATER_PRIVATE_KEY_PASSWORD`**，丢失任一则更新全废）；endpoints 占位（REPLACE_OWNER/REPLACE_REPO）随发布仓库定稿替换；④品牌图标现为占位（`scripts/make-placeholder-icon.mjs` 生成），正式资产替换 `brand/attic-icon.png` 后重跑 `tauri icon`。
 
 **WebView 最低版本支持做法（2026-10-21 调研，来源 tauri.app distribute/windows-installer + reference/webview-versions + 2.12 release notes）**：
 - **Windows（WebView2，自更新 Chromium）**：官方做法 = `bundle.windows.minimumWebview2Version`（如 `"110.0.1531.0"`）——安装器检测本机 WebView2 版本，不达标即按 `webviewInstallMode` 拉起运行时安装，五档：`downloadBootstrapper`（缺省，~0MB 需联网）/ `embedBootstrapper`（+1.8MB，内置引导器，Win7 msi 兼容路径）/ `offlineInstaller`（+127MB 全离线）/ `fixedVersion|fixedRuntime`（+180MB 自带固定运行时，体积大且安全补丁自担）/ `skip`（不推荐）。**决策建议**：NSIS + `embedBootstrapper` + 钉一个满足前端特性的最低版本；Win10 1803+/Win11 预装 Evergreen 基本免装。
@@ -206,11 +208,11 @@
 - **工具链下限（构建面，随记）**：Rust MSRV 1.90（Tauri 2.12 stable-3 政策）；此为玩家无关的 CI 面约束。
 - **已拍板（2026-10-21）**：
   - ① **WebView2 钉 `110.0.1531.0`**（特性余量最小够用，未来引入 >110 特性时再评估上调）。落点 = `tauri.conf.json: bundle.windows.minimumWebview2Version`。
-  - ② **安装器加旧系统检测提示**（非仅文档指路）：NSIS 自定义逻辑二判——OS 版本 < Win10（6.2/6.3/6.1 = 7/8.1）或 WebView2 Evergreen 注册表键（`…\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}`，HKLM+HKCU/WOW6432Node）读到的版本 ≤109 → MessageBox 明示「本机 WebView2 已停更，请改下载 electron 兼容构件」+ releases 页 URL 常量。实现通道 = `bundle.windows.nsis.template`（自定义 NSIS 模板）挂 customInit 钩子；Phase 5 落实项，URL 占位与构件命名（`attic-electron-*`）对齐发版 SOP。
+  - ② **安装器加旧系统检测提示**（非仅文档指路）：NSIS 自定义逻辑二判——OS 版本 < Win10（6.2/6.3/6.1 = 7/8.1）或 WebView2 Evergreen 注册表键（`…\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}`，HKLM+HKCU/WOW6432Node）读到的版本 ≤109 → MessageBox 明示「本机 WebView2 已停更，请改下载 electron 兼容构件」+ releases 页 URL 常量。实现通道 = ~~`nsis.template` 抄模板~~ **改核为官方轻量钩 `bundle.windows.nsis.installerHooks`**（bundler 模板以 `!ifmacrodef` 守 `NSIS_HOOK_PREINSTALL`，版本无关免维护整模板；2026-10-22 官方文档核实）。**「需要定制 NSIS 吗」定稿：不需要编译级定制**——官方预编译 makensis + 自带 LogicLib/WinVer/x64.nsh 足够，定制面 = 纯脚本层 .nsh；自定义插件 DLL（才需编译 NSIS）无需求。WebView2≥110 保证继续归 bundler `minimumWebview2Version`+`embedBootstrapper`，nsh 只做 OS/架构防错装。已落 `src-tauri/windows/attic-checks.nsh`；URL 占位（`ATTIC_LEGACY_DOWNLOAD_URL`）与构件命名（`attic-electron-*`）对齐发版 SOP。
 
 ## 6. Phase 5 — 分发
 
-- [ ] Windows：Tauri NSIS 主发布；Electron 版走 electron-builder（同为 NSIS）= 兼容兜底通道（2026-10-21 从「参考实现」升格，细则见下方选型调研）
+- [ ] Windows：Tauri NSIS 主发布；Electron 版走 electron-builder（同为 NSIS）= 兼容兜底通道（2026-10-21 从「参考实现」升格，细则见下方选型调研）**〔脚手架已落 2026-10-22：release.yml Windows 首发矩阵（tauri x64/arm64 NSIS + electron-legacy x64/ia32 NSIS）；src-tauri 构建面、updater 占位、便携 node 随装三项待 CI 首跑收口〕**
 - [ ] Linux：AppImage + 已知问题清单（DMABUF/Wayland 环境变量逃生舱）；Tier-2
 - [ ] macOS：ARM 为主（基线 Apple Silicon + 近两版 macOS）；未签名发布 + 右键打开教程；$99 开发者签名作为后置决策（风险 #5）
 - [ ] CI 矩阵：三平台仅构建 + 契约测试（不启动游戏）

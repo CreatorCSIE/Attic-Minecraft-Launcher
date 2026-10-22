@@ -1,0 +1,23 @@
+{
+  "name": "@attic/electron-legacy",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Win7/8/8.1 兜底壳：Electron 22（Chromium 108 / Node 16.17）+ electron-builder NSIS；复用 apps/electron 主入口源码（esbuild 单文件化 + electron.net fetch 桥）",
+  "main": "dist/legacy-main.cjs",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "node scripts/bundle.mjs",
+    "dist": "node scripts/bundle.mjs && electron-builder --win nsis"
+  },
+  "dependencies": {
+    "@attic/core-spec": "workspace:*",
+    "@attic/runtime": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "electron": "~22.3.25",
+    "electron-builder": "^24.13.3",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.3"
+  }
+}

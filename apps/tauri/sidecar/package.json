@@ -1,0 +1,22 @@
+{
+  "name": "@attic/sidecar",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Node sidecar：@attic/runtime 门面的 stdio NDJSON RPC 服务（Tauri 壳的 RPC 承载体，方法面 = ipc.ts 通道白名单）",
+  "type": "module",
+  "main": "dist/server.cjs",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "node scripts/bundle.mjs",
+    "test": "node scripts/bundle.mjs && node --test"
+  },
+  "dependencies": {
+    "@attic/core-spec": "workspace:*",
+    "@attic/runtime": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.3"
+  }
+}

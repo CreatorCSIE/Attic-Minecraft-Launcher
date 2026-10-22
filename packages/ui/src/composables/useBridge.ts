@@ -28,6 +28,7 @@ import type {
   VersionJson,
 } from '@attic/core-spec';
 import { demoInstances, demoJavaReport, demoModCategories, demoSettings, demoSysInfo, demoVersions, isDemo } from '../dev/demo';
+import { buildTauriBridge } from '../bridge/tauri';
 
 const NO_BRIDGE = 'no-bridge';
 
@@ -182,7 +183,12 @@ function demoBridge(): RendererBridge {
 }
 
 export function useBridge(): BridgeHandle {
-  const real = typeof window !== 'undefined' ? window.attic : undefined;
+  // 真桥两级探测（Phase 4）：Electron preload 注入的 window.attic 优先；
+  // Tauri 壳（withGlobalTauri）以 __TAURI__ 全局面适配出同款 RendererBridge。
+  const real =
+    typeof window !== 'undefined'
+      ? window.attic ?? (window.__TAURI__ ? buildTauriBridge(window.__TAURI__) : undefined)
+      : undefined;
   const bridge = real ?? (isDemo() ? demoBridge() : mockBridge);
   return {
     bridge,

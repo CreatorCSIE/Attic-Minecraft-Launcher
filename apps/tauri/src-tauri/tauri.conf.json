@@ -1,0 +1,63 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Attic Launcher",
+  "version": "0.1.0",
+  "identifier": "uk.attic.launcher",
+  "build": {
+    "devUrl": "http://localhost:5310",
+    "beforeDevCommand": "pnpm -C ../../packages/ui exec vite --port 5310 --strictPort",
+    "beforeBuildCommand": "pnpm -C ../.. -r build",
+    "frontendDist": "../../../packages/ui/dist"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Attic Minecraft Launcher",
+        "width": 980,
+        "height": 720,
+        "minWidth": 800,
+        "minHeight": 560,
+        "decorations": false,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "createUpdaterArtifacts": true,
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/icon.png",
+      "icons/icon.ico"
+    ],
+    "resources": {
+      "../sidecar/dist/server.cjs": "sidecar/server.cjs"
+    },
+    "windows": {
+      "webviewInstallMode": {
+        "type": "embedBootstrapper",
+        "silent": true
+      },
+      "minimumWebview2Version": "110.0.1531.0",
+      "nsis": {
+        "installerHooks": "./windows/attic-checks.nsh",
+        "displayLanguageSelector": false
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDY3MTU5MEVDNjcyMTA2REEKUldUYUJpRm43SkFWWjBiTEtldVRwWFNDbFI1L0RyaGZzd2htWXRPc0g5MEkwMmFjTmhadERPVGoK",
+      "endpoints": [
+        "https://github.com/REPLACE_OWNER/REPLACE_REPO/releases/latest/download/latest.json"
+      ]
+    }
+  }
+}

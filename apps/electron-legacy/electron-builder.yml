@@ -1,0 +1,26 @@
+# electron-builder 兜底壳配置（Phase 5 脚手架：Windows NSIS，x64+ia32）。
+# 注意：本壳与 Tauri 主壳分轨 —— 无自动更新（plan 拍板：兜底线手动更新）。
+appId: uk.attic.launcher.legacy
+productName: Attic Launcher Legacy
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist/**
+  - package.json
+# TODO(s6 首构建收尾): UI 产物入包（extraResources packages/ui/dist + main.ts uiDistIndex
+# 的产线分支），当前壳加载路径仍指向仓内相对位置（开发语义）。
+# extraResources:
+#   - from: ../../packages/ui/dist
+#     to: ui
+win:
+  target:
+    - target: nsis
+      arch: [x64, ia32]
+  artifactName: attic-launcher-legacy-${version}-${arch}-setup.${ext}
+  # TODO(branding): icon: build/icon.ico（品牌资产未落位，builder 用默认电子图标）
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  include: build/installer.nsh

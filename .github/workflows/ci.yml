@@ -7,7 +7,7 @@ on:
 
 jobs:
   static:
-    name: 静态闸门（typecheck + build）
+    name: 静态闸门（typecheck + build + test + Node16 API 锁）
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -31,5 +31,40 @@ jobs:
       - name: Build
         run: pnpm -r build
 
-      - name: Contract tests
+      - name: Contract tests (TS)
         run: pnpm -r test
+
+      # 契约面漂移 = fixture 与提交态不一致（sidecar 导出表为数据源）
+      - name: Contract fixtures in sync
+        run: pnpm run fixtures:check
+
+      # 兜底线（Electron 22 = Node 16.17）宿主面 API 锁
+      - name: Node16 API gate
+        run: pnpm run gate:node16
+
+  rust-contract:
+    name: 契约测试 Rust 侧（cargo test，Windows 原生 arch）
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install (skip electron binaries)
+        run: pnpm install --frozen-lockfile
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+
+      - name: Build (sidecar dist for fixtures)
+        run: pnpm -r build
+
+      - name: Regenerate contract fixtures
+        run: pnpm run fixtures
+
+      - name: Cargo contract tests
+        run: cargo test --manifest-path apps/tauri/src-tauri/Cargo.toml

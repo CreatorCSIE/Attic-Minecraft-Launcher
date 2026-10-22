@@ -27,19 +27,43 @@ Betacraft 版本 API              legacyfix javaagent
 
 ## 🌟 核心功能特性
 
-- **单一 IPC 契约 + 双壳架构（已可用）**：`packages/core-spec` 是渲染 ↔ 宿主全部通道（14 请求 + 3 事件）的唯一真相，双壳（Electron / Tauri）只允许一份契约、两份实现，漂移由契约测试拦截；`packages/ui` 共享 Vue 3 前端对壳完全透明（浏览器直开自动降级 mock 桥）。
-- **Betacraft 数据链路（已可用）**：版本清单（反引号分隔的 4/5 字段行形状）、版本 `.info` → VersionJson（字段集照 v1 `ReleaseJson.java` 逐字核对）、客户端 jar 下载 + sha1 校验、资产索引、legacyfix 从 GitHub Release 自动更新落位。
-- **Java 运行时自动探测（已可用，继承自 MCANextGen 算法）**：按**注册表 → 常见安装目录 → `JAVA_HOME` / `JDK_HOME` → `PATH`** 收集候选，逐候选**实测执行** `java -XshowSettings:properties -version` 读取真实版本 / 架构 / `java.home`，**优先 64 位 Java 8**、仅无 64 位时回退 32 位；探测全量报告（候选、拒绝原因、耗时）在设置页可视化。
-- **legacyfix 集成与按版本挂载决策（已可用）**：javaagent / coremod / mod 三种形态 + 版本区间过滤（判定失败 fail-open + 诊断）；纯 Applet 容器版本（c0.0.12a 等）自动剔除 classpath 中的 launchwrapper、保持 deawt 开启，修复补丁不再被整体跳过。
-- **v1 语义的实例管理（已可用）**：首启自动创建 `default instance`；`gameDir = 数据根/<实例名>`（按实例而非版本派生），同一实例切换版本时存档目录不变、选中版本写回实例；Instance Settings 可编辑集对齐 v1——名字 / 版本 / 游戏目录 / JVM 参数 / 窗口尺寸（默认 **854×480**，而非 legacyfix 兜底的 640×480），实例 JVM 参数紧随全局 `-Xmx` 注入实现按实例覆盖。
-- **启动参数拼装（已可用，组序契约化）**：固定 `-Xmx`/`-Xms` → 实例 launchArgs → legacy merge sort → proxyArgs → `-Dlf.proxy.levelServer` → javaagent → extraJvmArgs；Applet 容器 gameArgs 末尾注入 `--width/--height`（v1 Wrapper 面板尺寸语义）；干跑通道（dry-run）返回完整 LaunchConfig 供契约测试与排障共用。
-- **进程生命周期与崩溃分类（已可用）**：stdout/stderr 逐行事件流进 UI 控制台；退出自动分类（out-of-memory / gl-init / lwjgl-native / unsatisfied-link / java-missing）；纯 Applet 版本附 Windows 窗口看门狗——游戏窗口关闭即终止后台空转的 Java 进程并触发常规退出事件链。
-- **level-server.txt 静默单人修复（已可用）**：legacyfix 的 `legacyfix/level-server.txt` 一旦存在（尤其被设为 `local`）会永久跳过服务器设定对话框；壳侧以 `-Dlf.proxy.levelServer` 系统属性覆盖陈旧 txt（属性优先级高于文件），无需手动删文件即可重选服务器。
-- **Electron 壳与开发编排（已可用）**：无边距主窗 + 顶栏拖拽区 + 右上角窗口三键（最小化 / 最大化切换 / 关闭，走 `attic:window:control` 契约通道）；根目录 `pnpm dev` 一条命令完成全链路——串行编译契约/runtime/主进程 → 起 vite（端口复用检测）→ 就绪探测 → 拉起 Electron，关窗自动回收子进程。
-- **UI 体系（已可用）**：Modrinth App 组件形态逐字核对迁移（卡片配方、四级 surface 分层、inset 输入质感、状态过渡），全部尺寸/颜色/圆角走语义化 CSS 变量（Tailwind 工具类经映射指向同一组 token）；zh-CN / en 双语 i18n（缺键回落 en）；版本列表按年代分组 + 搜索 + 已安装标记；rail 底部作者头像在线取自 GitHub 并本地缓存（TTL 7 天，断网回落旧缓存）。
-- **离线账户与持久化（已可用）**：离线 UUID 确定性生成（version 3 / variant 2 的 MC 离线格式）；设置与实例档案以 Java `.properties` 格式落盘（转义 / 续行 / 非 ASCII `\uXXXX` 全回环测试），数据根三平台解析 + portable 模式。
-- **血统**：本仓库是 [MCANextGen](https://github.com/CreatorCSIE/MCANextGen)（已归档）的直接后继，继承其 Java 探测、字节码能力探测与远古版本 JVM 参数知识，并采纳其反面结论——**永远不要把游戏窗口嵌进宿主**。
-- **尚未实现**：Microsoft 账户登录（当前离线账户起步）、addons 接入、Tauri 壳（Phase 4）、安装包分发（Phase 5）、levelServer 的设置界面入口（留到控件迭代阶段）。
+### 游戏侧能力（已可用）
+
+- **远古版本全谱系**：Pre-Classic → 1.5.2 官方历史版本，版本清单、版本 JSON、预 patch 客户端 jar（sha1 校验）、资产索引、皮肤与 legacy 验证代理全部走 Betacraft 数据链路供给——客户端零版本数据，新增历史版本无需发版。
+- **Java 运行时自动探测**：注册表 → 常见安装目录 → `JAVA_HOME` → `PATH` 收集候选，逐候选**实测执行**读取真实版本 / 架构 / `java.home`；优先 64 位 Java 8、无 64 位才回退 32 位，设置页可手动覆盖，并附全量探测报告（候选、拒绝原因、耗时）。
+- **legacyfix 自动集成**：从 GitHub Release 自动更新落位；javaagent / coremod / mod 三种形态按版本区间过滤挂载（判定失败 fail-open + 诊断）；纯 Applet 容器版本自动剔除 classpath 中的 launchwrapper 并保持 deawt 开启。
+- **Mods 仓库（一期 = Betacraft 单源）**：分类列表、按版本安装登记、启动期刷新与基座合成；对比 v1 做了结构性修复（原子写、sha1 必验、离线不误路由、陈旧合成重算）。
+- **v1 语义实例系统**：`gameDir` 按实例（而非版本）派生，切版本存档不变；实例级 JVM 参数 / 窗口尺寸（默认 854×480）覆盖全局；首启自动创建 `default instance`。
+- **启动管线可观测**：参数组序契约化拼装，干跑通道返回完整 LaunchConfig；独立控制台窗逐行日志 + 崩溃自动分类（out-of-memory / gl-init / lwjgl-native / unsatisfied-link / java-missing）；Applet 版本附 Windows 窗口看门狗，关窗即回收空转进程。
+- **账户与数据**：离线账户（确定性 UUID，MC 离线格式）；设置与实例以 Java `.properties` 落盘；自定义版本 jar 导入与版本 JSON 编辑；数据根三平台解析 + portable 模式 + 可迁移老 `.betacraft`。
+
+### 架构（Electron 壳已可用；Tauri / 兜底壳脚手架就位）
+
+- **单一 IPC 契约**：`packages/core-spec` 是渲染 ↔ 宿主 **35 请求通道 + 4 事件通道**的唯一真相，契约测试与 CI 闸门拦截漂移。
+- **三壳共享一个核心**：`apps/electron`（开发参考实现，同进程直连）、`apps/tauri`（主发布线：Rust 窗层 + Node sidecar 跑同一份 TS runtime，stdio NDJSON RPC）、`apps/electron-legacy`（Win7/8/8.1 兜底：Electron 22 复用 electron 主进程源码 + `net` 模块 fetch 桥）。启动核心只有一份 TS 实现，Rust 只做壳层与窗口。
+- **跨语言契约闸门**：通道清单由 TS 导出 fixture，Rust 侧 `cargo test` 断言镜像常量与 host∪sidecar 分区不变量；宿主侧共享代码另受 **Node 16 API 锁**扫描（禁 `structuredClone` 等），保证兜底线可运行。
+- **对壳透明的 UI**：同一份 Vue 3 前端探测 `window.attic` / `window.__TAURI__` 自动接线，浏览器直开降级 demo mock 桥；Modrinth App 组件形态迁移 + 全量语义化 CSS token；zh-CN / en 双语（缺键回落 en）。
+
+### 分发（Phase 5 脚手架）
+
+- **Windows NSIS 安装包**：Tauri 官方预编译 makensis + 脚本层定制（OS/架构 guard 钩子；WebView2 ≥110 由 bundler 内嵌引导器处理），兜底壳走 electron-builder 独立 NSIS 配置（Win7 SP1 下限）。
+- **自动更新**：Tauri updater minisign 签名密钥已生成、release CI 矩阵（x64 / arm64 / legacy）就绪；兜底线按设计不随自动更新。
+
+### 血统
+
+本仓库是 [MCANextGen](https://github.com/CreatorCSIE/MCANextGen)（已归档）的直接后继，继承其 Java 探测、字节码能力探测与远古版本 JVM 参数知识，并采纳其反面结论——**永远不要把游戏窗口嵌进宿主**。
+
+---
+
+## 🧭 开发状态
+
+| 阶段 | 内容 | 状态 |
+|---|---|---|
+| Phase 0–2 | 脚手架 / IPC 契约 / TS 运行时 | ✅ 完成 |
+| Phase 3 | UI v0 + 设置页重写 + Mods/自定义版本 | ✅ 完成 |
+| Phase 4 | Tauri 壳 + sidecar + Electron 22 兜底壳 | 🔨 脚手架完成（Rust/TS 编译与契约测试全绿），端到端联调进行中 |
+| Phase 5 | NSIS 安装包分发 + release CI + updater | 🔨 脚手架完成，首发构建收口与端点配置进行中 |
+| Phase 6 | Microsoft 账户登录、addons、Discord RPC 等 | 📋 愿望池（不承诺时间） |
 
 ---
 
@@ -54,7 +78,8 @@ Betacraft 版本 API              legacyfix javaagent
 
 - **Node.js ≥ 20（LTS）**
 - **pnpm 10**（仓库声明 `packageManager: pnpm@10.34.5`，建议 `corepack enable` 后直接 `pnpm install`）
-- 操作系统：Windows / macOS / Linux 均可开发（窗口看门狗等个别逻辑仅 Windows 生效）
+- **Rust 工具链**（仅开发 Tauri 壳需要，`rustup` 默认 stable 即可；Electron 线不依赖）
+- 操作系统：Windows / macOS / Linux 均可开发（窗口看门狗等个别逻辑仅 Windows 生效；NSIS 打包与 WebView2 相关验证仅在 Windows）
 
 ---
 
@@ -67,7 +92,7 @@ Betacraft 版本 API              legacyfix javaagent
 git clone https://github.com/CreatorCSIE/Attic-Minecraft-Launcher.git
 cd Attic-Minecraft-Launcher
 
-# 安装 workspace 依赖（apps/electron + packages/*）
+# 安装 workspace 依赖（apps/* + packages/*）
 pnpm install
 
 # 开发一条龙：编译契约/runtime/主进程 → 起 vite(5310) → 拉起 Electron
@@ -77,6 +102,17 @@ pnpm dev
 pnpm build
 pnpm typecheck
 pnpm test
+
+# 契约镜像闸门（TS → fixture 导出 / 漂移检查 / Node16 API 锁）
+pnpm fixtures
+pnpm fixtures:check
+pnpm gate:node16
+
+# Tauri 壳（需 Rust 工具链；先编 sidecar 再 tauri dev）
+pnpm --filter @attic/tauri dev
+
+# Rust 侧契约镜像测试
+cargo test --manifest-path apps/tauri/src-tauri/Cargo.toml
 ```
 
 > **注意**：UI 改动经 vite HMR 即时生效；`runtime` / 主进程改动需重跑 `pnpm dev`（dist 为一次性编译，避免半新半旧的产物不一致）。
@@ -86,18 +122,19 @@ pnpm test
 ```text
 Attic-Minecraft-Launcher
 ├── plan.md                 分阶段开发计划与风险登记
-├── scripts/dev.mjs         pnpm dev 全链路开发编排
+├── scripts/                dev.mjs 开发编排 / emit-contract-fixtures.mjs 契约 fixture / node16-api-gate.mjs API 锁
+├── .github/workflows/      ci.yml（静态闸门 + Rust 契约测试）/ release.yml（NSIS x64·arm64 + legacy 矩阵）
 ├── docs/                   契约镜像（contract.md）、UI 设计守则（ui-design.md）、移植笔记
 ├── reference/              上游源码克隆（betacraft-launcher / legacyfix，gitignore，不入库）
 ├── apps/
-│   └── electron/           Electron 壳（开发参考实现）
-│       └── src/
-│           ├── main.ts     主进程：无边距窗 + IPC 注册 + 事件广播
-│           └── preload.ts  contextBridge 暴露 RendererBridge
-│   （apps/tauri/ — Rust 壳，Phase 4 计划中）
+│   ├── electron/           Electron 壳（开发参考实现：同进程直连 runtime）
+│   ├── tauri/
+│   │   ├── src-tauri/      Rust 窗层：ipc_forward 白名单转发 + 宿主面命令 + 契约镜像测试 + NSIS 钩子
+│   │   └── sidecar/        Node sidecar：stdio NDJSON RPC 跑同一份 runtime（打包为 dist/server.cjs 随装）
+│   └── electron-legacy/    Win7/8/8.1 兜底壳（Electron 22，esbuild 复用 electron 主进程源码 + net fetch 桥）
 └── packages/
-    ├── core-spec/          IPC 契约唯一真相：类型 + 通道 + 双壳契约测试
-    ├── ui/                 共享 Vue 3 前端（对壳透明）
+    ├── core-spec/          IPC 契约唯一真相：类型 + 通道 + 契约测试 + 跨语言 fixture
+    ├── ui/                 共享 Vue 3 前端（双桥探测，对壳透明）
     └── runtime/            TS 启动器核心：数据根 / 下载 / 探测 / 拼装 / 进程
 ```
 
@@ -114,27 +151,43 @@ Attic-Minecraft-Launcher
 
 ---
 
-## ❓ 常见问题排查与解决
+## ❓ 常见问题（FAQ）
 
-### 1. 启动游戏后没有窗口，但进程在跑
+### Q1：能启动哪些版本？支持 1.6 及以上吗？
 
-纯 Applet 容器版本（c0.0.12a 等）若 classpath 混入 launchwrapper，legacyfix 的全部补丁会被跳过。本启动器已在启动时自动剔除该依赖并保持 deawt 开启；若仍复现，检查是否手动改过实例 JVM 参数。
+覆盖 Pre-Classic 直到 1.5.2 的官方历史版本（含各期快照，以 Betacraft 版本清单实际提供为准）。1.6+ 不在本项目目标内——官方启动器已覆盖好那段历史，本启动器只做"官方不再提供"的部分。
 
-### 2. 关闭游戏窗口后启动器一直显示"运行中"
+### Q2：需要注册账号吗？没有 Microsoft 账户能玩吗？
 
-Applet 版本关窗不触发 JVM 退出。Windows 下启动器带窗口看门狗自动终止空转进程；若看门狗未生效（如非 Windows 平台），可点【停止】手动回收。
+能。离线账户即可启动游戏（按用户名确定性生成 MC 格式 UUID）；皮肤与 legacy 正版验证走 Betacraft 公共代理端点。Microsoft 账户登录在 Phase 6 计划中，当前未实现。
 
-### 3. 进入服务器却静默进了单人
+### Q3：游戏 jar 在仓库里吗？
 
-legacyfix 的 `<gameDir>/legacyfix/level-server.txt` 残留（尤其内容为 `local`）会跳过服务器对话框。启动器现以 `-Dlf.proxy.levelServer` 属性覆盖该文件；若需彻底重置，删除该 txt 后下次启动会重新弹设定框。
+不在，也不会分发。客户端 jar 与资产在首次启动时从 Betacraft 公共端点下载到本地数据目录，仓库不含任何 Mojang 版权内容（见许可证一节）。
 
-### 4. IPC 桥无响应 / 一直显示"未检测到 IPC 桥"横幅
+### Q4：需要自己装 Java 吗？
 
-Electron 20+ 默认沙箱会让 preload `require` 第三方模块静默失败；主窗口已显式 `sandbox: false`。自行改动壳代码时，先重跑 `pnpm dev` 确认主进程产物与 UI 同为最新（旧 dist + 新 UI 会出现无报错的功能异常）。
+游戏侧需要 Java 8（推荐 64 位），启动器不捆绑 JRE。会自动探测机器上已有的 Java（注册表 / 常见目录 / `JAVA_HOME` / `PATH` 逐个实测版本与架构），找不到或想指定别的，可在设置页手动选 Java 路径。
 
-### 5. 想改窗口尺寸 / JVM 内存但找不到入口
+### Q5：老系统（Win7 / Win8）能装吗？
 
-实例页点击实例卡片进入编辑（v1 Instance Settings 语义）：窗口宽/高仅对 Applet 容器版本生效；JVM 参数（如 `-Xmx2G`）会覆盖全局内存设置。
+主发布线基于 Tauri + WebView2，要求 Windows 10 及以上（安装器会检测并指路）。Win7 SP1 – 8.1 用户使用专门的兜底安装包（Electron 22 壳），功能对齐主线但**不提供自动更新**。
+
+### Q6：存档和配置放在哪？能把整个启动器带走吗？
+
+Windows 为 `%APPDATA%/.attic`，macOS / Linux 为 `~/.attic`（版本、资产、实例各占子目录）。在程序根目录放 portable 标记即优先使用本地目录；Betacraft Launcher v1 老用户可在设置页把数据根指回原 `.betacraft` 目录，存档与已下载版本直接复用。
+
+### Q7：双击启动没窗口 / 秒退，怎么排查？
+
+先看独立控制台窗的逐行日志——启动器会自动分类退出原因（内存不足 / GL 初始化 / LWJGL 原生库 / 链接失败 / Java 缺失），按对应提示处理即可。改内存、JVM 参数、窗口尺寸都在实例编辑页（点击实例卡片进入），实例参数覆盖全局设置。
+
+### Q8：设置了窗口尺寸为什么没生效？
+
+宽高设置仅对纯 Applet 容器版本（c 系列到 1.0.5 一代）生效；a1.0.4 起游戏主窗口自管分辨率与全屏，启动器不做干预——这也是本项目不把游戏窗口嵌进启动器的原因（见"戒律"与血统说明）。
+
+### Q9：开发时 UI 显示"未检测到 IPC 桥"横幅？
+
+浏览器直开 dev server（`http://localhost:5310/?demo=1`）属预期降级——demo mock 桥。走 `pnpm dev` 拉起 Electron 时若无桥，先重跑 `pnpm dev` 确认主进程产物与 UI 同为最新——`runtime` / 主进程改动是一次性编译，热更新只覆盖 UI 侧。
 
 ---
 

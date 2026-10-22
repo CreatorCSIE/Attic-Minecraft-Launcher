@@ -1,0 +1,13 @@
+{
+  "name": "@attic/tauri",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Tauri 2 主发布壳（Windows NSIS 首发）：Rust 窗层 + ipc_forward 转发 Node sidecar（stdio NDJSON RPC）",
+  "scripts": {
+    "dev": "pnpm --filter @attic/sidecar build && tauri dev",
+    "build:exe": "pnpm --filter @attic/sidecar build && tauri build --bundles nsis"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.1.0"
+  }
+}

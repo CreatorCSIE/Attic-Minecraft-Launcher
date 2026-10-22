@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "主窗与控制台窗的默认能力面（自定义命令不受 capability 约束，插件权限在此收口）",
+  "windows": ["main", "console-*"],
+  "permissions": [
+    "core:default",
+    "opener:default",
+    "dialog:default",
+    "updater:default"
+  ]
+}

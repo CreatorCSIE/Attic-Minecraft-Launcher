@@ -7,7 +7,10 @@
     "dev": "node scripts/dev.mjs",
     "typecheck": "pnpm -r typecheck",
     "build": "pnpm -r build",
-    "test": "pnpm -r test"
+    "test": "pnpm -r test",
+    "fixtures": "node scripts/emit-contract-fixtures.mjs",
+    "fixtures:check": "node scripts/emit-contract-fixtures.mjs --check",
+    "gate:node16": "node scripts/node16-api-gate.mjs"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

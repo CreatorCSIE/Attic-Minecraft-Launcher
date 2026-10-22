@@ -153,7 +153,7 @@ legacyfix jar 原位补丁（窗口偏右下最小修复，不属启动命令行
 现有 4 个夹具覆盖三形态：`c2.0-javaagent`、`b1.7.3-javaagent`（占位符展开 + 代理参数）、`1.4.7-forge-coremod`、`1.5.2-forge-mod`。
 
 - **TS 侧**：[tests/contract.test.js](../packages/core-spec/tests/contract.test.js)（`node --test`）断言形状 + §2.6 不变量。Phase 2 起，runtime 的 LaunchConfig 拼装器必须对同一组夹具产出 `expected`（行为断言替换形状断言）。
-- **Rust 侧**：Phase 4 的 `cargo test` 读**同一目录**，serde 反序列化 `versionJson`/`context`，用 Rust 拼装器断言输出 == `expected`。双实现同绿进 CI 闸门（风险 #2）。
+- **Rust 侧**（2026-10-22 口径修订）：拼装器不再有 Rust 第二实现（启动核心单一承载 = Node sidecar，见 §5 双壳接入模型），本组夹具的跨实现同绿闸门**收窄为契约镜像闸门**：`cargo test` 读 `tests/fixtures/ipc-channels.json` 比对 `src-tauri` 通道镜像；TS 侧 `fixtures:check` 保证 fixture 与 sidecar 导出表不漂移。
 - 夹具路径为中性 POSIX 风格字符串；两实现都不得对路径做平台假设（拼装时原样透传即可）。
 
 ## 5. Rust 镜像规则（Phase 4 约束）
@@ -162,6 +162,34 @@ legacyfix jar 原位补丁（窗口偏右下最小修复，不属启动命令行
 - 判别联合用 `#[serde(tag = "type", rename_all = "camelCase")]`（`Account`）；`AccountType`/`form`/`phase` 等字符串枚举用 `#[serde(rename_all = "camelCase")]`。
 - 通道/事件常量镜像为 `src-tauri` 内同名 `pub const`，值必须与 `ipc.ts` 逐字节一致（契约测试含常量比对）。
 - 可选字段用 `Option<T>` + `#[serde(skip_serializing_if = "Option::is_none")]`，缺省语义与 TS `?` 对齐。
+
+### 双壳接入模型（Phase 4/5 脚手架落地）
+
+三壳并立，UI 面（RendererBridge）唯一：
+
+| 壳 | 核心承载 | 桥注入 | 定位 |
+| --- | --- | --- | --- |
+| `apps/electron` | 同进程直连 `AtticRuntime` | preload → `window.attic` | 开发参考实现 |
+| `apps/electron-legacy` | 同上（esbuild 打包 = fetch 桥 + **同一份** `main.ts` 源码） | 同上 | Win7/8/8.1 兜底发布线（Electron 22 = Chromium 108 / Node 16.17，无自动更新） |
+| `apps/tauri` | **Node sidecar 子进程**（`@attic/runtime` 门面） | UI `bridge/tauri.ts` 适配 `window.__TAURI__`（withGlobalTauri）→ Rust 命令 | 主发布线（Windows NSIS + updater 分轨） |
+
+Tauri 线 Rust↔sidecar 线协议（stdio NDJSON，一行一帧；sidecar `src/server.ts`）：
+
+- 请求 `{id:number, method:string, params:unknown[]}`；响应 `{id, result}` | `{id, error}`；事件推送 `{event, payload}`（无 id）。
+- **错误以数据返回不跨进程抛**（IpcResult 语义的线协议形态）；`IpcResult` 封装由 Rust 壳完成（`{result|error}` → `{ok,value|error}`）。
+- 通道切分：35 契约通道 = **28 sidecar 承接** + **7 宿主面**（`window:control / window:console / instances:open-dir / shell:open-dir / shell:open-url / dialog:pick / custom:import-jar`，Rust 直处理；sidecar 收到即防御拒绝）。宿主面拆步走 `attic:internal:*` 私有方法（`instance-game-dir / special-dir / import-jar / shutdown`：Rust「先拿路径/入参，再做宿主动作」）。
+- 控制台 backlog（seq 盖戳 + 1MB 环形 + 4 会话）归属**壳层**：Electron 线在主进程、Tauri 线在 sidecar。
+- 环境面：`ATTIC_LAUNCHER_VERSION`（Rust 注入包版本）；`ATTIC_SIDECAR_NODE / ATTIC_SIDECAR_ENTRY`（开发/调试逃生舱）；sidecar 解析次序 = env 覆盖 → 安装态（resource 目录 `sidecar/server.cjs` + 随行/PATH node）→ 开发态仓内 dist。
+
+跨语言镜像闸门（戒律 #2 执行面）：`scripts/emit-contract-fixtures.mjs` 从 sidecar 导出表生成
+`packages/core-spec/tests/fixtures/ipc-channels.json`；Rust `contract_tests`（cargo test）与
+`fixtures:check`（CI）双向比对；Node16 API 锁 = `scripts/node16-api-gate.mjs`。
+
+NSIS 定制结论（Phase 5 拍板）：**无需编译级定制**（官方预编译 makensis + 自带插件足够），
+定制面 = 脚本层双钩：Tauri `nsis.installerHooks` → `src-tauri/windows/attic-checks.nsh`
+（`NSIS_HOOK_PREINSTALL`：OS<Win10 拒装指路兜底构件 + 架构 guard；WebView2≥110 交
+`minimumWebview2Version` + `embedBootstrapper`），electron-builder `nsis.include` →
+`build/installer.nsh`（`customInit`：下限 Win7 SP1）。
 
 ## 6. 端点与版本数据流（Phase 2 预告）
 
