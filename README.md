@@ -62,9 +62,9 @@ Betacraft 版本 API              legacyfix javaagent
 |---|---|---|
 | Phase 0–2 | 脚手架 / IPC 契约 / TS 运行时 | ✅ 完成 |
 | Phase 3 | UI v0 + 设置页重写 + Mods/自定义版本 | ✅ 完成 |
-| Phase 4 | Tauri 壳 + sidecar + Electron 22 兜底壳 | 🔨 脚手架完成（Rust/TS 编译与契约测试全绿），端到端联调进行中 |
-| Phase 5 | NSIS 安装包分发 + release CI + updater | 🔨 脚手架完成，首发构建收口与端点配置进行中 |
-| Phase 6 | Microsoft 账户登录、addons、Discord RPC 等 | 📋 愿望池（不承诺时间） |
+| Phase 4 | Tauri 壳 + sidecar + Electron 22 兜底壳 | 🔨 联调收尾：真窗端到端已通（窗控/拖拽/图标/视觉收口、契约双绿），余 M2 桌面手动验收（真窗点 Play） |
+| Phase 5 | NSIS 安装包分发 + release CI + updater | 🔨 全平台矩阵与签名密钥就绪；Secrets 登记、更新端点替换、CI 首跑收口待发布仓库定稿 |
+| Phase 6 | Microsoft 账户登录、addons、MC 工具接入、Discord RPC 等 | 📋 愿望池（不承诺时间）；addons 的 javaagent 分叉路线（fork vs 自写）评估中；工具接入两通路已定案（attach 类走 `-javaagent` 预挂载、种子类外置进程联动实例世界 seed） |
 
 ---
 
