@@ -96,8 +96,12 @@ cd Attic-Minecraft-Launcher
 # 安装 workspace 依赖（apps/* + packages/*）
 pnpm install
 
-# 开发一条龙：编译契约/runtime/主进程 → 起 vite(5310) → 拉起 Electron
+# 开发一条龙（默认 Electron 壳）：编译契约/runtime/主进程 → 起 vite(5310) → 拉起 Electron
 pnpm dev
+
+# 开发 Tauri 壳（需 Rust 工具链）：编译契约/runtime → 打 sidecar → tauri dev
+# （vite 由 tauri 的 beforeDevCommand 自起 5310；等价于 pnpm --filter @attic/tauri dev，此为根目录快捷入口）
+pnpm dev tauri
 
 # 全仓库构建 / 类型检查 / 测试
 pnpm build
@@ -109,14 +113,11 @@ pnpm fixtures
 pnpm fixtures:check
 pnpm gate:node16
 
-# Tauri 壳（需 Rust 工具链；先编 sidecar 再 tauri dev）
-pnpm --filter @attic/tauri dev
-
-# Rust 侧契约镜像测试
+# Rust 侧契约镜像测试（单独跑，无需整壳启动）
 cargo test --manifest-path apps/tauri/src-tauri/Cargo.toml
 ```
 
-> **注意**：UI 改动经 vite HMR 即时生效；`runtime` / 主进程改动需重跑 `pnpm dev`（dist 为一次性编译，避免半新半旧的产物不一致）。
+> **注意**：UI 改动经 vite HMR 即时生效；`runtime` / 主进程改动需重跑 `pnpm dev`（或 `pnpm dev tauri`）——dist 为一次性编译，避免半新半旧的产物不一致。`pnpm dev` 与 `pnpm dev tauri` 都占用 **5310** 端口（`--strictPort`），二者不可同时运行，切换前先停掉旧的 vite。
 
 ### 2. 仓库结构 (Repository Layout)
 

@@ -1,6 +1,11 @@
 #!/usr/bin/env node
 /**
- * pnpm dev —— 开发全链路编排（零新依赖）：
+ * pnpm dev [tauri] —— 开发全链路编排（零新依赖）：
+ *  · 默认（electron）：见下 1)~4)，走 core-spec→runtime→electron 编译 + vite + Electron。
+ *  · 传 `tauri`（`pnpm dev tauri`）：core-spec→runtime 编译后，交由 @attic/tauri 的 dev
+ *    （= sidecar bundle + `tauri dev`；vite 由 tauri 的 beforeDevCommand 自起 5310）。
+ *    注：`tauri` CLI 是 @attic/tauri 的局部依赖，须从仓内以 filter/-C 方式调用，根目录裸跑找不到。
+ *
  *  1) 串行编译：core-spec → runtime → electron 主进程
  *     （戒律：Electron 启动前主进程产物必须最新，避免半新半旧不一致）
  *  2) 起 vite dev server（packages/ui，端口 5310 strictPort；已在服务则复用）
@@ -18,6 +23,9 @@ const DEV_URL = `http://localhost:${PORT}`;
 // 探针走 localhost（vite 默认可能只绑 [::1]，127.0.0.1 会漏检成"端口空闲"再撞 strictPort）
 const PROBE_URL = `http://localhost:${PORT}/`;
 const READY_TIMEOUT_MS = 30_000;
+
+// 目标壳：`pnpm dev` → electron（默认）；`pnpm dev tauri` → Tauri 壳。
+const target = (process.argv[2] || 'electron').toLowerCase();
 
 const log = (msg) => console.log(`[dev] ${msg}`);
 const die = (msg, code = 1) => {
@@ -64,50 +72,73 @@ function killTree(child) {
 let electronExited = false;
 let vite = null;
 
-// —— 1. 串行构建（UI 无需 build：vite 直编源码，core-spec 走 alias 指 TS 源） ——
-build('core-spec', 'packages/core-spec', 'build');
-build('runtime', 'packages/runtime', 'build');
-build('electron main', 'apps/electron', 'build');
-
-// —— 2. vite dev server（已在服务则复用） ——
-if (await servingAlready()) {
-  log(`复用已在服务的 vite：${DEV_URL}`);
+if (target === 'tauri') {
+  // Tauri 壳：sidecar 以 external 方式在运行时 require @attic/runtime 与 @attic/core-spec 的 dist，
+  // 故先建二者；vite 与 cargo 编译交由 @attic/tauri 的 dev（= sidecar bundle + tauri dev，
+  // vite 由 tauri 的 beforeDevCommand 自起 5310）。从仓内以 --filter 调用，避免根目录裸跑找不到 tauri CLI。
+  build('core-spec', 'packages/core-spec', 'build');
+  build('runtime', 'packages/runtime', 'build');
+  log('launch: tauri dev（apps/tauri；= sidecar bundle + tauri dev，vite 由 beforeDevCommand 自起）');
+  const tauri = spawn('pnpm', ['--filter', '@attic/tauri', 'dev'], { cwd: ROOT, stdio: 'inherit', shell: true });
+  let tauriExited = false;
+  tauri.on('exit', (code) => {
+    if (tauriExited) return;
+    tauriExited = true;
+    process.exit(code ?? 0);
+  });
+  // Ctrl+C / SIGTERM：整树回收（tauri dev 会派生 vite + cargo + app 进程）
+  for (const sig of ['SIGINT', 'SIGTERM']) {
+    process.on(sig, () => {
+      killTree(tauri);
+      process.exit(sig === 'SIGINT' ? 130 : 143);
+    });
+  }
 } else {
-  log('serve: vite (packages/ui)');
-  vite = spawn('pnpm', ['-C', 'packages/ui', 'exec', 'vite', '--port', String(PORT), '--strictPort'], {
+  // —— 1. 串行构建（UI 无需 build：vite 直编源码，core-spec 走 alias 指 TS 源） ——
+  build('core-spec', 'packages/core-spec', 'build');
+  build('runtime', 'packages/runtime', 'build');
+  build('electron main', 'apps/electron', 'build');
+
+  // —— 2. vite dev server（已在服务则复用） ——
+  if (await servingAlready()) {
+    log(`复用已在服务的 vite：${DEV_URL}`);
+  } else {
+    log('serve: vite (packages/ui)');
+    vite = spawn('pnpm', ['-C', 'packages/ui', 'exec', 'vite', '--port', String(PORT), '--strictPort'], {
+      cwd: ROOT,
+      stdio: 'inherit',
+      shell: true,
+    });
+    vite.on('exit', (code) => {
+      if (electronExited) return;
+      electronExited = true;
+      die(`vite 意外退出（exit ${code}）`, code ?? 1);
+    });
+    await waitForReady();
+    log(`vite 就绪：${DEV_URL}`);
+  }
+
+  // —— 3. Electron ——
+  log('launch: electron');
+  const electron = spawn('pnpm', ['-C', 'apps/electron', 'exec', 'electron', '.', `--dev-url=${DEV_URL}`], {
     cwd: ROOT,
     stdio: 'inherit',
     shell: true,
   });
-  vite.on('exit', (code) => {
+  electron.on('exit', (code) => {
     if (electronExited) return;
     electronExited = true;
-    die(`vite 意外退出（exit ${code}）`, code ?? 1);
-  });
-  await waitForReady();
-  log(`vite 就绪：${DEV_URL}`);
-}
-
-// —— 3. Electron ——
-log('launch: electron');
-const electron = spawn('pnpm', ['-C', 'apps/electron', 'exec', 'electron', '.', `--dev-url=${DEV_URL}`], {
-  cwd: ROOT,
-  stdio: 'inherit',
-  shell: true,
-});
-electron.on('exit', (code) => {
-  if (electronExited) return;
-  electronExited = true;
-  if (vite) killTree(vite);
-  log(`Electron 退出（exit ${code}）${vite ? '，已回收 vite。' : '，vite 为复用实例，保留。'}`);
-  process.exit(code ?? 0);
-});
-
-// —— 4. Ctrl+C / SIGTERM：回收全部子进程 ——
-for (const sig of ['SIGINT', 'SIGTERM']) {
-  process.on(sig, () => {
-    killTree(electron);
     if (vite) killTree(vite);
-    process.exit(sig === 'SIGINT' ? 130 : 143);
+    log(`Electron 退出（exit ${code}）${vite ? '，已回收 vite。' : '，vite 为复用实例，保留。'}`);
+    process.exit(code ?? 0);
   });
+
+  // —— 4. Ctrl+C / SIGTERM：回收全部子进程 ——
+  for (const sig of ['SIGINT', 'SIGTERM']) {
+    process.on(sig, () => {
+      killTree(electron);
+      if (vite) killTree(vite);
+      process.exit(sig === 'SIGINT' ? 130 : 143);
+    });
+  }
 }

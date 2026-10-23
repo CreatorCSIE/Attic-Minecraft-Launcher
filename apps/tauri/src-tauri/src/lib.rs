@@ -157,19 +157,42 @@ fn resolve_sidecar_launch(app: &AppHandle) -> Result<(PathBuf, PathBuf), String>
                 PathBuf::from("node") // PATH 兜底（开发机常态）
             }
         });
-    let entry = std::env::var_os("ATTIC_SIDECAR_ENTRY").map(PathBuf::from).unwrap_or_else(|| {
-        app.path()
-            .resolve("sidecar/server.cjs", tauri::path::BaseDirectory::Resource)
-            .unwrap_or_else(|_| {
-                // 开发态回退：src-tauri/../sidecar/dist/server.cjs（`pnpm --filter @attic/sidecar build` 产物）
-                PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                    .join("../sidecar/dist/server.cjs")
-            })
-    });
-    if !entry.exists() {
-        return Err(format!("sidecar entry not found: {}", entry.display()));
+    // 候选：开发态优先仓内 dist（`sidecar build` 新鲜产物），安装态优先资源目录。
+    // 关键：Tauri 的 resolve 返回 `\\?\` 扩展长度前缀，node 模块解析器不认（误当盘符相对 `E:` → EISDIR），须剥除。
+    let entry = std::env::var_os("ATTIC_SIDECAR_ENTRY")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            let dev = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../sidecar/dist/server.cjs");
+            let resource = app
+                .path()
+                .resolve("sidecar/server.cjs", tauri::path::BaseDirectory::Resource)
+                .ok()
+                .map(strip_verbatim);
+            let ordered: Vec<PathBuf> = if cfg!(debug_assertions) {
+                [Some(dev.clone()), resource].into_iter().flatten().collect()
+            } else {
+                [resource, Some(dev.clone())].into_iter().flatten().collect()
+            };
+            ordered.into_iter().find(|p| p.is_file()).unwrap_or(dev)
+        });
+    let entry = strip_verbatim(entry);
+    if !entry.is_file() {
+        return Err(format!("sidecar entry not a file: {}", entry.display()));
     }
     Ok((node, entry))
+}
+
+/// 剥除 Windows 扩展长度路径前缀 `\\?\`（Tauri resolve 产物）。
+/// node 的模块解析器不识别该前缀，会把 `\\?\E:\...` 退化成盘符相对 `E:` 再 lstat → EISDIR。
+fn strip_verbatim(p: PathBuf) -> PathBuf {
+    let s = p.to_string_lossy();
+    if let Some(rest) = s.strip_prefix(r"\\?\UNC\") {
+        PathBuf::from(format!(r"\\{rest}"))
+    } else if let Some(rest) = s.strip_prefix(r"\\?\") {
+        PathBuf::from(rest)
+    } else {
+        p
+    }
 }
 
 impl Sidecar {
