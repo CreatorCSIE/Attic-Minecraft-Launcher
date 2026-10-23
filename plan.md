@@ -218,7 +218,18 @@
 - [ ] macOS：ARM 为主（基线 Apple Silicon + 近两版 macOS）；未签名发布 + 右键打开教程；$99 开发者签名作为后置决策（风险 #5）
 - [ ] CI 矩阵：三平台仅构建 + 契约测试（不启动游戏）
 - [ ] 更新通知：GitHub Releases 轮询（照抄 v2 的做法）
+- [ ] **更新通道设计（定稿清单——散点已存：updater 占位/分轨 SOP/portable 升级语义，本条缝合 + 补空白）**。分层 = 本体三轨 + 运行时随轨 + 数据面独立，两种信任锚不互借：
+  - **本体 · 主壳静默通道** = tauri-plugin-updater 官方闭环：`createUpdaterArtifacts: true`（bundler 自产出 `latest.json` + 逐构件签名，CI 上传归置 = release.yml 首跑核项）；minisign 密钥对已产（公钥钉 conf `plugins.updater.pubkey`，私钥 + 口令进 GitHub Secrets——**登记未做**，口令离线备份）；endpoint 现为 `REPLACE_OWNER/REPLACE_REPO` 占位，发布仓库定稿即替换；升级构件 = NSIS setup 静默自替换（与安装同栈一条通道，见选型注）；平台键分轨照「Updater 分轨」SOP（缺键 = 该架构静默收不到更新，脚本对账清单）。
+  - **本体 · 交互面** = 头区「检查更新」按钮解禁（现 disabled+soon 徽标）：手动即时检查 + 用户确认后下载安装；自动检查 = 每日轮询 Releases（照 v2 做法）。**通道单轨 latest，无 beta/nightly**——updater 只消费 `releases/latest/download`，pre-release 定性质 = 试装构件不是通道（有意约束，写档防手滑把 prerelease 挂 latest.json）；不造 staged rollout（GitHub 无原生面，不为自建基建）。
+  - **本体 · 兜底壳与 portable** = 无自动更新通道（已定稿两则同源：兜底钉 EOL 线手动下、portable 重新解压即升级），in-app「检查更新」对这两形态动作分叉 = 提示 + Releases 链接——同一 UI 代码路径，仅动作分叉。
+  - **运行时 sidecar = 不设独立通道**：构件随主壳打包，更新与本体同轨原子（NSIS 覆盖安装 = 安装目录整体替换；portable = 解压目录整体换新），杜绝「壳新 runtime 旧」的半升级态。
+  - **数据面（与用户面「更新」彻底分轨）**：legacyfix agent = 钉版哈希表 + release/nightly 结构门（已定稿）；版本 JSON/assets/游戏 jar = Mojang manifest；mod 仓库 = betacraft api + 缓存时效。均启动时按需拉取、无用户通知混入。**信任锚分界：本体 = minisign 签名（updater 内建校验），数据面 = SHA 哈希钉版（下载侧校验），互不借机制**。
+  - **失效面**：网络失败/签名不符 = 不更新维持现状 + 明示原因（检查失败不许静默吞）；静默升级中途失败 = 依赖 setup 覆盖语义，无回滚设计（Release 构件不可覆写重传，无半状态补发概念——失败 = 让用户重跑下载）；**密钥轮换预案（占位收口的一部分）**：公钥单钉约束下换密钥 = 已装旧版断更，硬流程 = 先用旧钥发一版「双公钥/换钉」过渡升级、确认覆盖率后再启用新钥签名；口令丢失 ≈ 通道死亡，备份责任先于首次发版。
+  - **端到端彩排** = 发布仓库定稿清单加一项：造 v_n→v_n+1 假版本走完整静默升级 + 三形态通知面 + 断网/坏签名失效面各一遍。
 - [ ] README 补免责声明显眼位 + 品牌写法 "Attic Launcher for Minecraft: Java Edition"（风险 #6）
+- [ ] **品牌定稿落地（图标与 banner 均用户亲自设计，2026-10 拍板；现态 = Tauri 官方默认图标全套 + 金顶占位归档 `apps/tauri/brand/icons-goldroof/`）**：设计交付后替换面清单——① `apps/tauri/brand/icons/` 全套（`tauri icon` 重生成，含 .ico/.icns/png 族）；② electron-builder `icon` 路径（Windows .ico / mac .icns / linux png 族，兜底壳与主壳同一套源图）；③ NSIS `installerIcon`/`uninstallerIcon`（见下条）；④ README banner（仓库顶部头图，含品牌写法 "Attic Launcher for Minecraft: Java Edition"，与免责条同次改 README）；⑤ 应用内头区 logo 占位（App.vue 山形 SVG）是否随新图标重绘 = 设计定稿时一并裁定。
+- [ ] **NSIS 安装器 UI 定制（设计交付物依赖上条）**：出图面 = header/sidebar 位图 + 安装/卸载图标（tauri.conf `bundle.windows.nsis` 面：`headerImage`/`sidebarImage`/`installerIcon`/`uninstallerIcon`，具体键名与图尺寸规格以实施时 bundler 模板要求为准，BMP 系）；语言与静默行为维持现口径不动；**双壳同栈红利**：electron-builder Windows 缺省同为 NSIS，位图素材两壳共用一套出图（兜底壳走 `installerIcon`/`nsis.*` 对应键），文档口径一致。
+- [ ] **portable 便携版落实（数据根口径已定稿于数据布局注「portable：根 = 可执行文件旁；rootDir 全局可配置」，本条 = 工程面补齐）**：① 构件形态 = **目录 zip，两壳统一**（归置依上条「portable 形态定稿 2026-10-21」：electron-builder `portable` 单文件 target 已被否——每次全量解包 %TEMP%/杀软误报重灾区/违「官方通道零维护」戒律，勿复活；tauri 面 = exe + sidecar/运行时资源目录手工布局，electron 面 = `--dir` 产物压缩，release.yml 各挂一构件，命名 `attic-<shell>-<os>-<arch>-<ver>-portable.<ext>` 并入统一规范）；② 模式判定 = 数据根解析处（packages/runtime）加 portable 分支——优先 exe 旁（`current_exe().parent()`），模式源 = 同目录 marker 文件（如 `portable.flag`/ini，随 zip 布局出厂）+ `rootDir` 全局配置可覆盖（已定稿面）；③ 只读目录兜底 = U 盘/Program Files 类不可写位 → 回落 `%APPDATA%` 并 UI 显式告知（首启一次性，写入 launcher.settings 记忆）；④ 更新器分叉 = portable 无静默自替换通道（NSIS 自更新路径不适用）→ in-app「检查更新」在 portable 模式改提示 + 指向 Releases 手动下载（v2 轮询面共用，仅动作分叉），安装包模式不受影响；⑤ 版本钉/agent 下载/bin 池等全部挂数据根之下，切换零额外改动（设计红利，验证面 = 真机便携目录全链路跑一遍 M1 三版本）。
 
 **安装包选型 + 架构矩阵早期调研（2026-10-21，来源 tauri.app distribute 文档 + tauri-bundler changelog）**：
 - **格式支持面**：Tauri bundler 原生 targets 仅 `["deb","rpm","appimage","nsis","msi","app","dmg"]` 或 `"all"`——**Inno Setup 无官方通道**（需社区外挂自写 .iss），排除；结论：Windows 不引入 Inno，维持 NSIS 主发布。
