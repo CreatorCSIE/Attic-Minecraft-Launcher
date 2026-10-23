@@ -487,6 +487,15 @@ pub fn run() {
             let handle = app.handle().clone();
             let sidecar = Sidecar::spawn(&handle).map_err(|e| e)?;
             app.manage(Arc::new(sidecar));
+            // 防白底：原生窗缺省底色为白，WebView2 首帧前会闪出。conf 已钉深色
+            // 底（#14120f，应用默认主题 = tokens.css 深色 --surface-1）；系统为
+            // 浅色主题时（渲染侧 system 模式经 matchMedia 解析为 light）在首帧
+            // 前改钉浅色底 #f2ede3，两种主题启动都不闪白。
+            if let Some(win) = app.get_webview_window("main") {
+                if matches!(win.theme(), Ok(tauri::Theme::Light)) {
+                    let _ = win.set_background_color(Some(tauri::window::Color(242, 237, 227, 255)));
+                }
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

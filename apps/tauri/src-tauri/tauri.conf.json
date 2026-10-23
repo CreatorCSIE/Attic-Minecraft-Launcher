@@ -20,7 +20,8 @@
         "minWidth": 800,
         "minHeight": 560,
         "decorations": false,
-        "resizable": true
+        "resizable": true,
+        "backgroundColor": [20, 18, 15, 255]
       }
     ],
     "security": {
