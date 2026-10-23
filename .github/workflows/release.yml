@@ -1,7 +1,11 @@
-name: Release（Windows NSIS 首发矩阵）
+name: Release（全平台矩阵）
 
-# Phase 5 脚手架：主壳 = Tauri NSIS（x64 + arm64 持续线），兜底 = Electron 22 NSIS（x64 + ia32）。
-# portable 目录构件（win zip / linux tar.xz）与 MSI 双轨、macOS/Linux 线 = 后续条目（plan.md）。
+# Phase 5 脚手架：主壳 = Tauri（Windows NSIS x64+arm64 / macOS DMG arm64 / Linux deb+AppImage x64），
+# 兜底 = Electron 22 NSIS（x64 + ia32，Win7 SP1 下限）。
+# 分发口径（用户拍板 2026-10-23）：Win/Mac arm64 照常发（壳原生，游戏侧走 x64 模拟 / Rosetta，
+# 见 depends.ts 闸门）；Linux 优先 Debian 系（deb，arch/redhat 有需求再说），linux arm64 不分发
+# （LWJGL2 无 arm64 原生库且无系统级模拟）。
+# portable 目录构件（win zip / linux tar.xz）与 MSI 双轨 = 后续条目（plan.md）。
 on:
   workflow_dispatch: {}
   push:
@@ -88,6 +92,74 @@ jobs:
           path: |
             apps/tauri/src-tauri/target/aarch64-pc-windows-msvc/release/bundle/nsis/*.exe
             apps/tauri/src-tauri/target/aarch64-pc-windows-msvc/release/bundle/nsis/*.sig
+
+  tauri-macos-arm64:
+    name: Tauri DMG · macOS arm64（持续线，Apple Silicon）
+    runs-on: macos-latest # GitHub 托管 arm64 runner
+    needs: gates
+    env:
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_UPDATER_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_UPDATER_PRIVATE_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+      # 游戏侧约束（depends.ts 闸门）：mac arm64 必须配 x86_64 JDK8 走 Rosetta——
+      # 壳与 updater 原生 arm64，不影响分发。
+      # Apple Developer 证书缺席时 tauri 跳过 codesign/notarize，用户需右键打开绕 Gatekeeper；
+      # 上正式签名时补 APPLE_IDENTITY/APPLE_ID/APPLE_PASSWORD/APPLE_TEAM_ID 环境组（TODO）。
+      - name: Tauri build (arm64)
+        run: pnpm --filter @attic/tauri exec tauri build --target aarch64-apple-darwin --bundles dmg
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: attic-tauri-macos-arm64
+          path: |
+            apps/tauri/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+            apps/tauri/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.app.tar.gz*
+
+  tauri-linux-x64:
+    name: Tauri DEB · linux-x64（持续线，Debian 系优先）
+    runs-on: ubuntu-22.04
+    needs: gates
+    env:
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_UPDATER_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_UPDATER_PRIVATE_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install system deps (webkit2gtk 等，Tauri v2 Linux 官方清单)
+        run: |
+          sudo apt update
+          sudo apt install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+      - name: Install
+        run: pnpm install --frozen-lockfile
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+      # 拍板 2026-10-23：Linux 优先 Debian 系（deb）；arch/redhat 有需求再说。
+      # AppImage 随发：Tauri v2 updater 在 Linux 仅支持 AppImage 通道（endpoint 钉好后即生效）。
+      # linux arm64 不分发（LWJGL2 无 arm64 原生库且无系统级模拟，启动会被闸门拦）。
+      - name: Tauri build (deb + appimage)
+        run: pnpm --filter @attic/tauri exec tauri build --bundles deb,appimage
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: attic-tauri-linux-x64
+          path: |
+            apps/tauri/src-tauri/target/release/bundle/deb/*.deb
+            apps/tauri/src-tauri/target/release/bundle/appimage/*.AppImage
+            apps/tauri/src-tauri/target/release/bundle/appimage/*.sig
 
   electron-legacy-windows:
     name: Electron 22 兜底 NSIS · x64+ia32

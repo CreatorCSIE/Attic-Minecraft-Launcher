@@ -13,6 +13,7 @@ const {
   hasLocalDepends,
   isDependsCurrent,
   ensureDepends,
+  checkLwjgl2Arch,
   writeZipEntries,
   DEFAULT_ENDPOINTS,
 } = require('../dist/index.js');
@@ -143,6 +144,33 @@ test('force：版本号一致也重拉（实例强制更新语义）', async () 
   state.downloads.length = 0;
   await ensureDepends(io, DEFAULT_ENDPOINTS, { force: true });
   assert.equal(state.downloads.length, 2);
+});
+
+// ---------- LWJGL2 架构闸门（arm64 死区，拍板 2026-10-23） ----------
+
+test('checkLwjgl2Arch：Windows 全放行（arm64 走 x64 模拟）', () => {
+  assert.equal(checkLwjgl2Arch('win32', 'arm64', 'arm64'), null);
+  assert.equal(checkLwjgl2Arch('win32', 'x64', 'x86_64'), null);
+});
+
+test('checkLwjgl2Arch：x64 宿主全放行（闸门只在 arm 宿主触发）', () => {
+  assert.equal(checkLwjgl2Arch('linux', 'x64', 'arm64'), null);
+  assert.equal(checkLwjgl2Arch('darwin', 'x64', 'arm64'), null);
+});
+
+test('checkLwjgl2Arch：Linux arm/arm64 一律拦（无模拟无 arm64 .so）', () => {
+  assert.match(checkLwjgl2Arch('linux', 'arm64', 'x86_64'), /暂不支持/);
+  assert.match(checkLwjgl2Arch('linux', 'arm', 'arm'), /暂不支持/);
+  assert.match(checkLwjgl2Arch('linux', 'arm64', null), /暂不支持/);
+});
+
+test('checkLwjgl2Arch：mac arm64 按 JVM 架构分流（x64 JVM=Rosetta 放行，arm64 JVM 拦）', () => {
+  assert.equal(checkLwjgl2Arch('darwin', 'arm64', 'x86_64'), null);
+  assert.equal(checkLwjgl2Arch('darwin', 'arm64', 'x86'), null);
+  assert.equal(checkLwjgl2Arch('darwin', 'arm64', null), null); // 探测失败放行不误杀
+  assert.equal(checkLwjgl2Arch('darwin', 'arm64', 'unknown'), null);
+  assert.match(checkLwjgl2Arch('darwin', 'arm64', 'arm64'), /Rosetta/);
+  assert.match(checkLwjgl2Arch('darwin', 'arm64', 'arm'), /Rosetta/);
 });
 
 test('自愈：下载中途失败不留假指纹（版本号未写，下次重拉）', async () => {

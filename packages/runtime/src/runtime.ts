@@ -37,8 +37,9 @@ import { applySettingsToProps, estimateMaxMemoryMb, instanceViewFromConfig, sett
 import { BetacraftClient, type FetchImpl } from './betacraft';
 import { endpointsFromOverrides, resolveEndpoints, type Endpoints } from './endpoints';
 import { infoToVersionJson, LAUNCH_METHOD_MAIN_CLASS } from './info';
-import { dependsOsFor, ensureDepends, type DependsIO } from './depends';
+import { checkLwjgl2Arch, dependsOsFor, ensureDepends, type DependsIO } from './depends';
 import { detectJavaRuntime } from './java/detect';
+import { probeJavaExecutable } from './java/probe';
 import { APPLET_LAUNCHER_CLASS, assembleLaunchConfig, type LaunchContext } from './launch';
 import {
   composeModJars,
@@ -1067,6 +1068,7 @@ export class AtticRuntime {
     if (!account) throw new Error('无可用账户，请先在账户页添加账户');
 
     const javaPath = request.javaPath ?? settings['javaPath'] ?? (await this.ensureJavaPath(settings));
+    await this.gateLwjgl2Arch(javaPath);
     // 内存三级优先：请求覆盖 > memoryMode=auto 宿主估算（总内存 40% 夹 [512,2048]）> 定值 > 1024 兜底
     const memory = Number(settings['maxMemoryMb']);
     const maxMemoryMb =
@@ -1104,6 +1106,22 @@ export class AtticRuntime {
       versionOrder: this.cachedVersionOrder(),
       levelServer: settings['levelServer'],
     };
+  }
+
+  /**
+   * LWJGL2 原生库架构闸门（arm64 死区，判定表与取证见 depends.ts checkLwjgl2Arch）：
+   * 仅 arm 宿主触发；darwin arm64 需实测所选 JVM 架构（探测失败放行，不抢自身报错）。
+   */
+  private async gateLwjgl2Arch(javaPath: string): Promise<void> {
+    if (this.platform === 'win32') return;
+    if (process.arch !== 'arm64' && process.arch !== 'arm') return;
+    let jvmArch: import('@attic/core-spec').JavaArchitecture | null = null;
+    if (this.platform === 'darwin' && process.arch === 'arm64') {
+      const probe = await probeJavaExecutable(javaPath, 'manual');
+      if (probe.ok) jvmArch = probe.install.architecture;
+    }
+    const error = checkLwjgl2Arch(this.platform, process.arch, jvmArch);
+    if (error) throw new Error(error);
   }
 
   /** BC 基础库集（libs/natives zip）核对与重拉——v1 downloadDepends 移植，语义见 depends.ts。 */

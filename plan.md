@@ -282,6 +282,7 @@
 6. **商标合规**：产品名用 "Attic Launcher"，"for Minecraft: Java Edition" 仅作描述；显眼免责声明（BlockHelm 模板）；不暗示官方背书。
 7. **远古 Java 可得性**：现代系统不发 JRE 6/7/8。缓解：Zulu 归档通道自动拉取 + 手动导入 + 探测失败面板给全候选与原因（MCANextGen 面板范式）。
 8. **LWJGL2 native 在现代系统**（声音/GL/32 位库）：属游戏侧问题，优先 legacyfix 补丁覆盖，其次 per-build 已知问题文档，最后才考虑客户端 workaround。
+9. **LWJGL2 arm64 架构死区**（2026-10-23 拍板闭环）：LWJGL 2.x 官方从未发布 arm64/armhf 原生库（2015 停维）；BC depends 三平台 natives 实测零 arm 覆盖（osx 单文件 = x86_64）。缓解已落地：启动链 `checkLwjgl2Arch` 闸门——mac arm64 拦 arm64 JVM 并指路 x64 JDK + Rosetta（Java 选择架构偏好天然优先 x64，Rosetta 路线零改动）、Linux arm/arm64 明示暂不支持、Windows arm64 放行（x64 模拟）。分发口径（同日二拍）：**Windows/macOS arm64 照常分发**（壳原生，游戏侧模拟/Rosetta）；Linux 仅 x86_64 且**优先 Debian 系（deb，AppImage 随发供 updater），arch/redhat 有需求再说**；linux arm64 不分发。社区 arm64 LWJGL2 重编译进 Phase 6 愿望池（第三方二进制信任评估前置）。
 
 ## 9. 参考（本地克隆于 `reference/`，不入库）
 

@@ -62,6 +62,7 @@ export {
   hasLocalDepends,
   isDependsCurrent,
   ensureDepends,
+  checkLwjgl2Arch,
   type DependsVersion,
   type DependsIO,
 } from './depends';

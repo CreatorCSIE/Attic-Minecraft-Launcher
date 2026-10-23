@@ -24,6 +24,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import type { JavaArchitecture } from '@attic/core-spec';
 import type { DependsOs, Endpoints } from './endpoints';
 import { binDir, launcherDir, nativesDir } from './storage';
 import { extractZipTo } from './zip';
@@ -139,4 +140,34 @@ function removeContents(dir: string): void {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     fs.rmSync(path.join(dir, entry.name), { recursive: true, force: true });
   }
+}
+
+// ---------- LWJGL2 原生库架构闸门（用户拍板 2026-10-23） ----------
+
+/**
+ * LWJGL 2.x 官方从未发布 arm64/armhf 原生库（2015 停维，桌面 arm64 当时不存在）；
+ * BC depends 实测（2026-10-23 取证）：natives-windows/linux = x86+x64 双份，
+ * natives-osx = 单文件 liblwjgl.dylib（x86_64，ODDLABS 老签名）——三平台零 arm 覆盖。
+ * 平台结论：
+ * - Windows arm64：系统自带 x64 模拟（x64 JDK8 + lwjgl64.dll 可跑）→ 不拦。
+ * - Linux arm/arm64：无系统级 x64 模拟、无 arm64/armhf .so → 一律拦（明示暂不支持）。
+ * - macOS arm64（Apple Silicon）：x86_64 JDK 经 Rosetta 2 可跑（选择逻辑架构偏好
+ *   x86_64 > x86 > arm64 已天然优先命中）；arm64 JVM 加载 x86_64 dylib 必
+ *   UnsatisfiedLinkError → 拦并指路。jvmArch=null（探测失败/未知）放行不误杀。
+ * 返回 null = 放行；返回文案 = 拒绝启动（调用方抛错，走既有启动失败呈现）。
+ */
+export function checkLwjgl2Arch(
+  platform: NodeJS.Platform,
+  hostArch: string,
+  jvmArch: JavaArchitecture | null,
+): string | null {
+  if (platform === 'win32') return null;
+  if (hostArch !== 'arm64' && hostArch !== 'arm') return null;
+  if (platform === 'linux') {
+    return 'LWJGL 2 在 Linux arm/arm64 无可用原生库（官方从未发布 arm64/armhf 构建），暂不支持启动历史版本；x86_64 机器不受影响。';
+  }
+  if (platform === 'darwin' && (jvmArch === 'arm64' || jvmArch === 'arm')) {
+    return 'Apple Silicon 的 arm64 Java 无法加载 LWJGL 2 原生库（仅有 x86_64 构建）：请安装 x86_64 架构的 Java 8（经 Rosetta 2 运行，未装时终端执行 softwareupdate --install-rosetta），并在设置页指定该 Java。';
+  }
+  return null;
 }

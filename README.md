@@ -32,6 +32,7 @@ Betacraft 版本 API              legacyfix javaagent
 - **远古版本全谱系**：Pre-Classic → 1.5.2 官方历史版本，版本清单、版本 JSON、预 patch 客户端 jar（sha1 校验）、资产索引、皮肤与 legacy 验证代理全部走 Betacraft 数据链路供给——客户端零版本数据，新增历史版本无需发版。
 - **Java 运行时自动探测**：注册表 → 常见安装目录 → `JAVA_HOME` → `PATH` 收集候选，逐候选**实测执行**读取真实版本 / 架构 / `java.home`；优先 64 位 Java 8、无 64 位才回退 32 位，设置页可手动覆盖，并附全量探测报告（候选、拒绝原因、耗时）。
 - **legacyfix 自动集成**：从 GitHub Release 自动更新落位；javaagent / coremod / mod 三种形态按版本区间过滤挂载（判定失败 fail-open + 诊断）；纯 Applet 容器版本自动剔除 classpath 中的 launchwrapper 并保持 deawt 开启。
+- **BC 基础库集（depends 通道，v1 移植）**：`libs-<os>.zip`（**Betacraft patched** LWJGL/JInput jar——鼠标抓取等修复编进 jar 本体）+ `natives-<os>.zip` 由 `depends-version.txt` 版本号驱动整体刷新，与 `.info` libraries / Mojang 回填构成双通道库池；arm 宿主启动前过 LWJGL2 架构闸门（见 FAQ）。
 - **Mods 仓库（一期 = Betacraft 单源）**：分类列表、按版本安装登记、启动期刷新与基座合成；对比 v1 做了结构性修复（原子写、sha1 必验、离线不误路由、陈旧合成重算）。
 - **v1 语义实例系统**：`gameDir` 按实例（而非版本）派生，切版本存档不变；实例级 JVM 参数 / 窗口尺寸（默认 854×480）覆盖全局；首启自动创建 `default instance`。
 - **启动管线可观测**：参数组序契约化拼装，干跑通道返回完整 LaunchConfig；独立控制台窗逐行日志 + 崩溃自动分类（out-of-memory / gl-init / lwjgl-native / unsatisfied-link / java-missing）；Applet 版本附 Windows 窗口看门狗，关窗即回收空转进程。
@@ -47,7 +48,7 @@ Betacraft 版本 API              legacyfix javaagent
 ### 分发（Phase 5 脚手架）
 
 - **Windows NSIS 安装包**：Tauri 官方预编译 makensis + 脚本层定制（OS/架构 guard 钩子；WebView2 ≥110 由 bundler 内嵌引导器处理），兜底壳走 electron-builder 独立 NSIS 配置（Win7 SP1 下限）。
-- **自动更新**：Tauri updater minisign 签名密钥已生成、release CI 矩阵（x64 / arm64 / legacy）就绪；兜底线按设计不随自动更新。
+- **自动更新**：Tauri updater minisign 签名密钥已生成、release CI 全平台矩阵就绪（Windows NSIS x64/arm64、macOS DMG arm64、Linux deb+AppImage x86_64、兜底 legacy x64/ia32）；兜底线按设计不随自动更新。Linux 首发 Debian 系（arch/redhat 按需），linux arm64 不分发（LWJGL2 无 arm64 原生库，见 FAQ）。
 
 ### 血统
 
@@ -123,7 +124,7 @@ cargo test --manifest-path apps/tauri/src-tauri/Cargo.toml
 Attic-Minecraft-Launcher
 ├── plan.md                 分阶段开发计划与风险登记
 ├── scripts/                dev.mjs 开发编排 / emit-contract-fixtures.mjs 契约 fixture / node16-api-gate.mjs API 锁
-├── .github/workflows/      ci.yml（静态闸门 + Rust 契约测试）/ release.yml（NSIS x64·arm64 + legacy 矩阵）
+├── .github/workflows/      ci.yml（静态闸门 + Rust 契约测试）/ release.yml（全平台矩阵 + legacy）
 ├── docs/                   契约镜像（contract.md）、UI 设计守则（ui-design.md）、移植笔记
 ├── reference/              上游源码克隆（betacraft-launcher / legacyfix，gitignore，不入库）
 ├── apps/
@@ -172,6 +173,10 @@ Attic-Minecraft-Launcher
 ### Q5：老系统（Win7 / Win8）能装吗？
 
 主发布线基于 Tauri + WebView2，要求 Windows 10 及以上（安装器会检测并指路）。Win7 SP1 – 8.1 用户使用专门的兜底安装包（Electron 22 壳），功能对齐主线但**不提供自动更新**。
+
+### Q5.5：M1/M2/M3 Mac 或 arm64 Linux 能跑吗？
+
+分平台——**macOS Apple Silicon**：可以，提供 arm64 安装包（壳原生）；但游戏侧必须用 **x86_64 架构的 Java 8**（经 Rosetta 2 运行），Java 自动探测的架构偏好已优先命中 x64 JDK，若机器上只有 arm64 Java，启动器会在启动前给出明确指路（安装 x64 JDK / `softwareupdate --install-rosetta`）而不是让游戏裸崩。**Windows arm64**：提供 arm64 安装包，游戏进程经系统自带的 x64 模拟运行（装 x64 Java 8 即可）。**Linux arm64/arm**：不分发也不支持——LWJGL 2 官方从未发布 arm64/armhf 原生库，且无系统级 x64 模拟，启动器会明确拒绝并说明原因（Linux 走 x86_64 包）。社区 arm64 LWJGL2 重编译属 Phase 6 愿望池。
 
 ### Q6：存档和配置放在哪？能把整个启动器带走吗？
 
