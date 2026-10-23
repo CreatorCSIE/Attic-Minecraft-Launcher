@@ -116,6 +116,18 @@ a {
   background: var(--scroll-thumb-hover);
 }
 
+/* 滚动条 reflow 防护（2026-10-23 CDP 真窗逐帧取证）：切到模组页时仓库数据到达 →
+   .detail 溢出从零变正 → 10px 经典滚动条出现 → 右列 clientWidth 440→430，
+   整列内容被压缩重排 = 「意外出现滚动条 + 组件位置更新」闪。
+   stable 常留槽位，滚动条出现/消失零 reflow。作用面 = 页面双栏约定命名
+   （.menu 卡片 / .detail 右列，五页共用；非滚动容器元素 overflow:visible 天然豁免）。
+   Chromium 94+（WebView2 110 / Electron 108 ✓）；旧 WebKit 忽略该属性——
+   macOS 为 overlay 滚动条，本就不占位、无 reflow。 */
+.menu,
+.detail {
+  scrollbar-gutter: stable;
+}
+
 /* —— 动效尊重系统偏好 —— */
 @media (prefers-reduced-motion: reduce) {
   *,

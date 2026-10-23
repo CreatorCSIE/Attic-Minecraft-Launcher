@@ -11,7 +11,8 @@ const { bridge, hasBridge } = useBridge();
 </script>
 
 <template>
-  <header class="titlebar">
+  <!-- data-tauri-drag-region = Tauri 壳拖拽通道（-webkit-app-region 仅 Electron 认，双壳并用无副作用） -->
+  <header class="titlebar" data-tauri-drag-region>
     <div class="brand">
       <span class="mark" aria-hidden="true"></span>
       <span class="name">{{ t('app.title') }}</span>

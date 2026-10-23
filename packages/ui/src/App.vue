@@ -299,7 +299,13 @@ onMounted(() => {
       <main class="body">
         <!-- 页面切换浮现动画（BlockHelm PageTransitionService 实测配方，用户指定）：
              240ms ease-out，淡入 + Y 轴 22px 位移，方向随导航序（前进自下、后退自上）；
-             key=view 保证每次切换都重新触发入场过渡。 -->
+             key=view 保证每次切换都重新触发入场过渡。
+             切页闪两段史（2026-10-23 逐帧取证）：①默认并发下新旧两页在流中共存
+             ~2 帧，双 flex:1 各被压半高 → 滚动条闪现+组件位移（浏览器 rAF 取证）；
+             ②改 mode="out-in" 后旧页先撤、新页再挂 → 中间 ~2-4 帧全空白，整卡
+             「消失再淡入」又是一种闪（CDP 截屏流取证，f02-f04 空白帧）。
+             终态方案 = 并发挂载 + 旧页 leave 期间脱离文档流（.page-leave-active
+             绝对定位，见样式注）：无挤压、无空窗，新页与旧页同帧交接。 -->
         <Transition name="page">
           <div v-if="view === 'launch'" key="launch" class="launch-stage" :style="{ '--page-dy': pageDy }">
             <AccountHero class="stage-hero" @open-accounts="view = 'accounts'" />
@@ -451,6 +457,7 @@ onMounted(() => {
    视口 scrollable overflow——切换瞬间闪出滚动条（浏览器实测：html 溢出 32px 随动衰减）。
    位移是装饰性溢出，理应 clip 在主区内（BlockHelm WPF 容器同为 ClipToBounds）。 */
 .body {
+  position: relative; /* 旧页 leave 脱离流后的包含块（.page-leave-active） */
   flex: 1;
   min-width: 0;
   min-height: 0;
@@ -458,9 +465,18 @@ onMounted(() => {
   flex-direction: column;
   overflow: hidden;
 }
-/* —— 页面切换浮现（BlockHelm PageTransitionService 等效，用户指定）：仅入场过渡——
-   旧页即刻替换，新页淡入 + translateY(±22px→0)，240ms（--dur-page）ease-out；
-   位移方向由 --page-dy 注入（前进 +22 自下、后退 -22 自上）。只动 transform/opacity。 —— */
+/* —— 页面切换浮现（BlockHelm PageTransitionService 实测配方，用户指定）：仅入场过渡——
+   新页淡入 + translateY(±22px→0)，240ms（--dur-page）ease-out；位移方向由 --page-dy
+   注入（前进 +22 自下、后退 -22 自上）。只动 transform/opacity。
+   "切换闪一下"真因（2026-10-23 浏览器 rAF 逐帧取证）：Transition 默认并发模式下
+   新旧两页在流中共存 ~2 帧（leave 无动画也要等 nextFrame），双 flex:1 各被压成
+   半高 → 新页内部滚动容器瞬时溢出闪出滚动条、组件位移，旧页撤除后回弹——
+   三壳（Tauri/Electron/浏览器）皆可复现。修复 = <Transition mode="out-in">
+   （见模板注），与合成层/窗底色无关（早先"WebView2 白闪"诊断为误判，已撤销）。
+   二段修复（用户复报卡片右缘仍闪，CDP 真窗取证）：模组页数据到达时 .detail
+   溢出从零变正，10px 经典滚动条出现致整列 440→430 reflow——修复见 base.css
+   滚动条节的 .menu/.detail scrollbar-gutter: stable（槽位常留、零 reflow）。
+   过渡元素垫不透明底色（.launch-stage/.content）保留：淡入期间背景不穿透，无害。—— */
 .page-enter-active {
   transition:
     opacity var(--dur-page) var(--ease-out),
@@ -469,6 +485,17 @@ onMounted(() => {
 .page-enter-from {
   opacity: 0;
   transform: translateY(var(--page-dy, 22px));
+}
+/* 旧页交接帧：leave 无动画（配方「即刻替换」），但 DOM 移除要等 ~2 帧 nextFrame。
+   并发改 key 时若旧页仍在流中 = 双 flex:1 挤压闪；out-in 先撤后挂 = 空白窗闪
+   （两段史见模板注）。绝对定位让旧页原地脱流叠在包含块 .body 上：尺寸不变、
+   不占流，新页同帧挂载淡入，交接零空窗。
+   选择器须带 .body 前缀提权（CDP 截屏流取证：裸 .page-leave-active 与
+   .launch-stage 同特异度且在前，被其 position: relative 覆盖 → 离开启动页时
+   旧页未脱流、dock 被压到半高中部 = 用户所见「整个 card 在闪」）。 */
+.body .page-leave-active {
+  position: absolute;
+  inset: 0;
 }
 @media (prefers-reduced-motion: reduce) {
   .page-enter-active {
@@ -484,6 +511,8 @@ onMounted(() => {
   width: 100%;
   display: flex;
   flex-direction: column;
+  /* 淡入期间背景不穿透（见 .page-enter-active 注） */
+  background: var(--surface-1);
 }
 /* —— 启动舞台：hero 左上角标式浮层，启动面板铺满，版本列表面板锚定左下 —— */
 .launch-stage {
@@ -493,6 +522,8 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   padding: var(--space-5);
+  /* 同 .content：淡入期间背景不穿透 */
+  background: var(--surface-1);
 }
 .stage-hero {
   position: absolute;
