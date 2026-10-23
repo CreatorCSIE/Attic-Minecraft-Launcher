@@ -1,0 +1,142 @@
+/**
+ * BC 基础库集（depends）—— v1 checkDepends/downloadDepends 移植（Launcher.java L862-951）。
+ *
+ * 为什么是 v1 通道而非只修 Mojang 回填（用户拍板，2026-10-22 实机事故）：
+ * BC 的 libs-<os>.zip 里是 **patched** 的 lwjgl.jar / lwjgl_util.jar / jinput.jar
+ * （鼠标抓取、AMD 云等修复编进 jar 本体），Mojang 重发布只有 2.9.0 原版。
+ * 事故形状：库池缺 org.lwjgl.LWJGLException 类时，legacyfix Agent.premain 的
+ * CtTransformer 重定义循环只 catch ClassNotFoundException（Agent.java L80），
+ * NoClassDefFoundError 属 LinkageError 直接穿透 → `processing of -javaagent failed` 秒崩。
+ *
+ * 两通道并存：depends 铺 BC 基础库集（全版本恒定），Mojang 回填仍是
+ * `.info` 缺 libraries 版本的增量通道（depends 先行、libraries 后补，清池不误伤）。
+ *
+ * 对 v1 的语义强化（原缺陷，逐条）：
+ * - v1 先写 settings 版本号再解压 zip（L933-949）——中途失败留下"半套库集 + 假指纹"，
+ *   此后 checkDepends 恒过；改为解包成功后才写版本号，失败下次重拉自愈。
+ * - v1 空判定 `listFiles().length <= 1`（L880-883，.DS_Store 类残留即可误判）；
+ *   改为 bin 至少一个 .jar + natives 至少一个文件。
+ * - v1 checkDepends 网络异常 assume-all-good（L899-903）：保留（本地有库集不拦启动）；
+ *   本地为空且拿不到版本号 → 失败（v1 弹框拒绝启动语义）。forceUpdate 时版本号拿不到
+ *   无从核对目标，直接失败而非静默跳过。
+ */
+
+import fs from 'node:fs';
+import path from 'node:path';
+
+import type { DependsOs, Endpoints } from './endpoints';
+import { binDir, launcherDir, nativesDir } from './storage';
+import { extractZipTo } from './zip';
+
+/** depends-version.txt 的两枚版本号（值是不透明字符串，v1 只做等值比较）。 */
+export interface DependsVersion {
+  libs: string;
+  natives: string;
+}
+
+/** Node platform → v1 的 depends 平台轴。 */
+export function dependsOsFor(platform: NodeJS.Platform): DependsOs {
+  return platform === 'win32' ? 'windows' : platform === 'darwin' ? 'osx' : 'linux';
+}
+
+/** 解析 `libs-version:N` / `natives-version:M` 两行（Java properties 形状，取首个冒号）。 */
+export function parseDependsVersion(text: string): DependsVersion {
+  let libs: string | undefined;
+  let natives: string | undefined;
+  for (const line of text.split(/\r?\n/)) {
+    const i = line.indexOf(':');
+    if (i < 0) continue;
+    const key = line.slice(0, i).trim();
+    const value = line.slice(i + 1).trim();
+    if (key === 'libs-version') libs = value;
+    else if (key === 'natives-version') natives = value;
+  }
+  if (!libs || !natives) throw new Error(`depends-version.txt 形状异常：${JSON.stringify(text.slice(0, 120))}`);
+  return { libs, natives };
+}
+
+/** 本地基础库集在位：bin 至少一个 jar + bin/natives 至少一个文件。 */
+export function hasLocalDepends(root: string): boolean {
+  let jars = 0;
+  try {
+    jars = fs.readdirSync(binDir(root)).filter((f) => f.toLowerCase().endsWith('.jar')).length;
+  } catch {
+    return false;
+  }
+  if (jars === 0) return false;
+  try {
+    return fs.readdirSync(nativesDir(root)).length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 现物核对：本地库集非空，且（remote 缺省 = 不比版本号，v1 assume-all-good 语义；
+ * 否则 settings 记录的两枚版本号与 remote 等值）。
+ */
+export function isDependsCurrent(
+  root: string,
+  settings: Record<string, string>,
+  remote: DependsVersion | null,
+): boolean {
+  if (!hasLocalDepends(root)) return false;
+  if (!remote) return true;
+  return settings['libs-version'] === remote.libs && settings['natives-version'] === remote.natives;
+}
+
+/** IO 注入面（测试可全 mock；生产由 AtticRuntime 桥到 client/fetch/settings）。 */
+export interface DependsIO {
+  root: string;
+  os: DependsOs;
+  /** 当前 launcher.settings 扁平视图（只读两枚版本号键）。 */
+  settings: Record<string, string>;
+  fetchText(url: string): Promise<string>;
+  /** 二进制下载落 destFile（进度事件走调用方既有 download 通道）。 */
+  download(url: string, destFile: string, id: string): Promise<void>;
+  /** 版本号键合并回写（实现方负责保留未知键）。 */
+  saveVersionKeys(keys: Record<string, string>): void;
+}
+
+/**
+ * 启动链维护点：核对/拉取 libs+natives zip → 清空重解 bin/ → 成功后登记版本号。
+ * 幂等：版本一致直接返回；失败抛错由启动链统一呈现。
+ */
+export async function ensureDepends(
+  io: DependsIO,
+  endpoints: Endpoints,
+  opts: { force?: boolean } = {},
+): Promise<void> {
+  let remote: DependsVersion | null = null;
+  try {
+    remote = parseDependsVersion(await io.fetchText(endpoints.dependsVersion));
+  } catch {
+    remote = null;
+  }
+  if (!opts.force && isDependsCurrent(io.root, io.settings, remote)) return;
+  if (!remote) {
+    // 拿不到版本号：本地已有库集且非强更 → v1 assume-all-good，不拦启动。
+    if (!opts.force && isDependsCurrent(io.root, io.settings, null)) return;
+    throw new Error('无法获取 depends-version.txt，且本地 BC 基础库集（libs/natives）缺失或需强制更新——无法完成');
+  }
+
+  // v1 L922-930 同位：zip 暂存 launcher/（同名覆盖，解包后不清理，与 v1 一致）。
+  const libsZip = path.join(launcherDir(io.root), 'libs.zip');
+  const nativesZip = path.join(launcherDir(io.root), 'natives.zip');
+  await io.download(endpoints.libsZip(io.os), libsZip, 'libs.zip');
+  await io.download(endpoints.nativesZip(io.os), nativesZip, 'natives.zip');
+
+  // v1 L943-949：清空 bin（含 natives 子目录）再解包；版本号写在解包成功之后（强化 #1）。
+  removeContents(binDir(io.root));
+  fs.mkdirSync(nativesDir(io.root), { recursive: true });
+  extractZipTo(nativesZip, nativesDir(io.root));
+  extractZipTo(libsZip, binDir(io.root));
+  io.saveVersionKeys({ 'libs-version': remote.libs, 'natives-version': remote.natives });
+}
+
+function removeContents(dir: string): void {
+  if (!fs.existsSync(dir)) return;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    fs.rmSync(path.join(dir, entry.name), { recursive: true, force: true });
+  }
+}

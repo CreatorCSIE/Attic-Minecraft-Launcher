@@ -37,6 +37,7 @@ import { applySettingsToProps, estimateMaxMemoryMb, instanceViewFromConfig, sett
 import { BetacraftClient, type FetchImpl } from './betacraft';
 import { endpointsFromOverrides, resolveEndpoints, type Endpoints } from './endpoints';
 import { infoToVersionJson, LAUNCH_METHOD_MAIN_CLASS } from './info';
+import { dependsOsFor, ensureDepends, type DependsIO } from './depends';
 import { detectJavaRuntime } from './java/detect';
 import { APPLET_LAUNCHER_CLASS, assembleLaunchConfig, type LaunchContext } from './launch';
 import {
@@ -542,6 +543,8 @@ export class AtticRuntime {
         };
       }
       json = this.resolveIndevMainClass(json);
+      // BC 基础库集先行（清池重解在 libraries 增量下载之前，避免误删刚下的库；v1 移植见 depends.ts）。
+      await this.updateDepends(settings, forceUpdate);
       await this.client.downloadLibrariesToBin(json, this.root, { force: forceUpdate });
       this.extractNatives();
       // 资产补全（v2 语义）：索引 + objects 全体由启动器预置——legacyfix 只自动补 custom 段，
@@ -1101,6 +1104,23 @@ export class AtticRuntime {
       versionOrder: this.cachedVersionOrder(),
       levelServer: settings['levelServer'],
     };
+  }
+
+  /** BC 基础库集（libs/natives zip）核对与重拉——v1 downloadDepends 移植，语义见 depends.ts。 */
+  private async updateDepends(settings: Record<string, string>, force: boolean): Promise<void> {
+    const io: DependsIO = {
+      root: this.root,
+      os: dependsOsFor(this.platform),
+      settings,
+      fetchText: async (url: string) => {
+        const res = await this.fetchImpl(url);
+        if (!res.ok) throw new Error(`HTTP ${res.status} ${url}`);
+        return res.text();
+      },
+      download: (url: string, destFile: string, id: string) => this.client.download(url, destFile, 'library', id),
+      saveVersionKeys: (keys: Record<string, string>) => saveSettings(this.root, { ...loadSettings(this.root), ...keys }),
+    };
+    await ensureDepends(io, this.endpoints, { force });
   }
 
   /** bin/ 库池里的 `*-natives-<os>.jar` 解到 bin/natives（LWJGL2/JInput 原生库落盘）。 */

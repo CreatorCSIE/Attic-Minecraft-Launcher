@@ -61,6 +61,8 @@
 
 Applet 容器（主类 `AppletLauncher`）的 `gameArgs` 末尾追加 `--width <w> --height <h>`（实例值，v1 缺省 854×480；`AppletFrame.java` 读取，缺省兜底 640×480）。非 Applet 版本窗口由 LWJGL/DeAwt 自管，不注入。
 
+`bin/` 库池双通道（v1 移植，`depends.ts`）：**BC 基础库集**（depends）先行——`depends-version.txt`（`libs-version`/`natives-version` 两行）与 `launcher.settings` 记录比对，不一致或缺物则重拉 `libs-<os>.zip`（BC patched `lwjgl.jar`/`lwjgl_util.jar`/`jinput.jar`）+ `natives-<os>.zip`（dll 集）→ 清空 `bin/` 重解 `bin/` 与 `bin/natives/`，版本号在解包成功后才写（v1 先写后解的假指纹缺陷已强化）；网络异常且本地库集在位 = assume-all-good 不拦启动（v1 语义），本地为空则启动失败。`.info` 缺 `libraries` 时的 **Mojang 重发布回填**为增量通道，跑在 depends 之后（清池不误伤，jinput 1.2.0 等按版本补齐）。动因（2026-10-22 实机）：库池缺 `org.lwjgl.LWJGLException` 类时 legacyfix `Agent.premain` 的重定义循环只 catch `ClassNotFoundException`，`NoClassDefFoundError` 穿透为 `processing of -javaagent failed` 秒崩；BC patched lwjgl 同时是修复红利（鼠标抓取等编进 jar）。
+
 legacyfix jar 原位补丁（窗口偏右下最小修复，不属启动命令行）：`ensureLegacyfix` 落位后对 `<root>/legacyfix/*.jar` 幂等应用 DeAwtPatch 常量池补丁——把 DeAwtPatch.class 折叠 javassist 源串（Display.setParent 替换体）中的 `setDisplayMode(new DisplayMode(w, h));` 改写为追加 `Display.setLocation(frame.getX(), frame.getY());`（本机 LWJGL 2.9.0 jar javap 实锤：`setLocation` 无条件写静态 x/y，`getWindowX/Y` 仅在 x==−1 才走 `(initial_mode − current_mode)/2` 混源居中；DeAWT 替换体从不设 parent Canvas，故建窗时坐标取我们写入的值）。安全门：DeAwtPatch.class 明文 SHA256 必须在钉版表内、锚点全文唯一，否则原 jar 保留不动（applet 容器维持原偏移）；补丁失败永不阻断启动，仅 `[attic-runtime]` 诊断。jar 必须无签名（实测 legacyfix Release 构件无 .SF 条目）。
 
 `CrashCategory`（v0 分类器枚举）：`none/java-missing/out-of-memory/gl-init/lwjgl-native/unsatisfied-link/unknown`。

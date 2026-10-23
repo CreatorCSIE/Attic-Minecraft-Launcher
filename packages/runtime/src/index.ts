@@ -56,6 +56,15 @@ export {
   type InstanceConfig,
 } from './storage';
 export { infoToVersionJson, LAUNCH_METHOD_MAIN_CLASS } from './info';
+export {
+  dependsOsFor,
+  parseDependsVersion,
+  hasLocalDepends,
+  isDependsCurrent,
+  ensureDepends,
+  type DependsVersion,
+  type DependsIO,
+} from './depends';
 export { DEFAULT_AGENT_MOUNTS } from './quirks';
 export {
   BetacraftClient,
