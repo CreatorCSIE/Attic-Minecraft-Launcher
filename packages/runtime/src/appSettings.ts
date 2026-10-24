@@ -56,6 +56,8 @@ export function settingsFromProps(props: Record<string, string>): AppSettings {
   const consoleOnLaunch = boolFromProps(props['consoleOnLaunch']);
   if (consoleOnLaunch !== undefined) out.consoleOnLaunch = consoleOnLaunch;
   if (props['rootOverride']) out.rootOverride = props['rootOverride'];
+  const wizardDone = boolFromProps(props['wizardDone']);
+  if (wizardDone !== undefined) out.wizardDone = wizardDone;
   if (props['levelServer']) out.levelServer = props['levelServer'];
 
   const endpoints: EndpointOverrides = {};
@@ -100,6 +102,7 @@ export function applySettingsToProps(
   put('diagnosticLog', settings.diagnosticLog === undefined ? undefined : String(settings.diagnosticLog));
   put('consoleOnLaunch', settings.consoleOnLaunch === undefined ? undefined : String(settings.consoleOnLaunch));
   put('rootOverride', settings.rootOverride);
+  put('wizardDone', settings.wizardDone === undefined ? undefined : String(settings.wizardDone));
   put('levelServer', settings.levelServer);
 
   for (const key of ENDPOINT_KEYS) {

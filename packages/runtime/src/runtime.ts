@@ -61,6 +61,8 @@ import {
   ensureLayout,
   infoFile,
   jsonsDir,
+  hasAnyEntries,
+  isPathWithin,
   listInstances,
   loadAccounts,
   loadInstance,
@@ -98,6 +100,11 @@ export interface AtticRuntimeOptions {
   platform?: NodeJS.Platform;
   /** 启动器版本（宿主注入：electron = app.getVersion()；SYS_INFO 展示用）。 */
   version?: string;
+  /**
+   * 宿主安装目录（宿主注入 dirname(process.execPath)；Tauri 产线 = 与 exe 同目录的 node.exe，
+   * 天然成立）。setSettings 护栏消费：rootOverride 落在安装目录之内 = 卸载器 {app} 整删射程 → 拒绝。
+   */
+  installDir?: string;
 }
 
 function messageOf(error: unknown): string {
@@ -156,6 +163,10 @@ function assertSafeVersionId(id: string): void {
 
 export class AtticRuntime {
   readonly root: string;
+  /** 平台默认根（不受 rootOverride/portable 影响——rootOverride 指针位与向导三重门判定基线）。 */
+  readonly defaultRoot: string;
+  /** 宿主安装目录（护栏参照；缺省 = 无护栏，测试/程序化场景）。 */
+  readonly installDir: string | undefined;
   readonly endpoints: Endpoints;
   /** 启动器版本（宿主注入，SYS_INFO/关于页消费）。 */
   readonly version: string;
@@ -177,6 +188,9 @@ export class AtticRuntime {
       portable: options.portable,
       rootDirOverride: options.rootDir,
     });
+    // 平台默认根（rootOverride 指针落位/向导三重门判定基线）：同参数但不带 override/portable。
+    this.defaultRoot = resolveDataRoot({ platform: options.platform, env: options.env, execPath: options.execPath });
+    this.installDir = options.installDir;
     ensureLayout(this.root);
     this.version = options.version ?? '0.0.0';
     this.platform = options.platform ?? process.platform;
@@ -883,12 +897,35 @@ export class AtticRuntime {
     return settingsFromProps(loadSettings(this.root));
   }
 
+  /**
+   * 合并落盘（未知键保留），返回保存后的视图。端点改动下次启动应用生效。
+   * 落盘前护栏：rootOverride 若落在宿主安装目录之内 = 卸载器 `{app}` 整删射程
+   * （Inno `[UninstallDelete]` 无排除机制），数据必丢且不可逆 → 显式拒绝（微文案：实际动作 + 出路）。
+   * 向导/设置页/手改 settings 三入口共用本道闸；宿主侧 bootstrap peek 另有同款兜底。
+   */
+  setSettings(settings: AppSettings): AppSettings {
+    if (
+      settings.rootOverride &&
+      this.installDir &&
+      isPathWithin(this.installDir, settings.rootOverride, this.platform)
+    ) {
+      throw new Error(
+        '游戏数据不能放进安装目录——卸载时会连同整个安装目录删除，存档不可恢复。' +
+          '请选安装目录之外的位置；想要「一切随一个文件夹」请用便携版构件（amcl-*-portable.zip）。',
+      );
+    }
+    saveSettings(this.root, applySettingsToProps(loadSettings(this.root), settings));
+    return this.getSettings();
+  }
+
   /** 宿主环境快照（设置页通用/内存/关于栏共用；内存取不到按 0 返回，UI 端降级）。 */
   getSystemInfo(): SystemInfo {
     return {
       launcherVersion: this.version,
       platform: this.platform,
       dataRoot: this.root,
+      defaultRoot: this.defaultRoot,
+      defaultRootPopulated: hasAnyEntries(this.defaultRoot),
       logsDir: path.join(launcherDir(this.root), 'logs'),
       totalMemMb: Math.round(os.totalmem() / 0x100000),
       freeMemMb: Math.round(os.freemem() / 0x100000),
@@ -915,12 +952,6 @@ export class AtticRuntime {
       }
     }
     return removed;
-  }
-
-  /** 合并落盘（未知键保留），返回保存后的视图。端点改动下次启动应用生效。 */
-  setSettings(settings: AppSettings): AppSettings {
-    saveSettings(this.root, applySettingsToProps(loadSettings(this.root), settings));
-    return this.getSettings();
   }
 
   listInstances(): InstanceView[] {

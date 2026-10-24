@@ -71,6 +71,12 @@ export interface AppSettings {
    */
   rootOverride?: string;
   /**
+   * 首启欢迎向导完成标记（完成与跳过皆写此键——"已见过向导"语义收敛于此，
+   * 与 rootOverride 指针职责分离，防「跳过不写指针 → 反复弹」）。向导三重门之三：
+   * 无此键 且 无 rootOverride 且 默认根无既有数据 → 弹。缺省 false（缺键）。
+   */
+  wizardDone?: boolean;
+  /**
    * LegacyFix 关卡存档模式（JVM 属性 `lf.proxy.levelServer` 直通）：
    * `local`=强制本地单人存档；URL=在线关卡代理；缺省=LegacyFix 一次性对话框。
    * 有值时对话框永不弹，且覆盖游戏目录里陈旧的 `legacyfix/level-server.txt`（属性优先于文件）。

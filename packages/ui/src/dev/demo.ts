@@ -117,6 +117,10 @@ export const demoSysInfo: SystemInfo = {
   launcherVersion: '0.0.0',
   platform: 'win32',
   dataRoot: 'C:\\Users\\Player\\AppData\\Roaming\\.attic',
+  defaultRoot: 'C:\\Users\\Player\\AppData\\Roaming\\.attic',
+  // 首启演练口径：默认根"无既有数据" → 三重门全过 → 欢迎向导在 demo 可弹（跳过/完成后
+  // setSettings 假成功，本会话不再弹；刷新页面重置 = demo 无持久化语义，非缺陷）
+  defaultRootPopulated: false,
   logsDir: 'C:\\Users\\Player\\AppData\\Roaming\\.attic\\launcher\\logs',
   totalMemMb: 16384,
   freeMemMb: 8192,

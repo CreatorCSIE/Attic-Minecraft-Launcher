@@ -31,6 +31,37 @@ function expandHome(p: string): string {
   return p;
 }
 
+/** 按目标平台语义取 path 实现（win32 钉死 win32，不随宿主分隔符漂移——resolveDataRoot 同款纪律）。 */
+function pathFor(platform: string): typeof path.win32 {
+  return platform === 'win32' ? path.win32 : path.posix;
+}
+
+/**
+ * child 是否位于 parent 目录之内（含相等的场景：child === parent 也算命中）。
+ * win32 大小写不敏感（盘符/段全小写后比较）；POSIX 原样。护栏与 peek 兜底共用。
+ */
+export function isPathWithin(parent: string, child: string, platform = process.platform): boolean {
+  const win = platform === 'win32';
+  const p = pathFor(platform);
+  let a = p.resolve(parent);
+  let b = p.resolve(child);
+  if (win) {
+    a = a.toLowerCase();
+    b = b.toLowerCase();
+  }
+  if (a === b) return true;
+  return b.startsWith(a + (win ? '\\' : '/'));
+}
+
+/** 默认根是否已有既有数据：目录存在且有任意条目（保守判定，读失败 = false 之外的值不给）。 */
+export function hasAnyEntries(dir: string): boolean {
+  try {
+    return fs.readdirSync(dir).length > 0;
+  } catch {
+    return false;
+  }
+}
+
 export function resolveDataRoot(options: ResolveDataRootOptions = {}): string {
   const platform = options.platform ?? process.platform;
   if (options.rootDirOverride) return path.resolve(expandHome(options.rootDirOverride));

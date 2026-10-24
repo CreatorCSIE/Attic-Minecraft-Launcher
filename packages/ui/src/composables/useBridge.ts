@@ -27,10 +27,16 @@ import type {
   SystemInfo,
   VersionJson,
 } from '@attic/core-spec';
-import { demoInstances, demoJavaReport, demoModCategories, demoSettings, demoSysInfo, demoVersions, isDemo } from '../dev/demo';
+import { demoInstances, demoJavaInstall, demoJavaReport, demoModCategories, demoSettings, demoSysInfo, demoVersions, isDemo } from '../dev/demo';
 import { buildTauriBridge } from '../bridge/tauri';
 
 const NO_BRIDGE = 'no-bridge';
+
+/** demo 假安装目录（Electron 安装版典型落位）：向导/设置页护栏演练口径用。 */
+const DEMO_INSTALL_DIR = 'C:\\Users\\Player\\AppData\\Local\\Programs\\Attic';
+
+/** demo pickDirectory 轮转值：第 2 次起命中安装目录 → 护栏拒绝错误行可在浏览器里排练。 */
+const DEMO_PICK_PATHS = ['D:\\Games\\AtticData', DEMO_INSTALL_DIR + '\\data'];
 
 function ok<T>(value: T): IpcResult<T> {
   return { ok: true, value };
@@ -113,8 +119,10 @@ export interface BridgeHandle {
   hasBridge: ComputedRef<boolean>;
 }
 
-/** 演示覆写：只改"读"侧数据源，写/动作/窗控沿用 mock（假数据不伪装成真宿主行为）。 */
+/** 演示覆写：只改"读"侧数据源与可演练的写侧护栏，其余动作/窗控沿用 mock（假数据不伪装成真宿主行为）。 */
 function demoBridge(): RendererBridge {
+  // pickDirectory 轮转计数（每次建桥一个闭包，页面刷新即重置 = demo 无持久化语义）
+  let pickCount = 0;
   return {
     ...mockBridge,
     listVersions: async () => ok(demoVersions),
@@ -126,6 +134,27 @@ function demoBridge(): RendererBridge {
     detectJava: async () => ok<JavaDetectionReport>(demoJavaReport),
     // 假宿主快照：让设置页通用/内存/关于栏在浏览器里排出真稿（动作类仍走 mock err）。
     getSystemInfo: async () => ok<SystemInfo>(demoSysInfo),
+    // 首启向导演练面：建号/目录选择器/Java 选择器给假值可走通三步。
+    addAccount: async (name: string) => ok<AccountView>({ id: `demo-${name.toLowerCase()}`, name, type: 'offline' }),
+    // demo 假安装目录：演练护栏口径——rootOverride 落进它内即拒绝（文案与 runtime 护栏一致；
+    // 前缀比对去掉尾部分隔符再拼 sep，兄弟前缀不误判 = isPathWithin 同纪律）。
+    setSettings: async (s: AppSettings) => {
+      if (s.rootOverride) {
+        const norm = (p: string) => p.replace(/[\\/]+$/, '').toLowerCase();
+        const parent = norm(DEMO_INSTALL_DIR);
+        const child = norm(s.rootOverride);
+        const hit = child === parent || child.startsWith(parent + '\\') || child.startsWith(parent + '/');
+        if (hit) {
+          return err<AppSettings>(
+            '游戏数据不能放进安装目录——卸载时会连同整个安装目录删除，存档不可恢复。' +
+              '请选安装目录之外的位置；想要「一切随一个文件夹」请用便携版构件（amcl-*-portable.zip）。',
+          );
+        }
+      }
+      return ok(s);
+    },
+    pickDirectory: async () => ok<string | null>(DEMO_PICK_PATHS[pickCount++ % DEMO_PICK_PATHS.length] ?? null),
+    pickJavaExecutable: async () => ok<string | null>(demoJavaInstall.executable),
     // Mods 页演示：假仓库「现拉现发」= 每次深拷贝返回（与真宿主语义一致——直接回原数组引用时，
     // installMod 的原地改写落在 raw 对象上、绕过 Vue reactive 代理，installed 徽标不刷新）。
     listMods: async () => ok<ModCategoryView[]>(structuredClone(demoModCategories)),

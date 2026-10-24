@@ -14,6 +14,8 @@ export {
 } from './appSettings';
 export {
   resolveDataRoot,
+  isPathWithin,
+  hasAnyEntries,
   ensureLayout,
   launcherDir,
   instancesDir,

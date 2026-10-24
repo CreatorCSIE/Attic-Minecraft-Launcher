@@ -103,6 +103,10 @@ export interface SystemInfo {
   platform: string;
   /** 生效中的数据根绝对路径（rootOverride 应用后的结果）。 */
   dataRoot: string;
+  /** 平台默认根绝对路径（rootOverride 指针的落位，与宿主 bootstrap peek 同语义；portable 下也是它——指针位不随模式变）。 */
+  defaultRoot: string;
+  /** 默认根是否已有既有数据（目录存在且有任意条目；首启向导三重门之二：true = 老用户，不弹，保守判定）。 */
+  defaultRootPopulated: boolean;
   /** 启动器日志目录（`<dataRoot>/launcher/logs`）。 */
   logsDir: string;
   /** 系统总物理内存 MB（取不到 = 0，UI 端滑杆回退保守上限）。 */

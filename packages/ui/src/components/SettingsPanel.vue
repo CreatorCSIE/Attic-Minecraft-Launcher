@@ -25,7 +25,7 @@ import ConfirmDialog from './ConfirmDialog.vue';
 
 const { t, locale, setLocale } = useI18n();
 const { hasBridge, bridge } = useBridge();
-const { settings, patch } = useSettings();
+const { settings, patch, patchDetailed } = useSettings();
 const { info } = useSysInfo();
 const { activeSection } = useSettingsNav();
 
@@ -66,10 +66,16 @@ async function openDir(target: 'data-root' | 'logs-dir'): Promise<void> {
   await bridge.openSpecialDir(target);
 }
 
+/** 安装目录护栏拒绝的可见错误行（changeRoot 消费）。 */
+const rootErr = ref('');
+
 async function changeRoot(): Promise<void> {
   const res = await bridge.pickDirectory();
   if (!res.ok || !res.value) return;
-  await patch({ rootOverride: res.value });
+  rootErr.value = '';
+  // patchDetailed：护栏拒绝原文必须可见（"实际动作+出路"微文案，静默失败 = 事故温床）
+  const r = await patchDetailed({ rootOverride: res.value });
+  if (!r.ok) rootErr.value = r.error ?? 'save failed';
 }
 
 const clearOpen = ref(false);
@@ -228,6 +234,7 @@ function feedback(url: string): void {
               <button class="mini" :disabled="!hasBridge" @click="changeRoot">{{ t('settings.general.change') }}</button>
             </div>
             <p v-if="pendingRoot" class="warn">{{ t('settings.general.rootPending', { path: pendingRoot }) }}</p>
+            <p v-if="rootErr" class="warn root-err" role="alert">{{ rootErr }}</p>
           </div>
 
           <div class="card">
@@ -571,6 +578,10 @@ function feedback(url: string): void {
   margin: 0;
   font-size: var(--fs-xs);
   color: var(--warn);
+}
+/* 护栏拒绝行：danger 语义高于 warn（不可逆事故被拦下的告知） */
+.root-err {
+  color: var(--danger);
 }
 .ok-line {
   margin: 0;

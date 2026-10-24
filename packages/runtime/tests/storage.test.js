@@ -26,6 +26,10 @@ const {
   instancesDir,
   versionListCacheFile,
   instanceViewFromConfig,
+  isPathWithin,
+  hasAnyEntries,
+  settingsFromProps,
+  loadSettings,
   AtticRuntime,
 } = require('../dist/index.js');
 const { buildJarBuffer } = require('./zipFixture.js');
@@ -432,4 +436,73 @@ test('listVersions SWR（首帧空窗修复）：缓存在即返回不等网络�
     cache.versions.some((v) => v.id === 'b2.0'),
     '新清单项在下一次拉取生效（最终一致）',
   );
+});
+
+// ---------- 首启欢迎向导三重门（数据面契约测试） ----------
+
+test('isPathWithin：win32 大小写不敏感、包含自身、兄弟前缀不误判；POSIX 原样', () => {
+  // 安装目录护栏的底层谓词：卸载器 {app} 整删射程判定共用。
+  assert.equal(isPathWithin('C:\\Programs\\Attic', 'C:\\Programs\\Attic\\.attic', 'win32'), true);
+  assert.equal(isPathWithin('C:\\Programs\\Attic', 'c:\\programs\\attic\\sub\\data', 'win32'), true, 'win32 大小写不敏感');
+  assert.equal(isPathWithin('C:\\Programs\\Attic', 'C:\\Programs\\Attic', 'win32'), true, '相等算命中');
+  assert.equal(isPathWithin('C:\\Programs\\Attic', 'C:\\Programs\\AtticX', 'win32'), false, '兄弟目录前缀不误判');
+  assert.equal(isPathWithin('C:\\Programs\\Attic', 'C:\\Users\\me\\.attic', 'win32'), false);
+  assert.equal(isPathWithin('/opt/attic', '/opt/attic/.attic', 'linux'), true);
+  assert.equal(isPathWithin('/opt/attic', '/opt/atticX', 'linux'), false);
+  assert.equal(isPathWithin('/opt/Attic', '/opt/attic/data', 'linux'), false, 'POSIX 大小写敏感');
+});
+
+test('hasAnyEntries：缺目录 = false（首启）；空目录 = false；有任意条目 = true（老用户保守判）', (t) => {
+  const base = tempRoot(t);
+  assert.equal(hasAnyEntries(path.join(base, 'nope')), false);
+  fs.mkdirSync(path.join(base, 'empty'), { recursive: true });
+  assert.equal(hasAnyEntries(path.join(base, 'empty')), false);
+  fs.writeFileSync(path.join(base, 'empty', 'launcher.settings'), 'x=1');
+  assert.equal(hasAnyEntries(path.join(base, 'empty')), true);
+});
+
+test('setSettings 护栏：rootOverride 落在安装目录内 = 显式报错（文案含实际动作+出路）；目录外正常写入', (t) => {
+  const base = tempRoot(t);
+  const installDir = path.join(base, 'Programs', 'Attic Launcher');
+  fs.mkdirSync(installDir, { recursive: true });
+  const rt = new AtticRuntime({
+    rootDir: path.join(base, 'data'),
+    platform: process.platform,
+    fetchImpl: () => Promise.reject(new Error('offline')),
+    installDir,
+  });
+  // 命中射程：拒绝，且文案带"卸载"动作与 portable 出路（微文案戒律的机器闸）
+  assert.throws(
+    () => rt.setSettings({ rootOverride: path.join(installDir, '.attic') }),
+    (e) => e.message.includes('卸载') && e.message.includes('portable'),
+  );
+  // 相等场景同样拒绝
+  assert.throws(() => rt.setSettings({ rootOverride: installDir }), /卸载/);
+  // 射程外正常：写入并回读一致
+  const outside = path.join(base, 'games', 'attic-data');
+  const saved = rt.setSettings({ rootOverride: outside });
+  assert.equal(saved.rootOverride, outside);
+  assert.equal(settingsFromProps(loadSettings(rt.root)).rootOverride, outside);
+  // 不传 installDir = 无护栏（测试/程序化场景不设闸）
+  const free = new AtticRuntime({ rootDir: path.join(base, 'free'), platform: process.platform, fetchImpl: () => Promise.reject(new Error('offline')) });
+  assert.equal(free.setSettings({ rootOverride: installDir }).rootOverride, installDir);
+});
+
+test('getSystemInfo：defaultRoot 恒为平台默认根（不随 rootOverride/portable 漂移），populated 如实', (t) => {
+  const base = tempRoot(t);
+  const override = path.join(base, 'elsewhere');
+  const rt = new AtticRuntime({
+    rootDir: override,
+    platform: process.platform,
+    env: { APPDATA: path.join(base, 'appdata'), HOME: path.join(base, 'home') },
+    fetchImpl: () => Promise.reject(new Error('offline')),
+  });
+  const info = rt.getSystemInfo();
+  assert.equal(info.dataRoot, path.resolve(override));
+  // 默认根 = 平台默认位（win32=APPDATA/.attic，其余 HOME/.attic 或 macOS Application Support）
+  assert.notEqual(info.defaultRoot, info.dataRoot, '指针生效不得改写默认根参照位');
+  assert.equal(info.defaultRootPopulated, false, '默认根未建 = 未初始化（三重门之二成立）');
+  fs.mkdirSync(info.defaultRoot, { recursive: true });
+  fs.writeFileSync(path.join(info.defaultRoot, 'x.txt'), 'seed');
+  assert.equal(rt.getSystemInfo().defaultRootPopulated, true, '既有数据 = 老用户，保守不弹');
 });

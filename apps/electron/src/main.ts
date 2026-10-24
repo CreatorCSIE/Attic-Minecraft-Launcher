@@ -18,23 +18,34 @@ import {
   type SpecialDir,
   type WindowAction,
 } from '@attic/core-spec';
-import { AtticRuntime, launcherDir, loadSettings, resolveDataRoot } from '@attic/runtime';
+import { AtticRuntime, isPathWithin, launcherDir, loadSettings, resolveDataRoot } from '@attic/runtime';
+
+/** 宿主安装目录（卸载器 {app} 射程 = 数据根禁入区）：产线 = exe 同目录。 */
+const INSTALL_DIR = path.dirname(process.execPath);
 
 /**
  * 数据根覆盖引导：设置页「更换数据根」写的是平台默认根 launcher.settings 的 rootOverride
  * （root 属构造级配置，运行期不换根）——启动时从默认根 peek 一次，指过去即完成迁移式切换。
  * portable/env 覆盖在 resolveDataRoot 内部优先于此（本函数只读默认根的键，不与之争）。
+ * 兜底护栏（与 runtime.setSettings 道闸同款）：手改 settings 把根指进安装目录 = 卸载清存档
+ * 的不可逆事故 → 忽略该指针回落默认根（setSettings 入口拦新写入，本处拦存量手改）。
  */
 function bootstrapRootDir(): string | undefined {
   try {
-    return loadSettings(resolveDataRoot())['rootOverride'] || undefined;
+    const override = loadSettings(resolveDataRoot())['rootOverride'];
+    if (!override) return undefined;
+    if (isPathWithin(INSTALL_DIR, override)) {
+      console.warn('[attic] rootOverride 位于安装目录内，卸载会删除数据——本次已忽略该指针，回落默认根');
+      return undefined;
+    }
+    return override;
   } catch {
     return undefined; // 首启无 settings = 走平台默认根
   }
 }
 
 /** TS 启动器核心门面（Phase 2）：主进程唯一实例。 */
-const runtime = new AtticRuntime({ rootDir: bootstrapRootDir(), version: app.getVersion() });
+const runtime = new AtticRuntime({ rootDir: bootstrapRootDir(), version: app.getVersion(), installDir: INSTALL_DIR });
 
 /** 无边距主窗引用（WINDOW_CONTROL 通道操作目标）。 */
 let mainWindow: BrowserWindow | null = null;

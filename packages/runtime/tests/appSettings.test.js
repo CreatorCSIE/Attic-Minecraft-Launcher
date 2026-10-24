@@ -58,6 +58,15 @@ test('memoryMode 只认 auto/manual；其他值缺省省略', () => {
   assert.equal(settingsFromProps({ memoryMode: 'whatever' }).memoryMode, undefined);
 });
 
+test('wizardDone 回环（首启向导完成标记）：true/false 显式保留、缺键 = undefined、undefined 清键', () => {
+  assert.equal(settingsFromProps({}).wizardDone, undefined, '缺键 = 从未见过向导');
+  assert.equal(settingsFromProps({ wizardDone: 'true' }).wizardDone, true);
+  assert.equal(settingsFromProps({ wizardDone: 'false' }).wizardDone, false);
+  assert.deepEqual(applySettingsToProps({}, { wizardDone: true }), { wizardDone: 'true' });
+  assert.equal(settingsFromProps(applySettingsToProps({}, { wizardDone: true })).wizardDone, true);
+  assert.equal('wizardDone' in applySettingsToProps({ wizardDone: 'true' }, { wizardDone: undefined }), false);
+});
+
 test('estimateMaxMemoryMb：40% 取 128 步长夹 [512,2048]，无宿主数据回落 1024', () => {
   assert.equal(estimateMaxMemoryMb(16384), 2048);
   assert.equal(estimateMaxMemoryMb(4096), 1664);

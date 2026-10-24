@@ -21,15 +21,28 @@ import {
 } from '@attic/core-spec';
 import {
   AtticRuntime,
+  isPathWithin,
   launcherDir,
   loadSettings,
   resolveDataRoot,
 } from '@attic/runtime';
 
-/** 数据根覆盖引导：与 Electron 壳同款（从默认根 peek rootOverride）。 */
+/**
+ * 宿主安装目录：产线布局 node.exe 与主 exe 同目录（stage 随装），dirname(execPath) 天然 = 安装目录；
+ * 开发态 = 系统 node 目录，护栏参照虽变但无害（无人把数据根指进 node 安装位）。
+ */
+const INSTALL_DIR = path.dirname(process.execPath);
+
+/** 数据根覆盖引导：与 Electron 壳同款（从默认根 peek rootOverride + 安装目录兜底护栏，手改 settings 拦存量）。 */
 function bootstrapRootDir(): string | undefined {
   try {
-    return loadSettings(resolveDataRoot())['rootOverride'] || undefined;
+    const override = loadSettings(resolveDataRoot())['rootOverride'];
+    if (!override) return undefined;
+    if (isPathWithin(INSTALL_DIR, override)) {
+      console.warn('[attic] rootOverride 位于安装目录内，卸载会删除数据——本次已忽略该指针，回落默认根');
+      return undefined;
+    }
+    return override;
   } catch {
     return undefined;
   }
@@ -38,6 +51,7 @@ function bootstrapRootDir(): string | undefined {
 const runtime = new AtticRuntime({
   rootDir: bootstrapRootDir(),
   version: process.env['ATTIC_LAUNCHER_VERSION'] ?? '0.0.0',
+  installDir: INSTALL_DIR,
 });
 
 // —— 输出帧（NDJSON：单行、无内嵌换行）——
