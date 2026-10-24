@@ -14,7 +14,10 @@
 ; CI/本地调用（ISCC 命令行 /D 一律带引号；VERSION 传去 v 前缀的 tag）：
 ;   ISCC /DATTIC_FLAVOR="legacy" /DATTIC_PAYLOAD="<win-unpacked>" \
 ;        /DATTIC_VERSION="0.0.0" /DATTIC_ARCH="x64" attic.iss
-;   → attic-launcher-<flavor>-<version>-<arch>-setup.exe
+;   → amcl-<shell>-windows-<arch>-<version>-setup.exe
+;   构件命名统一范式（2026-10-24 用户拍板；amcl = Attic Minecraft Launcher 简称）：
+;   amcl-<shell>-<os>-<arch>-<ver>，shell = tauri | electron | legacy（即 FLAVOR 值）；
+;   安装器后缀 = -setup（本 iss 产出）；portable 目录构件后缀 = -portable（CI 压缩步骤产出）。
 ;   戒律（实测）：Inno 的文件类路径（OutputDir / [Files]Source / SetupIconFile）相对
 ;   解析基准 = **本 .iss 所在目录，不是 cwd**——从仓根传 "installer\dist"、"stage"、
 ;   "apps\...\icon.ico" 会落 installer\installer\dist、installer\stage、编译报错。
@@ -42,7 +45,7 @@
 
 #ifdef ATTIC_FLAVOR
 #else
-  #define ATTIC_FLAVOR "main"
+  #define ATTIC_FLAVOR "tauri"
 #endif
 #define Is(S, X) (Pos(X, S) > 0)
 #define LEGACY Is(ATTIC_FLAVOR, "legacy")
@@ -72,12 +75,12 @@
   #define ATTIC_APPID  "uk.attic.launcher.electron"
   #define ATTIC_NAME   "Attic Minecraft Launcher (Electron)"
   #define ATTIC_EXE    "Attic Minecraft Launcher (Electron).exe"
-#elif ATTIC_FLAVOR == "main"
+#elif ATTIC_FLAVOR == "tauri"
   #define ATTIC_APPID  "uk.attic.launcher"
   #define ATTIC_NAME   "Attic Minecraft Launcher"
   #define ATTIC_EXE    "attic-launcher.exe"
 #else
-  #error ATTIC_FLAVOR 未知取值：main | electron | legacy
+  #error ATTIC_FLAVOR 未知取值：tauri | electron | legacy
 #endif
 
 #if ATTIC_ARCH == "x64"
@@ -105,7 +108,7 @@ DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 ArchitecturesInstallIn64BitMode={#ATTIC_64MODE}
 OutputDir={#ATTIC_OUTDIR}
-OutputBaseFilename=attic-launcher-{#ATTIC_FLAVOR}-{#ATTIC_VERSION}-{#ATTIC_ARCH}-setup
+OutputBaseFilename=amcl-{#ATTIC_FLAVOR}-windows-{#ATTIC_ARCH}-{#ATTIC_VERSION}-setup
 ; SetupIconFile 有意不设：安装器图标维持 Inno 缺省（两壳统一，终拍见头注）
 UninstallDisplayName={#ATTIC_NAME}
 UninstallDisplayIcon={app}\{#ATTIC_EXE}

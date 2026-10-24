@@ -49,6 +49,9 @@ function resolveDevUrl(): string | undefined {
 }
 
 function uiDistIndex(): string {
+  // 产线（随装）：extraResources 把 packages/ui/dist 落成 resources/ui（两壳 yml 同键）；
+  // 开发态：仓内 packages/ui/dist 相对位。legacy 壳复用本文件（legacy-entry 同源），零分叉。
+  if (app.isPackaged) return path.join(process.resourcesPath, 'ui', 'index.html');
   return path.resolve(app.getAppPath(), '..', '..', 'packages', 'ui', 'dist', 'index.html');
 }
 

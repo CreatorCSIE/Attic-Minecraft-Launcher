@@ -367,12 +367,14 @@ async fn open_console(app: AppHandle) -> Value {
             "Attic Minecraft Launcher — Console".to_string(),
         ),
     };
+    // .icon() 返回 Result（解码失败可拒），and_then 串进 build()
     match WebviewWindowBuilder::new(&app, &label, WebviewUrl::App(url.into()))
         .title(&title)
         .inner_size(860.0, 600.0)
         .min_inner_size(520.0, 360.0)
         .decorations(false)
-        .build()
+        .icon(app_icon())
+        .and_then(WebviewWindowBuilder::build)
     {
         Ok(_) => ok_json(Value::Null),
         Err(e) => err_json(e.to_string()),
@@ -478,6 +480,14 @@ async fn import_custom_jar(app: AppHandle) -> Value {
 
 // ————————————————————————— 装配 —————————————————————————
 
+/// 应用窗口图标（任务栏/标题栏）：显式注入，不依赖 tauri 2.12 运行时读 exe
+/// APP_ICON@32512 的新约定——dev 场景该链任一环失配即回退 Windows 缺省图标，
+/// 显式 set_icon 幂等且 dev/release 行为一致。需 Cargo.toml `image-png` feature。
+/// 注：`include_image!` 路径基准 = CARGO_MANIFEST_DIR（非源文件目录），非 `include_bytes!` 语义。
+fn app_icon() -> tauri::image::Image<'static> {
+    tauri::include_image!("icons/32x32.png")
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -492,6 +502,8 @@ pub fn run() {
             // 浅色主题时（渲染侧 system 模式经 matchMedia 解析为 light）在首帧
             // 前改钉浅色底 #f2ede3，两种主题启动都不闪白。
             if let Some(win) = app.get_webview_window("main") {
+                // 主窗任务栏图标显式注入（conf 窗口创建先于 setup，此处窗口已存在）
+                let _ = win.set_icon(app_icon());
                 if matches!(win.theme(), Ok(tauri::Theme::Light)) {
                     let _ = win.set_background_color(Some(tauri::window::Color(242, 237, 227, 255)));
                 }

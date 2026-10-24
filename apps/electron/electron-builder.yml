@@ -13,11 +13,11 @@ directories:
 files:
   - dist/**
   - package.json
-# TODO(s6 首构建收尾，与 legacy 壳同项): UI 产物入包（extraResources packages/ui/dist
-# + main.ts uiDistIndex 产线分支），当前壳加载路径仍指向仓内相对位置（开发语义）。
-# extraResources:
-#   - from: ../../packages/ui/dist
-#     to: ui
+# UI 入包（v0.0.1 pre-release 落实，同日 legacy 壳同改）：packages/ui/dist 随装为
+# resources/ui，main.ts uiDistIndex 按 app.isPackaged 走产线分支。
+extraResources:
+  - from: ../../packages/ui/dist
+    to: ui
 # 风险注（CI 首跑观察项）：@attic/runtime / @attic/core-spec 为 pnpm workspace 依赖，
 # electron-builder 24 跟随 symlink 收集进 asar；若首跑解析异常，参照 legacy 壳的
 # bundle 形态收口（esbuild 单文件化）作为后备方案。
