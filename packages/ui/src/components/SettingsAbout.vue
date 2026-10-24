@@ -12,6 +12,7 @@ import { useExternalLink } from '../composables/useExternalLink';
 import { useSysInfo } from '../composables/useSysInfo';
 import { isDemo } from '../dev/demo';
 import AppSelect from './AppSelect.vue';
+import appIcon from '../assets/app-icon.png';
 
 const { t } = useI18n();
 const { openExternal } = useExternalLink();
@@ -55,11 +56,9 @@ function openUrl(url: string): void {
     <!-- 头区：名称 + 版本 + 动作键（版本号来自宿主快照，无桥时隐藏版本行） -->
     <div class="card head-card">
       <div class="head-brand">
-        <span class="head-logo" aria-hidden="true">
-          <!-- lucide: mountain (品牌占位图形，与字标同源) -->
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="m8 3 4 8 5-5 5 11H2L8 3z" />
-          </svg>
+        <span class="head-logo">
+          <!-- 品牌图标（源 = apps/tauri/brand/attic-icon.png 母版，与安装包图标同源） -->
+          <img :src="appIcon" alt="" />
         </span>
         <div>
           <p class="head-name">{{ t('app.title') }}</p>
@@ -182,16 +181,14 @@ function openUrl(url: string): void {
   display: inline-flex;
   width: 56px;
   height: 56px;
-  align-items: center;
-  justify-content: center;
-  background: var(--surface-3);
-  border: 1px solid var(--card-border);
+  flex: 0 0 auto;
+  overflow: hidden;
   border-radius: var(--radius-lg);
-  color: var(--accent);
 }
-.head-logo svg {
-  width: 28px;
-  height: 28px;
+.head-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 .head-name {
   margin: 0;

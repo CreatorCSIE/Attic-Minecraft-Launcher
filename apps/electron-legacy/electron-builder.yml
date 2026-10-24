@@ -14,11 +14,12 @@ files:
 #   - from: ../../packages/ui/dist
 #     to: ui
 win:
+  icon: build/icon.ico
   target:
     - target: nsis
       arch: [x64, ia32]
   artifactName: attic-launcher-legacy-${version}-${arch}-setup.${ext}
-  # TODO(branding): icon: build/icon.ico（品牌资产未落位，builder 用默认电子图标）
+  # icon 已落位（见上 win.icon = build/icon.ico，源 = apps/tauri/brand/attic-icon.png 派生）
 nsis:
   oneClick: false
   perMachine: false
