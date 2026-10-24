@@ -1,7 +1,9 @@
 name: Release（全平台矩阵）
 
-# Phase 5 脚手架：主壳 = Tauri（Windows NSIS x64+arm64 / macOS DMG arm64 / Linux deb+AppImage x64），
-# 兜底 = Electron 22 NSIS（x64 + ia32，Win7 SP1 下限）。
+# Phase 5：主壳 = Tauri（Windows Inno Setup x64+arm64 / macOS DMG arm64 / Linux deb+AppImage x64），
+# 兜底 = Electron 22 Inno Setup（x64 + ia32，Win7 SP1 下限）。
+# 2026-10-24 路线拍板：Windows 安装器双壳 NSIS → Inno（仓库级 installer/attic.iss 一份，
+# flavor 参数化；nsis target 全部退场）。updater 产物 = ISCC 输出 + `tauri signer sign` 手动签名。
 # 分发口径（用户拍板 2026-10-23）：Win/Mac arm64 照常发（壳原生，游戏侧走 x64 模拟 / Rosetta，
 # 见 depends.ts 闸门）；Linux 优先 Debian 系（deb，arch/redhat 有需求再说），linux arm64 不分发
 # （LWJGL2 无 arm64 原生库且无系统级模拟）。
@@ -32,10 +34,24 @@ jobs:
       - run: pnpm run fixtures:check
       - run: pnpm run gate:node16
 
-  tauri-windows-x64:
-    name: Tauri NSIS · windows-x64（主发布轨）
+  # 两 Windows 架构 = 一 job 两 matrix 腿（90% 步骤相同，差异全在 include 四元组：
+  # build_args / exe / arch 标签；stage、ISCC、sign、upload 单点维护勿再复制成双）
+  tauri-windows:
+    name: Tauri Inno · windows-${{ matrix.arch }}（x64 主发布轨 + arm64 持续线）
     runs-on: windows-latest
     needs: gates
+    strategy:
+      # arm64 腿依赖 runner 的 MSVC ARM64 组件（缺失首跑即在此报错，装组件即可）——
+      # 不许连坐 x64 主发布轨
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            build_args: ""
+            exe: apps/tauri/src-tauri/target/release/attic-launcher.exe
+          - arch: arm64
+            build_args: "--target aarch64-pc-windows-msvc"
+            exe: apps/tauri/src-tauri/target/aarch64-pc-windows-msvc/release/attic-launcher.exe
     env:
       # updater minisign 私钥只在发版 CI 注入（公钥已入 tauri.conf.json，plan 发版 SOP）
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_UPDATER_PRIVATE_KEY }}
@@ -51,47 +67,38 @@ jobs:
         run: pnpm install --frozen-lockfile
         env:
           ELECTRON_SKIP_BINARY_DOWNLOAD: 1
-      # beforeBuildCommand（pnpm -r build）覆盖 ui/sidecar 产物；--bundles nsis 单目标（MSI 双轨 = 后续条目）
-      - name: Tauri build
-        run: pnpm --filter @attic/tauri exec tauri build --bundles nsis
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: attic-tauri-windows-x64
-          path: |
-            apps/tauri/src-tauri/target/release/bundle/nsis/*.exe
-            apps/tauri/src-tauri/target/release/bundle/nsis/*.sig
-
-  tauri-windows-arm64:
-    name: Tauri NSIS · windows-arm64（持续线）
-    runs-on: windows-latest
-    needs: gates
-    env:
-      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_UPDATER_PRIVATE_KEY }}
-      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_UPDATER_PRIVATE_KEY_PASSWORD }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - name: Install
-        run: pnpm install --frozen-lockfile
-        env:
-          ELECTRON_SKIP_BINARY_DOWNLOAD: 1
-      # 依赖 windows-latest 的 MSVC ARM64 生成工具组件（缺失则首跑在此报错，装组件即可）
-      - name: Add rust target
+      - name: Pin Inno Setup
+        run: winget install --id JRSoftware.InnoSetup --exact --version 6.7.3 --silent --accept-package-agreements --accept-source-agreements
+      - name: Add rust target (arm64)
+        if: matrix.arch == 'arm64'
         run: rustup target add aarch64-pc-windows-msvc
-      - name: Tauri build (arm64)
-        run: pnpm --filter @attic/tauri exec tauri build --target aarch64-pc-windows-msvc --bundles nsis
+      # --no-bundle：nsis 已退场；bundler 的 resources 拷贝不随 --no-bundle 发生，
+      # stage 目录显式组包（exe + sidecar/server.cjs = Tauri v2 Windows Resource 基目录
+      # 即 exe 同目录的解析位，与 lib.rs resolve 对账过）
+      - name: Tauri build (exe only)
+        run: pnpm --filter @attic/tauri exec tauri build ${{ matrix.build_args }} --no-bundle
+      - name: Stage payload
+        run: |
+          mkdir stage
+          cp ${{ matrix.exe }} stage/
+          mkdir -p stage/sidecar
+          cp apps/tauri/sidecar/dist/server.cjs stage/sidecar/
+      # 安装器本体 32-bit（ISCC 唯一形态），两架构 runner 都能直接跑；ARCH 标签只决定
+      # 64-mode 与 IsWin64 闸门：x64 腿带闸门，arm64 腿不带（arm64/x64 主机皆放行，
+      # 载荷本身即 arm64 原生）
+      - name: ISCC (main flavor)
+        shell: bash
+        run: '/c/Program Files (x86)/Inno Setup 6/ISCC.exe /DATTIC_FLAVOR="main" /DATTIC_PAYLOAD="stage" /DATTIC_VERSION="${GITHUB_REF_NAME#v}" /DATTIC_ARCH="${{ matrix.arch }}" /DATTIC_ICON="apps/tauri/src-tauri/icons/icon.ico" /DATTIC_OUTDIR="installer\\dist" installer/attic.iss'
+      - name: Sign updater artifact
+        shell: bash
+        run: pnpm --filter @attic/tauri exec tauri signer sign "installer/dist/attic-launcher-main-${GITHUB_REF_NAME#v}-${{ matrix.arch }}-setup.exe"
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: attic-tauri-windows-arm64
+          name: attic-tauri-windows-${{ matrix.arch }}
           path: |
-            apps/tauri/src-tauri/target/aarch64-pc-windows-msvc/release/bundle/nsis/*.exe
-            apps/tauri/src-tauri/target/aarch64-pc-windows-msvc/release/bundle/nsis/*.sig
+            installer/dist/attic-launcher-main-*-${{ matrix.arch }}-setup.exe
+            installer/dist/attic-launcher-main-*-${{ matrix.arch }}-setup.exe.sig
 
   tauri-macos-arm64:
     name: Tauri DMG · macOS arm64（持续线，Apple Silicon）
@@ -162,7 +169,7 @@ jobs:
             apps/tauri/src-tauri/target/release/bundle/appimage/*.sig
 
   electron-legacy-windows:
-    name: Electron 22 兜底 NSIS · x64+ia32
+    name: Electron 22 兜底 Inno · x64+ia32
     runs-on: windows-latest
     needs: gates
     steps:
@@ -174,15 +181,26 @@ jobs:
           cache: pnpm
       - name: Install
         run: pnpm install --frozen-lockfile
+      - name: Pin Inno Setup
+        run: winget install --id JRSoftware.InnoSetup --exact --version 6.7.3 --silent --accept-package-agreements --accept-source-agreements
       - name: Build bundles
         run: pnpm -r build
-      - name: electron-builder NSIS
+      - name: electron-builder (--dir × x64+ia32)
         run: pnpm --filter @attic/electron-legacy run dist
+      # 两架构目录构件各出一只 Inno 安装器（均为 32-bit 安装器本体，ia32 载荷覆盖
+      # 32-bit Win7 主机；x64 载荷带 IsWin64 闸门）——一次构建两腿，循环即可不必 matrix
+      - name: ISCC (legacy x64 + ia32)
+        shell: bash
+        run: |
+          for pair in "x64:win-unpacked" "ia32:win-ia32-unpacked"; do
+            arch="${pair%%:*}"; dir="${pair#*:}"
+            '/c/Program Files (x86)/Inno Setup 6/ISCC.exe' /DATTIC_FLAVOR="legacy" /DATTIC_PAYLOAD="apps/electron-legacy/release/$dir" /DATTIC_VERSION="${GITHUB_REF_NAME#v}" /DATTIC_ARCH="$arch" /DATTIC_OUTDIR="installer\\dist" installer/attic.iss
+          done
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: attic-electron-legacy-windows
-          path: apps/electron-legacy/release/*.exe
+          path: installer/dist/attic-launcher-legacy-*-setup.exe
 
   # TODO(发版 SOP)：latest.json（minisign 验签清单）生成与 GitHub Release 发布步骤；
   # sidecar 便携 node 随装策略（exe 目录 node.exe 或安装包内嵌）在此定稿。

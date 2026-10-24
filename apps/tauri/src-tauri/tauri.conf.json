@@ -30,7 +30,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
+    "targets": ["app"],
     "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
@@ -46,11 +46,7 @@
         "type": "embedBootstrapper",
         "silent": true
       },
-      "minimumWebview2Version": "110.0.1531.0",
-      "nsis": {
-        "installerHooks": "./windows/attic-checks.nsh",
-        "displayLanguageSelector": false
-      }
+      "minimumWebview2Version": "110.0.1531.0"
     }
   },
   "plugins": {

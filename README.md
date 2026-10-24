@@ -49,8 +49,8 @@ Betacraft 版本 API              legacyfix javaagent
 
 ### 分发（Phase 5 脚手架）
 
-- **Windows NSIS 安装包**：Tauri 官方预编译 makensis + 脚本层定制（OS/架构 guard 钩子；WebView2 ≥110 由 bundler 内嵌引导器处理），兜底壳走 electron-builder 独立 NSIS 配置（Win7 SP1 下限）。
-- **自动更新**：Tauri updater minisign 签名密钥已生成、release CI 全平台矩阵就绪（Windows NSIS x64/arm64、macOS DMG arm64、Linux deb+AppImage x86_64、兜底 legacy x64/ia32）；兜底线按设计不随自动更新。Linux 首发 Debian 系（arch/redhat 按需），linux arm64 不分发（LWJGL2 无 arm64 原生库，见 FAQ）。
+- **Windows Inno Setup 安装包**：双壳共用一份 `installer/attic.iss`（flavor 参数化，Inno 6.7.3 版本钉，简体中文 isl 已 vendor）；`[Code]` 层双闸 guard（主壳 Win10+ / 兜底壳 Win7 SP1+、x64 载荷 IsWin64 防错装）；纯用户级安装（`PrivilegesRequired=lowest`，装 `%LOCALAPPDATA%\Programs`）。2026-10-24 拍板 NSIS → Inno（NSIS 默认观感老旧 + builder 模板宏层崩溃史，崩溃戒律归档于 attic.iss 头注）。
+- **自动更新**：Tauri updater minisign 签名密钥已生成、release CI 全平台矩阵就绪（Windows Inno x64/arm64、macOS DMG arm64、Linux deb+AppImage x86_64、兜底 legacy x64/ia32）；updater 产物 = ISCC 输出 + CI `tauri signer sign` 手动签名，升级体验为可见 Inno 向导；兜底线按设计不随自动更新。Linux 首发 Debian 系（arch/redhat 按需），linux arm64 不分发（LWJGL2 无 arm64 原生库，见 FAQ）。
 
 ### 血统
 
@@ -65,7 +65,7 @@ Betacraft 版本 API              legacyfix javaagent
 | Phase 0–2 | 脚手架 / IPC 契约 / TS 运行时 | ✅ 完成 |
 | Phase 3 | UI v0 + 设置页重写 + Mods/自定义版本 | ✅ 完成 |
 | Phase 4 | Tauri 壳 + sidecar + Electron 22 兜底壳 | 🔨 联调收尾：真窗端到端已通（窗控/拖拽/图标/视觉收口、契约双绿），余 M2 桌面手动验收（真窗点 Play） |
-| Phase 5 | NSIS 安装包分发 + release CI + updater | 🔨 全平台矩阵与签名密钥就绪；Secrets 登记、更新端点替换、CI 首跑收口待发布仓库定稿 |
+| Phase 5 | Inno Setup 安装包分发 + release CI + updater | 🔨 全平台矩阵与签名密钥就绪，attic.iss 双 flavor 本地装退全绿；Secrets 登记、更新端点替换、CI 首跑真载荷收口待发布仓库定稿 |
 | Phase 6 | Microsoft 账户登录、addons、MC 工具接入、Java 深搜（deepScan）、Discord RPC 等 | 📋 愿望池（不承诺时间）；addons 的 javaagent 分叉路线（fork vs 自写）评估中；工具接入两通路已定案（attach 类走 `-javaagent` 预挂载、种子类外置进程联动实例世界 seed）；Java 深搜方案已归档（配方与契约成本细则见 plan.md） |
 
 ---
@@ -82,7 +82,7 @@ Betacraft 版本 API              legacyfix javaagent
 - **Node.js ≥ 20（LTS）**
 - **pnpm 10**（仓库声明 `packageManager: pnpm@10.34.5`，建议 `corepack enable` 后直接 `pnpm install`）
 - **Rust 工具链**（仅开发 Tauri 壳需要，`rustup` 默认 stable 即可；Electron 线不依赖）
-- 操作系统：Windows / macOS / Linux 均可开发（窗口看门狗等个别逻辑仅 Windows 生效；NSIS 打包与 WebView2 相关验证仅在 Windows）
+- 操作系统：Windows / macOS / Linux 均可开发（窗口看门狗等个别逻辑仅 Windows 生效；Inno 安装器构建与 WebView2 相关验证仅在 Windows）
 
 ---
 
@@ -133,7 +133,7 @@ Attic-Minecraft-Launcher
 ├── apps/
 │   ├── electron/           Electron 壳（开发参考实现：同进程直连 runtime）
 │   ├── tauri/
-│   │   ├── src-tauri/      Rust 窗层：ipc_forward 白名单转发 + 宿主面命令 + 契约镜像测试 + NSIS 钩子
+│   │   ├── src-tauri/      Rust 窗层：ipc_forward 白名单转发 + 宿主面命令 + 契约镜像测试
 │   │   └── sidecar/        Node sidecar：stdio NDJSON RPC 跑同一份 runtime（打包为 dist/server.cjs 随装）
 │   └── electron-legacy/    Win7/8/8.1 兜底壳（Electron 22，esbuild 复用 electron 主进程源码 + net fetch 桥）
 └── packages/

@@ -173,7 +173,7 @@ legacyfix jar 原位补丁（窗口偏右下最小修复，不属启动命令行
 | --- | --- | --- | --- |
 | `apps/electron` | 同进程直连 `AtticRuntime` | preload → `window.attic` | 开发参考实现 |
 | `apps/electron-legacy` | 同上（esbuild 打包 = fetch 桥 + **同一份** `main.ts` 源码） | 同上 | Win7/8/8.1 兜底发布线（Electron 22 = Chromium 108 / Node 16.17，无自动更新） |
-| `apps/tauri` | **Node sidecar 子进程**（`@attic/runtime` 门面） | UI `bridge/tauri.ts` 适配 `window.__TAURI__`（withGlobalTauri）→ Rust 命令 | 主发布线（Windows NSIS + updater 分轨） |
+| `apps/tauri` | **Node sidecar 子进程**（`@attic/runtime` 门面） | UI `bridge/tauri.ts` 适配 `window.__TAURI__`（withGlobalTauri）→ Rust 命令 | 主发布线（Windows Inno Setup + updater 分轨） |
 
 Tauri 线 Rust↔sidecar 线协议（stdio NDJSON，一行一帧；sidecar `src/server.ts`）：
 
@@ -187,11 +187,13 @@ Tauri 线 Rust↔sidecar 线协议（stdio NDJSON，一行一帧；sidecar `src/
 `packages/core-spec/tests/fixtures/ipc-channels.json`；Rust `contract_tests`（cargo test）与
 `fixtures:check`（CI）双向比对；Node16 API 锁 = `scripts/node16-api-gate.mjs`。
 
-NSIS 定制结论（Phase 5 拍板）：**无需编译级定制**（官方预编译 makensis + 自带插件足够），
-定制面 = 脚本层双钩：Tauri `nsis.installerHooks` → `src-tauri/windows/attic-checks.nsh`
-（`NSIS_HOOK_PREINSTALL`：OS<Win10 拒装指路兜底构件 + 架构 guard；WebView2≥110 交
-`minimumWebview2Version` + `embedBootstrapper`），electron-builder `nsis.include` →
-`build/installer.nsh`（`customInit`：下限 Win7 SP1）。
+Windows 安装器结论（2026-10-24 改拍板：NSIS → Inno Setup）：双壳共用仓库级
+`installer/attic.iss`（flavor 参数化 main/legacy，Inno 6.7.3 版本钉，简中 isl vendor
+于 `installer/lang/`）；两壳的 nsis target 均退场（tauri `--no-bundle` + stage 组包、
+electron-builder `--dir`），CI 用 ISCC 出安装器、`tauri signer sign` 手动签名 updater 产物。
+定制面 = `[Code]` 双闸 guard（主壳 Win10+ / 兜底壳 Win7 SP1+；x64 载荷 IsWin64 防错装）+
+`PrivilegesRequired=lowest` 纯用户级安装。WebView2 引导残余差异（embedBootstrapper 随
+nsis target 退场）与 NSIS 崩溃戒律归档见 attic.iss 头注及 plan.md。
 
 ## 6. 端点与版本数据流（Phase 2 预告）
 
