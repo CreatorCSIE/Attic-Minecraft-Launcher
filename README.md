@@ -40,17 +40,17 @@ Betacraft 版本 API              legacyfix javaagent
 - **启动管线可观测**：参数组序契约化拼装，干跑通道返回完整 LaunchConfig；独立控制台窗逐行日志 + 崩溃自动分类（out-of-memory / gl-init / lwjgl-native / unsatisfied-link / java-missing）；Applet 版本附 Windows 窗口看门狗，关窗即回收空转进程。
 - **账户与数据**：离线账户（确定性 UUID，MC 离线格式）；设置与实例以 Java `.properties` 落盘；自定义版本 jar 导入与版本 JSON 编辑；数据根三平台解析 + portable 模式 + 可迁移老 `.betacraft`。
 
-### 架构（Electron 壳已可用；Tauri / 兜底壳脚手架就位）
+### 架构（三壳共享核心：Tauri 主发布 + Electron 可选形态 + Win7 兜底）
 
 - **单一 IPC 契约**：`packages/core-spec` 是渲染 ↔ 宿主 **35 请求通道 + 4 事件通道**的唯一真相，契约测试与 CI 闸门拦截漂移。
-- **三壳共享一个核心**：`apps/electron`（开发参考实现，同进程直连）、`apps/tauri`（主发布线：Rust 窗层 + Node sidecar 跑同一份 TS runtime，stdio NDJSON RPC）、`apps/electron-legacy`（Win7/8/8.1 兜底：Electron 22 复用 electron 主进程源码 + `net` 模块 fetch 桥）。启动核心只有一份 TS 实现，Rust 只做壳层与窗口。
+- **三壳共享一个核心**：`apps/tauri`（主发布线、优先推荐：Rust 窗层 + Node sidecar 跑同一份 TS runtime，stdio NDJSON RPC）、`apps/electron`（日常开发壳 + 可选 Windows 发行形态，同进程直连，双壳并进）、`apps/electron-legacy`（Win7/8/8.1 兜底：Electron 22 复用 electron 主进程源码 + `net` 模块 fetch 桥）。启动核心只有一份 TS 实现，Rust 只做壳层与窗口；三形态数据根同轨，壳之间切换/共存零数据分叉。
 - **跨语言契约闸门**：通道清单由 TS 导出 fixture，Rust 侧 `cargo test` 断言镜像常量与 host∪sidecar 分区不变量；宿主侧共享代码另受 **Node 16 API 锁**扫描（禁 `structuredClone` 等），保证兜底线可运行。
 - **对壳透明的 UI**：同一份 Vue 3 前端探测 `window.attic` / `window.__TAURI__` 自动接线，浏览器直开降级 demo mock 桥；Modrinth App 组件形态迁移 + 全量语义化 CSS token；zh-CN / en 双语（缺键回落 en）。
 
 ### 分发（Phase 5 脚手架）
 
-- **Windows Inno Setup 安装包**：双壳共用一份 `installer/attic.iss`（flavor 参数化，Inno 6.7.3 版本钉，简体中文 isl 已 vendor）；`[Code]` 层双闸 guard（主壳 Win10+ / 兜底壳 Win7 SP1+、x64 载荷 IsWin64 防错装）；纯用户级安装（`PrivilegesRequired=lowest`，装 `%LOCALAPPDATA%\Programs`）。2026-10-24 拍板 NSIS → Inno（NSIS 默认观感老旧 + builder 模板宏层崩溃史，崩溃戒律归档于 attic.iss 头注）。
-- **自动更新**：Tauri updater minisign 签名密钥已生成、release CI 全平台矩阵就绪（Windows Inno x64/arm64、macOS DMG arm64、Linux deb+AppImage x86_64、兜底 legacy x64/ia32）；updater 产物 = ISCC 输出 + CI `tauri signer sign` 手动签名，升级体验为可见 Inno 向导；兜底线按设计不随自动更新。Linux 首发 Debian 系（arch/redhat 按需），linux arm64 不分发（LWJGL2 无 arm64 原生库，见 FAQ）。
+- **Windows Inno Setup 安装包**：三种发行形态共用一份 `installer/attic.iss`（flavor = main/electron/legacy 参数化，Inno 6.7.3 版本钉，简体中文 isl 已 vendor）；`[Code]` 层双闸 guard（主壳/Electron 壳 Win10+ / 兜底壳 Win7 SP1+、x64 载荷 IsWin64 防错装）；纯用户级安装（`PrivilegesRequired=lowest`，装 `%LOCALAPPDATA%\Programs`）；AppId 分轨可同机共存。2026-10-24 拍板 NSIS → Inno（NSIS 默认观感老旧 + builder 模板宏层崩溃史，崩溃戒律归档于 attic.iss 头注）。
+- **自动更新**：Tauri updater minisign 签名密钥已生成、release CI 全平台矩阵就绪（Windows Inno x64/arm64 + Electron 壳 x64、macOS DMG arm64、Linux deb+AppImage x86_64、兜底 legacy x64/ia32）；updater 产物 = ISCC 输出 + CI `tauri signer sign` 手动签名，升级体验为可见 Inno 向导；兜底线按设计不随自动更新。Linux 首发 Debian 系（arch/redhat 按需），linux arm64 不分发（LWJGL2 无 arm64 原生库，见 FAQ）。
 
 ### 血统
 
@@ -65,7 +65,7 @@ Betacraft 版本 API              legacyfix javaagent
 | Phase 0–2 | 脚手架 / IPC 契约 / TS 运行时 | ✅ 完成 |
 | Phase 3 | UI v0 + 设置页重写 + Mods/自定义版本 | ✅ 完成 |
 | Phase 4 | Tauri 壳 + sidecar + Electron 22 兜底壳 | 🔨 联调收尾：真窗端到端已通（窗控/拖拽/图标/视觉收口、契约双绿），余 M2 桌面手动验收（真窗点 Play） |
-| Phase 5 | Inno Setup 安装包分发 + release CI + updater | 🔨 全平台矩阵与签名密钥就绪，attic.iss 双 flavor 本地装退全绿；Secrets 登记、更新端点替换、CI 首跑真载荷收口待发布仓库定稿 |
+| Phase 5 | Inno Setup 安装包分发 + release CI + updater | 🔨 全平台矩阵与签名密钥就绪，attic.iss 双 flavor 装退全绿 + 双壳并进第三 flavor（electron）编译绿；Secrets 登记、更新端点替换、CI 首跑真载荷收口待发布仓库定稿 |
 | Phase 6 | Microsoft 账户登录、addons、MC 工具接入、Java 深搜（deepScan）、Discord RPC 等 | 📋 愿望池（不承诺时间）；addons 的 javaagent 分叉路线（fork vs 自写）评估中；工具接入两通路已定案（attach 类走 `-javaagent` 预挂载、种子类外置进程联动实例世界 seed）；Java 深搜方案已归档（配方与契约成本细则见 plan.md） |
 
 ---
@@ -131,7 +131,7 @@ Attic-Minecraft-Launcher
 ├── docs/                   契约镜像（contract.md）、UI 设计守则（ui-design.md）、移植笔记
 ├── reference/              上游源码克隆（betacraft-launcher / legacyfix，gitignore，不入库）
 ├── apps/
-│   ├── electron/           Electron 壳（开发参考实现：同进程直连 runtime）
+│   ├── electron/           Electron 壳（开发 + 可选 Windows 发行形态 Electron 33：同进程直连 runtime）
 │   ├── tauri/
 │   │   ├── src-tauri/      Rust 窗层：ipc_forward 白名单转发 + 宿主面命令 + 契约镜像测试
 │   │   └── sidecar/        Node sidecar：stdio NDJSON RPC 跑同一份 runtime（打包为 dist/server.cjs 随装）
@@ -175,7 +175,7 @@ Attic-Minecraft-Launcher
 
 ### Q5：老系统（Win7 / Win8）能装吗？
 
-主发布线基于 Tauri + WebView2，要求 Windows 10 及以上（安装器会检测并指路）。Win7 SP1 – 8.1 用户使用专门的兜底安装包（Electron 22 壳），功能对齐主线但**不提供自动更新**。
+主发布线基于 Tauri + WebView2，要求 Windows 10 及以上（安装器会检测并指路）。Win10+ 用户若偏好自带 Chromium 的 Electron 壳（或对 WebView2 有障碍），可选装 Electron 安装包（`attic-launcher-electron-*`，与主壳同机共存、数据同轨），更新方式为检查+提示+手动下载。Win7 SP1 – 8.1 用户使用专门的兜底安装包（Electron 22 壳），功能对齐主线但**不提供自动更新**。
 
 ### Q5.5：M1/M2/M3 Mac 或 arm64 Linux 能跑吗？
 

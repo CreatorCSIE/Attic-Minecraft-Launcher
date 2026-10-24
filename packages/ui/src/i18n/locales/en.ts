@@ -357,7 +357,7 @@ export const en = {
       channelBeta: 'Beta',
       legalSection: 'Copyright & Legal',
       copyright: 'Copyright notice',
-      copyrightDesc: 'Copyright © 2026 Attic Launcher developers',
+      copyrightDesc: 'Copyright © 2026 Attic Minecraft Launcher developers',
       license: 'Open-source license',
       licenseDesc: 'This software is released under GNU GPL v3 (GPL-3.0-only).',
       agreement: 'User agreement',

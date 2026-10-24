@@ -1,0 +1,28 @@
+# electron-builder 现代 Electron 壳配置（双壳并进 2026-10-24 用户拍板：Tauri 主壳
+# 优先推荐，本壳为可选 Windows 发行形态；mac/linux 暂无发行计划，社区有需求再开）。
+# 与 legacy 壳同法：nsis 不上，`--dir` 出 win-unpacked → ISCC 编译 installer/attic.iss
+# （/DATTIC_FLAVOR="electron"）。更新策略拍板 = 检查+提示+手动下载（无 electron-updater、
+# 无 Authenticode 依赖；检查链挂账 plan.md，UI「检查更新」按钮现为占位）。
+# 与 apps/electron-legacy 的差异：Electron 33（Win10+ 地板）、主进程走 tsc 直出
+# dist/（不做 esbuild 单文件化——那是 legacy 迁就 Electron22/Node16 的形态）。
+appId: uk.attic.launcher.electron
+productName: Attic Minecraft Launcher (Electron)
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist/**
+  - package.json
+# TODO(s6 首构建收尾，与 legacy 壳同项): UI 产物入包（extraResources packages/ui/dist
+# + main.ts uiDistIndex 产线分支），当前壳加载路径仍指向仓内相对位置（开发语义）。
+# extraResources:
+#   - from: ../../packages/ui/dist
+#     to: ui
+# 风险注（CI 首跑观察项）：@attic/runtime / @attic/core-spec 为 pnpm workspace 依赖，
+# electron-builder 24 跟随 symlink 收集进 asar；若首跑解析异常，参照 legacy 壳的
+# bundle 形态收口（esbuild 单文件化）作为后备方案。
+win:
+  icon: build/icon.ico
+  target:
+    - target: dir
+      arch: [x64]

@@ -88,7 +88,14 @@ jobs:
       # 载荷本身即 arm64 原生）
       - name: ISCC (main flavor)
         shell: bash
-        run: '/c/Program Files (x86)/Inno Setup 6/ISCC.exe /DATTIC_FLAVOR="main" /DATTIC_PAYLOAD="stage" /DATTIC_VERSION="${GITHUB_REF_NAME#v}" /DATTIC_ARCH="${{ matrix.arch }}" /DATTIC_ICON="apps/tauri/src-tauri/icons/icon.ico" /DATTIC_OUTDIR="installer\\dist" installer/attic.iss'
+        # 戒律（attic.iss 头注）：Inno 文件类路径相对基准 = .iss 目录而非 cwd，
+        # PAYLOAD 必须 $PWD 绝对化；OUTDIR 不传 = 缺省 "dist" 落 installer/dist；
+        # 安装器图标两壳皆 Inno 缺省（用户终拍，不传 SetupIconFile）
+        run: |
+          '/c/Program Files (x86)/Inno Setup 6/ISCC.exe' \
+            /DATTIC_FLAVOR="main" /DATTIC_PAYLOAD="$PWD/stage" \
+            /DATTIC_VERSION="${GITHUB_REF_NAME#v}" /DATTIC_ARCH="${{ matrix.arch }}" \
+            installer/attic.iss
       - name: Sign updater artifact
         shell: bash
         run: pnpm --filter @attic/tauri exec tauri signer sign "installer/dist/attic-launcher-main-${GITHUB_REF_NAME#v}-${{ matrix.arch }}-setup.exe"
@@ -99,6 +106,45 @@ jobs:
           path: |
             installer/dist/attic-launcher-main-*-${{ matrix.arch }}-setup.exe
             installer/dist/attic-launcher-main-*-${{ matrix.arch }}-setup.exe.sig
+
+  # 双壳并进（2026-10-24 用户拍板）：Electron 壳 = Tauri 主壳之外的可选发行形态，
+  # 仅 Windows（mac/linux 有社区需求再开）。更新策略 = 检查+提示+手动下载
+  # （链路与主壳「检查更新」按钮同项挂账，见 plan.md）。
+  electron-windows:
+    name: Electron 壳 Inno · x64（可选形态）
+    runs-on: windows-latest
+    needs: gates
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      # 注意：本 job 不设 ELECTRON_SKIP_BINARY_DOWNLOAD——electron-builder 需要
+      # Electron 33 二进制入包（legacy/tauri job 才跳）。
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Pin Inno Setup
+        run: winget install --id JRSoftware.InnoSetup --exact --version 6.7.3 --silent --accept-package-agreements --accept-source-agreements
+      - name: Build bundles
+        run: pnpm -r build
+      - name: electron-builder (--dir x64)
+        run: pnpm --filter @attic/electron run dist
+      # flavor="electron" 表在 attic.iss（AppId uk.attic.launcher.electron，与主壳
+      # 分离可同机共存）；载荷路径相对基准 = .iss 目录 → $PWD 绝对化戒律同主壳
+      - name: ISCC (electron x64)
+        shell: bash
+        run: |
+          '/c/Program Files (x86)/Inno Setup 6/ISCC.exe' \
+            /DATTIC_FLAVOR="electron" /DATTIC_PAYLOAD="$PWD/apps/electron/release/win-unpacked" \
+            /DATTIC_VERSION="${GITHUB_REF_NAME#v}" /DATTIC_ARCH="x64" \
+            installer/attic.iss
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: attic-electron-windows-x64
+          path: installer/dist/attic-launcher-electron-*-x64-setup.exe
 
   tauri-macos-arm64:
     name: Tauri DMG · macOS arm64（持续线，Apple Silicon）
@@ -194,7 +240,7 @@ jobs:
         run: |
           for pair in "x64:win-unpacked" "ia32:win-ia32-unpacked"; do
             arch="${pair%%:*}"; dir="${pair#*:}"
-            '/c/Program Files (x86)/Inno Setup 6/ISCC.exe' /DATTIC_FLAVOR="legacy" /DATTIC_PAYLOAD="apps/electron-legacy/release/$dir" /DATTIC_VERSION="${GITHUB_REF_NAME#v}" /DATTIC_ARCH="$arch" /DATTIC_OUTDIR="installer\\dist" installer/attic.iss
+            '/c/Program Files (x86)/Inno Setup 6/ISCC.exe' /DATTIC_FLAVOR="legacy" /DATTIC_PAYLOAD="$PWD/apps/electron-legacy/release/$dir" /DATTIC_VERSION="${GITHUB_REF_NAME#v}" /DATTIC_ARCH="$arch" installer/attic.iss
           done
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

@@ -171,7 +171,7 @@ legacyfix jar 原位补丁（窗口偏右下最小修复，不属启动命令行
 
 | 壳 | 核心承载 | 桥注入 | 定位 |
 | --- | --- | --- | --- |
-| `apps/electron` | 同进程直连 `AtticRuntime` | preload → `window.attic` | 开发参考实现 |
+| `apps/electron` | 同进程直连 `AtticRuntime` | preload → `window.attic` | 日常开发 + 可选 Windows 发行形态（Electron 33，Inno electron flavor，更新 = 检查+提示+手动下载；双壳并进 2026-10-24） |
 | `apps/electron-legacy` | 同上（esbuild 打包 = fetch 桥 + **同一份** `main.ts` 源码） | 同上 | Win7/8/8.1 兜底发布线（Electron 22 = Chromium 108 / Node 16.17，无自动更新） |
 | `apps/tauri` | **Node sidecar 子进程**（`@attic/runtime` 门面） | UI `bridge/tauri.ts` 适配 `window.__TAURI__`（withGlobalTauri）→ Rust 命令 | 主发布线（Windows Inno Setup + updater 分轨） |
 

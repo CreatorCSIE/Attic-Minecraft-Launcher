@@ -1,5 +1,5 @@
 ; ============================================================================
-; Attic Launcher —— Inno Setup 6 共享安装脚本（双壳一个 .iss，flavor 参数化）。
+; Attic Minecraft Launcher —— Inno Setup 6 共享安装脚本（双壳一个 .iss，flavor 参数化）。
 ;
 ; 路线拍板（2026-10-24）：双壳安装器由 NSIS 切 Inno —— NSIS 默认观感老旧、宏/插件
 ; 层晦涩（builder 模板 customInstallMode×UAC 插件 0xc0000005 崩溃史见 plan.md），
@@ -13,17 +13,23 @@
 ;
 ; CI/本地调用（ISCC 命令行 /D 一律带引号；VERSION 传去 v 前缀的 tag）：
 ;   ISCC /DATTIC_FLAVOR="legacy" /DATTIC_PAYLOAD="<win-unpacked>" \
-;        /DATTIC_VERSION="0.0.0" /DATTIC_ARCH="x64" /DATTIC_OUTDIR="installer\dist" attic.iss
+;        /DATTIC_VERSION="0.0.0" /DATTIC_ARCH="x64" attic.iss
 ;   → attic-launcher-<flavor>-<version>-<arch>-setup.exe
-;   主壳另传 /DATTIC_ICON="...\icons\icon.ico"（兜底壳不传 = Inno 默认安装器图标，
-;   用户拍板：向导维持 Inno 原生观感，品牌位图/自定义皮肤全部不上）。
+;   戒律（实测）：Inno 的文件类路径（OutputDir / [Files]Source / SetupIconFile）相对
+;   解析基准 = **本 .iss 所在目录，不是 cwd**——从仓根传 "installer\dist"、"stage"、
+;   "apps\...\icon.ico" 会落 installer\installer\dist、installer\stage、编译报错。
+;   OUTDIR 走缺省 "dist"（= installer\dist）不传；PAYLOAD 一律传绝对路径。
+;   安装器图标 = Inno 缺省，两壳皆然（用户 2026-10-24 终拍：严格维持默认，不设
+;   SetupIconFile 参数面；应用图标只归 exe/快捷方式/卸载面板面）。品牌位图/自定义
+;   皮肤全部不上，向导维持 Inno 原生观感。
 ;
 ; 形态约定（本文件内不再改动）：
 ;   * 纯用户级（PrivilegesRequired=lowest，装 %LOCALAPPDATA%）——替代原 NSIS
 ;     customInstallMode 跳范围页的全部职能；无范围选择页（Inno 天然干净）
-;   * 双闸 guard 移植自 windows/attic-checks.nsh：主壳判 Win10+（WebView2 110 钉
+;   * 双闸 guard 移植自 windows/attic-checks.nsh：主壳/Electron 壳判 Win10+（WebView2 110 钉
 ;     由 OS 闸门代管；Evergreen 自更；embedBootstrapper 随 nsis target 退场，
-;     残余差异记 plan.md）；兜底壳判 Win7 SP1+（Electron 22 = Chromium 108 一代，Win7 SP1 为其地板）
+;     残余差异记 plan.md；Electron 壳 = Electron 33，地板同为 Win10）；兜底壳判 Win7 SP1+
+;     （Electron 22 = Chromium 108 一代，Win7 SP1 为其地板）
 ;   * attic:// 协议注册归运行时插件面，安装器不写协议表（与迁移前一致）
 ;
 ; 更新通道衔接（latest.json platforms.windows-x86_64）：
@@ -51,17 +57,27 @@
 #endif
 #ifdef ATTIC_OUTDIR
 #else
-  #define ATTIC_OUTDIR "installer\dist"
+  ; 相对基准 = 本 .iss 目录（installer\）→ 产物落 installer\dist
+  #define ATTIC_OUTDIR "dist"
 #endif
 
-#if LEGACY
+#if   ATTIC_FLAVOR == "legacy"
   #define ATTIC_APPID  "uk.attic.launcher.legacy"
-  #define ATTIC_NAME   "Attic Launcher Legacy"
-  #define ATTIC_EXE    "Attic Launcher Legacy.exe"
-#else
+  #define ATTIC_NAME   "Attic Minecraft Launcher Legacy"
+  ; 与 electron-builder.yml productName 派生的 exe 名严格一致（改名两处同动）
+  #define ATTIC_EXE    "Attic Minecraft Launcher Legacy.exe"
+#elif ATTIC_FLAVOR == "electron"
+  ; 双壳并进（2026-10-24 用户拍板）：Tauri 主壳优先推荐，Electron 壳为可选发行形态。
+  ; AppId/目录/快捷方式三者与主壳分离可同机共存；数据根两壳同走 .attic（壳只是窗层）
+  #define ATTIC_APPID  "uk.attic.launcher.electron"
+  #define ATTIC_NAME   "Attic Minecraft Launcher (Electron)"
+  #define ATTIC_EXE    "Attic Minecraft Launcher (Electron).exe"
+#elif ATTIC_FLAVOR == "main"
   #define ATTIC_APPID  "uk.attic.launcher"
-  #define ATTIC_NAME   "Attic Launcher"
+  #define ATTIC_NAME   "Attic Minecraft Launcher"
   #define ATTIC_EXE    "attic-launcher.exe"
+#else
+  #error ATTIC_FLAVOR 未知取值：main | electron | legacy
 #endif
 
 #if ATTIC_ARCH == "x64"
@@ -76,12 +92,6 @@
 #else
   #error ATTIC_PAYLOAD 必传：/DATTIC_PAYLOAD="<构件目录>"（win-unpacked 或 tauri release）
 #endif
-#ifdef ATTIC_ICON
-  #define ATTIC_ICON_LINE ATTIC_ICON
-#else
-  #define ATTIC_ICON_LINE ""
-#endif
-
 [Setup]
 AppId={#ATTIC_APPID}
 AppName={#ATTIC_NAME}
@@ -96,7 +106,7 @@ PrivilegesRequired=lowest
 ArchitecturesInstallIn64BitMode={#ATTIC_64MODE}
 OutputDir={#ATTIC_OUTDIR}
 OutputBaseFilename=attic-launcher-{#ATTIC_FLAVOR}-{#ATTIC_VERSION}-{#ATTIC_ARCH}-setup
-SetupIconFile={#ATTIC_ICON_LINE}
+; SetupIconFile 有意不设：安装器图标维持 Inno 缺省（两壳统一，终拍见头注）
 UninstallDisplayName={#ATTIC_NAME}
 UninstallDisplayIcon={app}\{#ATTIC_EXE}
 Compression=lzma2/max
@@ -183,7 +193,7 @@ begin
   if (Major < 6) or ((Major = 6) and (SP < 1)) then
   begin
     RegQueryStringValue(HKLM, 'SOFTWARE\Microsoft\Windows NT\CurrentVersion', 'ProductName', VS);
-    Msg := 'Attic Launcher Legacy 需要 Windows 7 SP1 或更新系统（当前：' + VS + '）。';
+    Msg := 'Attic Minecraft Launcher Legacy 需要 Windows 7 SP1 或更新系统（当前：' + VS + '）。';
     MsgBox(Msg, mbCriticalError, MB_OK);
     Result := False;
     Exit;
@@ -195,7 +205,7 @@ begin
   if Major < 10 then
   begin
     RegQueryStringValue(HKLM, 'SOFTWARE\Microsoft\Windows NT\CurrentVersion', 'ProductName', VS);
-    Msg := 'Attic Launcher requires Windows 10 or later (WebView2 110+). Current system: ' + VS + '. ' +
+    Msg := '{#ATTIC_NAME} requires Windows 10 or later (WebView2 110+). Current system: ' + VS + '. ' +
            'Windows 7/8/8.1 users please install the Electron-compatible build from:' +
            Chr(13) + Chr(10) + LegacyDownloadUrl + Chr(13) + Chr(13) + Chr(10) +
            '安装已中止：本程序需要 Windows 10 或更新系统。';

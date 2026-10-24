@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Attic Launcher",
+  "productName": "Attic Minecraft Launcher",
   "version": "0.0.0",
   "identifier": "uk.attic.launcher",
   "build": {
