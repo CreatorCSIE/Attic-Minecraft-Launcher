@@ -4,6 +4,8 @@
 
 名字取自"阁楼"：家里放旧宝贝的地方，落满灰但都还活着。
 
+<p align="center"><img src="docs/banner.png" alt="Attic Minecraft Launcher banner" width="100%"/></p>
+
 > **免责声明**：本项目是独立开发的第三方开源启动器，并非 Minecraft 官方产品，未获 Microsoft、Mojang Studios 或任何第三方平台的赞助、认可或背书。
 > *Independently developed third-party open-source launcher. Not an official Minecraft product; not approved or endorsed by Microsoft or Mojang Studios.*
 
@@ -64,7 +66,7 @@ Betacraft 版本 API              legacyfix javaagent
 | Phase 3 | UI v0 + 设置页重写 + Mods/自定义版本 | ✅ 完成 |
 | Phase 4 | Tauri 壳 + sidecar + Electron 22 兜底壳 | 🔨 联调收尾：真窗端到端已通（窗控/拖拽/图标/视觉收口、契约双绿），余 M2 桌面手动验收（真窗点 Play） |
 | Phase 5 | NSIS 安装包分发 + release CI + updater | 🔨 全平台矩阵与签名密钥就绪；Secrets 登记、更新端点替换、CI 首跑收口待发布仓库定稿 |
-| Phase 6 | Microsoft 账户登录、addons、MC 工具接入、Discord RPC 等 | 📋 愿望池（不承诺时间）；addons 的 javaagent 分叉路线（fork vs 自写）评估中；工具接入两通路已定案（attach 类走 `-javaagent` 预挂载、种子类外置进程联动实例世界 seed） |
+| Phase 6 | Microsoft 账户登录、addons、MC 工具接入、Java 深搜（deepScan）、Discord RPC 等 | 📋 愿望池（不承诺时间）；addons 的 javaagent 分叉路线（fork vs 自写）评估中；工具接入两通路已定案（attach 类走 `-javaagent` 预挂载、种子类外置进程联动实例世界 seed）；Java 深搜方案已归档（配方与契约成本细则见 plan.md） |
 
 ---
 
