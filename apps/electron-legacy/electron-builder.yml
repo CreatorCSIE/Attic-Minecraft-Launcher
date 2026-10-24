@@ -20,3 +20,5 @@ win:
   target:
     - target: dir
       arch: [x64, ia32]
+# 注意（CI 首跑教训 2026-10）：CLI `--dir` 会顶掉本配置 target/arch（只按宿主架构出
+# win-unpacked，ia32 目录缺失 → ISCC No files found）——dist 脚本必须显式 `--x64 --ia32`。
