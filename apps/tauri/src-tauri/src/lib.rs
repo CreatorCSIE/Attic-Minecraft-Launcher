@@ -195,16 +195,30 @@ fn strip_verbatim(p: PathBuf) -> PathBuf {
     }
 }
 
+/// Windows：控制台子系统子进程（node.exe / taskkill.exe）由 GUI 壳裸 spawn 会闪黑窗
+/// （产线真机实测：sidecar 弹 node 控制台）。CREATE_NO_WINDOW 抑制；POSIX 下为空操作。
+#[cfg(windows)]
+fn hide_console(cmd: &mut StdCommand) {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    cmd.creation_flags(CREATE_NO_WINDOW);
+}
+
+#[cfg(not(windows))]
+fn hide_console(_cmd: &mut StdCommand) {}
+
 impl Sidecar {
     fn spawn(app: &AppHandle) -> Result<Self, String> {
         let (node, entry) = resolve_sidecar_launch(app)?;
         let version = app.package_info().version.to_string();
-        let mut child = StdCommand::new(&node)
-            .arg(&entry)
+        let mut cmd = StdCommand::new(&node);
+        cmd.arg(&entry)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())
-            .env("ATTIC_LAUNCHER_VERSION", &version)
+            .env("ATTIC_LAUNCHER_VERSION", &version);
+        hide_console(&mut cmd);
+        let mut child = cmd
             .spawn()
             .map_err(|e| format!("spawn {} {}: {e}", node.display(), entry.display()))?;
         let stdin = child.stdin.take().ok_or("no stdin")?;

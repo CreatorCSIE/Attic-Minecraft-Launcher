@@ -163,7 +163,11 @@ function createWindow(): void {
   win.webContents.on('console-message', (_e, _level, msg, _line, src) => {
     console.log(`[renderer] ${msg} (${src})`);
   });
-  win.webContents.openDevTools({ mode: 'detach' });
+  // DevTools 仅开发态（产线真机实测教训：无条件开 = 安装版弹出调试窗）。
+  // 兜底壳（electron-legacy）复用本源码，同修同生效。
+  if (!app.isPackaged) {
+    win.webContents.openDevTools({ mode: 'detach' });
+  }
 
   const devUrl = resolveDevUrl();
   if (devUrl) {

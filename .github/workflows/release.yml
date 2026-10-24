@@ -90,6 +90,27 @@ jobs:
           cp ${{ matrix.exe }} stage/
           mkdir -p stage/sidecar
           cp apps/tauri/sidecar/dist/server.cjs stage/sidecar/
+      # 拍板① sidecar 随行 node.exe（p4 首件）：x64 腿复制 runner node（x64 v22 ≥20 ✓）；
+      # arm64 腿 runner node 是 x64 不可入包 → 官方 win-arm64 单文件，版本钉 + SHASUMS256
+      # 运行时对账（哈希不硬编码）。落 stage 即随 [Files] 递归入 Inno 包（iss 零改动）；
+      # lib.rs resolve_sidecar_launch 已认 exe 旁 node.exe（零代码改动）。
+      - name: Stage sidecar node.exe
+        shell: pwsh
+        run: |
+          if ('${{ matrix.arch }}' -eq 'x64') {
+            Copy-Item (Get-Command node).Source stage\node.exe
+          } else {
+            $nv = 'v22.14.0'
+            $zip = "node-$nv-win-arm64.zip"
+            Invoke-WebRequest "https://nodejs.org/dist/$nv/$zip" -OutFile "$env:RUNNER_TEMP\$zip"
+            $sums = (Invoke-WebRequest "https://nodejs.org/dist/$nv/SHASUMS256.txt").Content
+            $want = (($sums -split "`n" | Where-Object { $_ -match [regex]::Escape($zip) } | Select-Object -First 1) -split '\s+')[0]
+            $got = (Get-FileHash "$env:RUNNER_TEMP\$zip" -Algorithm SHA256).Hash.ToLower()
+            if ($got -ne $want) { throw "node zip sha256 mismatch: got=$got want=$want" }
+            Expand-Archive "$env:RUNNER_TEMP\$zip" -DestinationPath "$env:RUNNER_TEMP\node-arm64"
+            Copy-Item "$env:RUNNER_TEMP\node-arm64\node-$nv-win-arm64\node.exe" stage\node.exe
+          }
+          Get-Item stage\node.exe | Select-Object Name, Length
       # 安装器本体 32-bit（ISCC 唯一形态），两架构 runner 都能直接跑；ARCH 标签只决定
       # 64-mode 与 IsWin64 闸门：x64 腿带闸门，arm64 腿不带（arm64/x64 主机皆放行，
       # 载荷本身即 arm64 原生）
