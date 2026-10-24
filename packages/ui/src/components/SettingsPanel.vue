@@ -100,10 +100,11 @@ async function chooseLanguage(code: string): Promise<void> {
 // —— 主题栏 ——
 const themes = ['dark', 'light', 'system'] as const;
 
-// —— 反馈弹屏（两条都指 Issues，模板区分；用户拍板） ——
+// —— 反馈弹屏（功能建议 → Discussions 的 ideas 分区；Bug → Issues 空白新建页。
+// 两侧均不钉模板：仓库无 ISSUE_TEMPLATE/，勿再往 URL 里加 ?template=） ——
 const feedbackOpen = ref(false);
-const FEATURE_URL = 'https://github.com/CreatorCSIE/Attic-Minecraft-Launcher/issues/new?template=feature-request';
-const BUG_URL = 'https://github.com/CreatorCSIE/Attic-Minecraft-Launcher/issues/new?template=bug-report';
+const FEATURE_URL = 'https://github.com/CreatorCSIE/Attic-Minecraft-Launcher/discussions/new?category=ideas';
+const BUG_URL = 'https://github.com/CreatorCSIE/Attic-Minecraft-Launcher/issues/new';
 
 function feedback(url: string): void {
   feedbackOpen.value = false;

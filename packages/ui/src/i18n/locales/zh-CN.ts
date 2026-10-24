@@ -399,11 +399,11 @@ export const zhCN: Record<string, unknown> = {
     },
     feedback: {
       title: '建议与反馈',
-      subtitle: '通过 GitHub Issues 提交，请先选择类型。',
+      subtitle: '通过 GitHub 提交，请先选择类型。',
       feature: '新功能建议',
-      featureDesc: '对启动器功能的想法与改进建议（feature-request 模板）。',
+      featureDesc: '功能想法与改进建议，在 GitHub Discussions 发起讨论。',
       bug: 'Bug 反馈',
-      bugDesc: '报告启动、下载或兼容性问题（bug-report 模板）。',
+      bugDesc: '报告启动、下载或兼容性问题。',
     },
   },
 };

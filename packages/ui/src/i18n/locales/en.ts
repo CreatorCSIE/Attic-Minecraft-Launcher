@@ -409,11 +409,11 @@ export const en = {
     },
     feedback: {
       title: 'Suggestions & Feedback',
-      subtitle: 'Submit via GitHub Issues — pick a type first.',
+      subtitle: 'Submit via GitHub — pick a type first.',
       feature: 'Feature suggestion',
-      featureDesc: 'Ideas and improvements for the launcher (feature-request template).',
+      featureDesc: 'Ideas and improvements — start a thread in GitHub Discussions.',
       bug: 'Bug report',
-      bugDesc: 'Report launch, download or compatibility problems (bug-report template).',
+      bugDesc: 'Report launch, download or compatibility problems.',
     },
   },
 } as const;

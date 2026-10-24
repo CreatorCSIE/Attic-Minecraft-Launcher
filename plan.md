@@ -145,13 +145,13 @@
 - [x] **侧栏左下角头像点击 → 跳转本分区**：useSettingsNav 模块级 `goSection`（App.vue 直 import）+ activeSection 模块级持久，点头像 view='settings' + 关于栏立现
 
 **建议和反馈栏**（必须完整移植）
-- [x] 分区列表末项，点击弹 AppDialog 不切页：「新功能建议」→ `issues/new?template=feature-request` /「Bug 反馈」→ `issues/new?template=bug-report` / 底部取消——纯外链大按钮行（lightbulb/bug 图标），零表单零 API（待决策 #4 已拍板：仓库未开 Discussions，两条均指 Issues 模板区分）
+- [x] 分区列表末项，点击弹 AppDialog 不切页：「新功能建议」→ `issues/new?template=feature-request` /「Bug 反馈」→ `issues/new?template=bug-report` / 底部取消——纯外链大按钮行（lightbulb/bug 图标），零表单零 API（待决策 #4 已拍板：仓库未开 Discussions，两条均指 Issues 模板区分）〔URL 现况见待决策 #4 的 2026-10-25 改口径注记：功能建议走 Discussions 的 ideas 分区、Bug 走空白 Issues 新建页，两侧不钉模板〕
 
 **待决策（已全部拍板 2026-10-20，随落实定稿）**
 1. 语言：**热切换** ✅ 已落地（settings.language 单一真相，localStorage 仅 bootstrap）
 2. 数据根：**单根+更换/打开** ✅ 已落地（rootOverride + pendingRoot 重启提示）
 3. endpoints + username 去向：**新建「开发者设置」栏** ✅ 已落地（发行时再评估可见性）
-4. 反馈链接：**两条均指 GitHub Issues**，template=feature-request / bug-report 区分 ✅ 已落地
+4. 反馈链接：〔原拍板（2026-10-20）= 两条均指 Issues 以 template 区分；**2026-10-25 改口径** = Discussions 已开，「新功能建议」→ `discussions/new?category=ideas`、「Bug 反馈」→ `issues/new`。两侧均**不钉模板**：仓库无 `ISSUE_TEMPLATE/`，历史 URL 里的 `?template=` 一直是悬空指向（点下去 404 或回落空白表单），故一并去掉〕 ✅ 已落地
 
 ### Mods repository 与四功能调研（v1/legacyfix 源码核对 + 端点实测 2026-10-19，待落实）
 
