@@ -8,7 +8,15 @@ node_modules/
 
 # --- build outputs ---
 dist/
+# build/ 整体 ignore 曾把 electron-builder buildResources 的品牌图标吞掉（CI 静默回退
+# 默认 Electron 图标，2026-10-24 真机教训）——白名单制：目录仍整体忽略，仅放行 icon.ico。
 build/
+!apps/electron/build/
+!apps/electron-legacy/build/
+apps/electron/build/*
+apps/electron-legacy/build/*
+!apps/electron/build/icon.ico
+!apps/electron-legacy/build/icon.ico
 out/
 target/
 

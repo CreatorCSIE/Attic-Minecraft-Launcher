@@ -166,6 +166,8 @@ jobs:
         run: winget install --id JRSoftware.InnoSetup --exact --version 6.7.3 --silent --accept-package-agreements --accept-source-agreements
       - name: Build bundles
         run: pnpm -r build
+      - name: Guard brand icon (缺则 fail，禁静默回退默认 Electron 图标)
+        run: test -f apps/electron/build/icon.ico
       - name: electron-builder (--dir x64)
         run: pnpm --filter @attic/electron run dist
       # flavor="electron" 表在 attic.iss（AppId uk.attic.launcher.electron，与主壳
@@ -303,6 +305,8 @@ jobs:
         run: winget install --id JRSoftware.InnoSetup --exact --version 6.7.3 --silent --accept-package-agreements --accept-source-agreements
       - name: Build bundles
         run: pnpm -r build
+      - name: Guard brand icon (缺则 fail，禁静默回退默认 Electron 图标)
+        run: test -f apps/electron-legacy/build/icon.ico
       - name: electron-builder (--dir × x64+ia32)
         run: pnpm --filter @attic/electron-legacy run dist
       # 两架构目录构件各出一只 Inno 安装器（均为 32-bit 安装器本体，ia32 载荷覆盖
