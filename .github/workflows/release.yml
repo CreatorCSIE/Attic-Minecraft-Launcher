@@ -94,17 +94,20 @@ jobs:
       # 64-mode 与 IsWin64 闸门：x64 腿带闸门，arm64 腿不带（arm64/x64 主机皆放行，
       # 载荷本身即 arm64 原生）
       - name: ISCC (main flavor)
-        shell: bash
+        shell: pwsh
         # 戒律（attic.iss 头注）：Inno 文件类路径相对基准 = .iss 目录而非 cwd，
-        # PAYLOAD 必须 $PWD 绝对化；OUTDIR 不传 = 缺省 "dist" 落 installer/dist；
+        # PAYLOAD 必须绝对化（pwsh 下 $PWD 即 Windows 形）；OUTDIR 不传 = 缺省 "dist" 落 installer/dist；
         # 安装器图标两壳皆 Inno 缺省（用户终拍，不传 SetupIconFile）。
+        # CI 首跑教训（2026-10）：bash 腿 = Git Bash，MSYS 会把 `/DATTIC_*=...` 当 POSIX 路径
+        # 重写成 C:/Program Files/Git/DATTIC_*=... → ISCC 见多个"脚本文件名" exit 2；改 pwsh 根除。
         # 版本两形态：tag 用去 v 的 tag 名；非 tag（测试形态）钉 0.0.0（版本号未收口）。
         run: |
-          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then ver="${GITHUB_REF_NAME#v}"; else ver="0.0.0"; fi
-          '/c/Program Files (x86)/Inno Setup 6/ISCC.exe' \
-            /DATTIC_FLAVOR="tauri" /DATTIC_PAYLOAD="$PWD/stage" \
-            /DATTIC_VERSION="$ver" /DATTIC_ARCH="${{ matrix.arch }}" \
-            installer/attic.iss
+          if ($env:GITHUB_REF_TYPE -eq 'tag') { $ver = $env:GITHUB_REF_NAME.TrimStart('v') } else { $ver = '0.0.0' }
+          & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' `
+            "/DATTIC_FLAVOR=tauri" "/DATTIC_PAYLOAD=$PWD\stage" `
+            "/DATTIC_VERSION=$ver" "/DATTIC_ARCH=${{ matrix.arch }}" `
+            'installer\attic.iss'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       # 测试形态（无 Secrets）跳过签名——正式发版形态该步必有钥
       - name: Sign updater artifact
         if: env.TAURI_SIGNING_PRIVATE_KEY != ''
@@ -147,13 +150,15 @@ jobs:
       # flavor="electron" 表在 attic.iss（AppId uk.attic.launcher.electron，与主壳
       # 分离可同机共存）；载荷路径相对基准 = .iss 目录 → $PWD 绝对化戒律同主壳
       - name: ISCC (electron x64)
-        shell: bash
+        shell: pwsh
+        # pwsh 戒律同主壳（Git Bash MSYS 会重写 /D 参数）；载荷路径绝对化
         run: |
-          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then ver="${GITHUB_REF_NAME#v}"; else ver="0.0.0"; fi
-          '/c/Program Files (x86)/Inno Setup 6/ISCC.exe' \
-            /DATTIC_FLAVOR="electron" /DATTIC_PAYLOAD="$PWD/apps/electron/release/win-unpacked" \
-            /DATTIC_VERSION="$ver" /DATTIC_ARCH="x64" \
-            installer/attic.iss
+          if ($env:GITHUB_REF_TYPE -eq 'tag') { $ver = $env:GITHUB_REF_NAME.TrimStart('v') } else { $ver = '0.0.0' }
+          & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' `
+            "/DATTIC_FLAVOR=electron" "/DATTIC_PAYLOAD=$PWD\apps\electron\release\win-unpacked" `
+            "/DATTIC_VERSION=$ver" "/DATTIC_ARCH=x64" `
+            'installer\attic.iss'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -282,13 +287,18 @@ jobs:
       # 两架构目录构件各出一只 Inno 安装器（均为 32-bit 安装器本体，ia32 载荷覆盖
       # 32-bit Win7 主机；x64 载荷带 IsWin64 闸门）——一次构建两腿，循环即可不必 matrix
       - name: ISCC (legacy x64 + ia32)
-        shell: bash
+        shell: pwsh
+        # pwsh 戒律同主壳（Git Bash MSYS 会重写 /D 参数）；两架构目录构件各出一只 Inno 安装器
         run: |
-          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then ver="${GITHUB_REF_NAME#v}"; else ver="0.0.0"; fi
-          for pair in "x64:win-unpacked" "ia32:win-ia32-unpacked"; do
-            arch="${pair%%:*}"; dir="${pair#*:}"
-            '/c/Program Files (x86)/Inno Setup 6/ISCC.exe' /DATTIC_FLAVOR="legacy" /DATTIC_PAYLOAD="$PWD/apps/electron-legacy/release/$dir" /DATTIC_VERSION="$ver" /DATTIC_ARCH="$arch" installer/attic.iss
-          done
+          if ($env:GITHUB_REF_TYPE -eq 'tag') { $ver = $env:GITHUB_REF_NAME.TrimStart('v') } else { $ver = '0.0.0' }
+          foreach ($pair in @('x64|win-unpacked', 'ia32|win-ia32-unpacked')) {
+            $arch, $dir = $pair -split '\|'
+            & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' `
+              "/DATTIC_FLAVOR=legacy" "/DATTIC_PAYLOAD=$PWD\apps\electron-legacy\release\$dir" `
+              "/DATTIC_VERSION=$ver" "/DATTIC_ARCH=$arch" `
+              'installer\attic.iss'
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
