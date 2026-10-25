@@ -298,9 +298,12 @@ jobs:
       - name: Sign updater artifact
         if: env.TAURI_SIGNING_PRIVATE_KEY != ''
         shell: bash
+        # CI 首签教训（v0.0.1 试跑）：pnpm --filter exec 的 cwd = 包目录 apps/tauri，
+        # 相对路径 installer/dist 从仓库根起算 → os error 3。构件路径必须绝对化。
+        # --app-version：签名绑定版本（updater 配 requireSignedVersion 后无版本签名会被拒）。
         run: |
           ver="${ATTIC_VERSION}"
-          pnpm --filter @attic/tauri exec tauri signer sign "installer/dist/amcl-tauri-windows-${{ matrix.arch }}-${ver}-setup.exe"
+          pnpm --filter @attic/tauri exec tauri signer sign --app-version "$ver" "$GITHUB_WORKSPACE/installer/dist/amcl-tauri-windows-${{ matrix.arch }}-${ver}-setup.exe"
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
