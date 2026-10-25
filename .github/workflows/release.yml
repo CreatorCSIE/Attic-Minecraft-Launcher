@@ -623,12 +623,14 @@ jobs:
             echo "::error::workflow_call 语境 tag ${TAG} 不存在——拒绝在 HEAD 现场建 tag 发布（防污染 releases/latest）；试装演练请先 git tag ${TAG} && git push origin ${TAG}"
             exit 1
           fi
+      # 源码 checkout：人写稿 release-notes/<tag>.md 的读取面（无它 = 占位逻辑，不报错）
+      - uses: actions/checkout@v4
       - name: 下载全部构件
         uses: actions/download-artifact@v4
         with:
           pattern: 'amcl-*'
           path: dist
-      - name: 创建 Release（notes = 占位/试装声明 + 构件清单）
+      - name: 创建 Release（notes = 人写稿/占位 + 试装声明 + 构件清单）
         shell: bash
         run: |
           set -euo pipefail
@@ -636,11 +638,17 @@ jobs:
           if [[ "${#files[@]}" -eq 0 ]]; then echo "::error::无任何 amcl-* 构件可挂"; exit 1; fi
           url_base="https://github.com/${REPO}/releases/download/${TAG}"
           : > notes.md
-          if [[ "$STABLE" == "true" ]]; then
+          # 首发特例（plan「Changelog 供给设计」）：release-notes/<tag>.md 在场 = 人写稿顶替占位段
+          # （v0.0.1 = 能力概览；stable 详细稿覆写也走此面）。按 tag 取文件 = 不会被下个版本误复用。
+          if [[ -f "release-notes/${TAG}.md" ]]; then
+            cat "release-notes/${TAG}.md" >> notes.md
+            echo '' >> notes.md
+          elif [[ "$STABLE" == "true" ]]; then
             echo '## 更新说明（占位）' >> notes.md
             echo '> stable 发布说明 = Trae agent 按 tag 区间 git log 归纳 + 人审 Publish（plan「发布说明（Changelog）供给设计」条）。' >> notes.md
             echo '> CI 只建 draft 占坑——本段由详细稿覆写后再 Publish。' >> notes.md
-          else
+          fi
+          if [[ "$STABLE" != "true" ]]; then
             echo '> 试装构件（prerelease 轨：semver < 0.1.0 ∨ 含预发布标识）——不进 updater latest.json 通道（plan「更新通道设计」版本轨语义条）。' >> notes.md
           fi
           echo '' >> notes.md
