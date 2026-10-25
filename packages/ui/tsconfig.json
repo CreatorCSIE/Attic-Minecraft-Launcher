@@ -5,7 +5,11 @@
     "moduleResolution": "Bundler",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "types": ["vite/client"],
-    "noEmit": true
+    "noEmit": true,
+    "paths": {
+      "@attic/runtime/markdown": ["../runtime/src/markdown.ts"],
+      "@attic/runtime/updatePolicy": ["../runtime/src/updatePolicy.ts"]
+    }
   },
   "include": ["src"]
 }

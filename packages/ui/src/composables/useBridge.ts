@@ -28,7 +28,7 @@ import type {
   UpdateCheckResult,
   VersionJson,
 } from '@attic/core-spec';
-import { demoInstances, demoJavaInstall, demoJavaReport, demoModCategories, demoSettings, demoSysInfo, demoSysInfoPortable, demoUpdateCheck, demoVersions, isDemo, isDemoPortable } from '../dev/demo';
+import { demoInstances, demoJavaInstall, demoJavaReport, demoModCategories, demoSettings, demoSysInfo, demoSysInfoPortable, demoUpdateCheck, demoVersions, isDemo, isDemoPortable, isDemoUpdate } from '../dev/demo';
 import { buildTauriBridge } from '../bridge/tauri';
 
 const NO_BRIDGE = 'no-bridge';
@@ -139,8 +139,12 @@ function demoBridge(): RendererBridge {
     detectJava: async () => ok<JavaDetectionReport>(demoJavaReport),
     // 假宿主快照：让设置页通用/内存/关于栏在浏览器里排出真稿（动作类仍走 mock err）。
     getSystemInfo: async () => ok<SystemInfo>(isDemoPortable() ? demoSysInfoPortable : demoSysInfo),
-    // 假检查更新：关于页「有新版」弹窗与红点徽标可演练（固定回包，无网络语义）。
-    checkUpdate: async () => ok<UpdateCheckResult>(demoUpdateCheck),
+    // 假检查更新：?demo=1&update=1 才回假 update 包（三钮弹窗/忽略账演练面），
+    // 日常 demo 回 upToDate——自动检查链不被弹窗打扰（手动按钮仍可排四分支）。
+    checkUpdate: async () =>
+      ok<UpdateCheckResult>(
+        isDemoUpdate() ? demoUpdateCheck : { status: 'upToDate', current: demoSysInfo.launcherVersion },
+      ),
     // 首启向导演练面：建号/目录选择器/Java 选择器给假值可走通三步。
     addAccount: async (name: string) => ok<AccountView>({ id: `demo-${name.toLowerCase()}`, name, type: 'offline' }),
     // demo 假安装目录：演练护栏口径——rootOverride 落进它内即拒绝（文案与 runtime 护栏一致；

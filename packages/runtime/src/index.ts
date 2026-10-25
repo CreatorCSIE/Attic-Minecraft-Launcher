@@ -158,6 +158,8 @@ export {
 } from './mods';
 export { AtticRuntime, maskSecrets, type AtticRuntimeOptions } from './runtime';
 export { compareSemver, checkLatestRelease, type UpdateCheckDeps } from './updateCheck';
+export { shouldPromptUpdate } from './updatePolicy';
+export { renderMarkdown } from './markdown';
 
 // 契约面透传：壳层只 import 本包即可拿到全部通道常量与类型。
 export {

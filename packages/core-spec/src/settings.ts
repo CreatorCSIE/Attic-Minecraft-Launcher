@@ -12,6 +12,12 @@ export type ThemeMode = 'dark' | 'light' | 'system';
 export type MemoryMode = 'auto' | 'manual';
 
 /**
+ * 更新自动检查策略（缺省 `startup`）：`startup` = 启动时自动检查一次；`off` = 从不自动检查。
+ * 只约束自动检查链——关于页手动「检查更新」按钮两策略下恒可用。
+ */
+export type UpdatePolicy = 'startup' | 'off';
+
+/**
  * 端点覆盖（风险 #1）：全部为可 IPC 序列化的纯字符串。
  * 函数形态的 `versionJson(id)`/`assetIndex(id)` 由 `filesBase` 在 runtime 侧派生，
  * 契约层不携带可调用形状（跨进程不可序列化）。
@@ -100,6 +106,16 @@ export interface AppSettings {
    * 有值时对话框永不弹，且覆盖游戏目录里陈旧的 `legacyfix/level-server.txt`（属性优先于文件）。
    */
   levelServer?: string;
+  /**
+   * 更新自动检查策略；缺省 `startup`（缺键 = 消费端 `?? 'startup'`）。
+   * 只约束自动检查（启动时一次，无轮询）；手动「检查更新」不受此键约束恒可用。
+   */
+  updatePolicy?: UpdatePolicy;
+  /**
+   * 「忽略此版本」单槽账：自动检查命中 `update` 且版本等于本值 → 不弹窗、不打红点（全静默）。
+   * 手动检查无视此账恒显结果。缺省 undefined = 无忽略。
+   */
+  updateIgnoreVersion?: string;
   /** 端点覆盖；改动在下次启动应用后生效（端点属构造级配置）。 */
   endpoints?: EndpointOverrides;
 }

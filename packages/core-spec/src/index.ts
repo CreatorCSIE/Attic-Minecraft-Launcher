@@ -62,5 +62,6 @@ export type {
   InstanceView,
   MemoryMode,
   ThemeMode,
+  UpdatePolicy,
 } from './settings';
 export { INSTANCE_ADDONS, DEFAULT_ADDONS } from './settings';

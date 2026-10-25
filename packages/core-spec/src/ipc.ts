@@ -146,8 +146,9 @@ export interface SystemInfo {
 
 /**
  * 检查更新结果（判别联合；全部分支以数据返回、不抛异常——UI 弹窗可见呈现）。
- * 数据源 = GitHub Releases API `/releases/latest`（天然排除 draft/prerelease）；
- * 预发布纪律：自身或 latest 含 `-`（预发布/构建后缀）→ 永不提示，归入 upToDate。
+ * 数据源按轨分流：stable 构件 = GitHub Releases API `/releases/latest`（天然排除 draft/prerelease）；
+ * nightly 构件（含 `-nightly.`）= `/releases` 列表轨中匹配（只认同轨 prerelease，跨 base 允许不混 stable）；
+ * 其余预发布构件（0.0.x、-rc 等）→ 永不提示，归入 upToDate。
  */
 export type UpdateCheckResult =
   | {

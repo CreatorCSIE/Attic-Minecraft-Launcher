@@ -104,6 +104,13 @@ jobs:
             if [[ "$verdict" == "stable" ]]; then mode="draft"; else mode="auto"; fi
           elif [[ "$event" == "workflow_call" ]]; then
             mode="${{ inputs.release_mode }}"
+            # stable ∧ auto 互斥（通道污染防线①）：stable 直发必须走 draft 占坑 + 人审 Publish——
+            # 调用方递 stable 版本号 + auto 想绕审直发 = 强制降 draft，防 HEAD 构件发布即成
+            # releases/latest、全体 stable 用户被提示升向未经审的构件。
+            if [[ "$verdict" == "stable" && "$mode" == "auto" ]]; then
+              echo "::warning::workflow_call 语境 stable 版本拒绝 auto 直发，已强制降为 draft（人审 Publish 纪律）"
+              mode="draft"
+            fi
           else
             mode="none"
           fi
@@ -603,6 +610,19 @@ jobs:
       REPO: ${{ github.repository }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
+      # 通道污染防线②：workflow_call 语境的 tag = 由 version 输入合成——`gh release create` 对
+      # 不存在的 tag 会在 HEAD 现场建 tag 并发布。若调用方手滑递了个高于现行 stable 的版本号，
+      # 发布即抢占 releases/latest → 全体用户被提示升向假版本。故强制：tag 必须已真实存在
+      # （正常 tag push 语境天然成立；dispatch 试装演练须先自行打 tag）。
+      - name: workflow_call tag 在场守卫
+        if: github.event_name == 'workflow_call'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! gh api "repos/${REPO}/git/ref/tags/${TAG}" --silent; then
+            echo "::error::workflow_call 语境 tag ${TAG} 不存在——拒绝在 HEAD 现场建 tag 发布（防污染 releases/latest）；试装演练请先 git tag ${TAG} && git push origin ${TAG}"
+            exit 1
+          fi
       - name: 下载全部构件
         uses: actions/download-artifact@v4
         with:

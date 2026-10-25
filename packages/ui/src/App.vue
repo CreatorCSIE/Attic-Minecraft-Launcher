@@ -20,6 +20,7 @@ import CustomVersionsPanel from './components/CustomVersionsPanel.vue';
 import ModsPanel from './components/ModsPanel.vue';
 import SettingsPanel from './components/SettingsPanel.vue';
 import ExternalLinkErrorDialog from './components/ExternalLinkErrorDialog.vue';
+import UpdateDialog from './components/UpdateDialog.vue';
 import WelcomeWizard from './components/WelcomeWizard.vue';
 import { goSection } from './composables/useSettingsNav';
 import { useUpdateCheck } from './composables/useUpdateCheck';
@@ -105,8 +106,9 @@ async function loadCreatorAvatar(): Promise<void> {
   }
 }
 
-// 检查更新链（启动静默一次 + 24h 周期）：只挂主页，控制台窗不重复发请求；
-// 自动结果不打扰——有新版仅点亮设置页关于栏红点（useUpdateCheck 模块级单例共享）。
+// 检查更新链（策略门控：startup = 启动自动查一次，off = 从不自动查；24h 轮询已删）：
+// 只挂主页，控制台窗不重复发请求；自动结果过打扰门才打扰（弹窗+关于栏红点，
+// useUpdateCheck 模块级单例共享，UpdateDialog 全局挂本层——关于页外也要能弹）。
 const updateCheck = useUpdateCheck();
 
 onMounted(() => {
@@ -333,6 +335,9 @@ onMounted(() => {
 
     <!-- 外链打开失败全局弹窗（useExternalLink 单例状态；Mods 页与关于页共用） -->
     <ExternalLinkErrorDialog />
+
+    <!-- 更新结果全局弹窗（useUpdateCheck 单例弹窗状态；自动=打扰门裁决后弹，手动=恒弹） -->
+    <UpdateDialog />
 
     <!-- 首启欢迎向导（三重门自判定，见组件头注；控制台窗不挂=主页 v-else 分支内） -->
     <WelcomeWizard />

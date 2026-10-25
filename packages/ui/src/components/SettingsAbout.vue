@@ -1,51 +1,32 @@
 <script setup lang="ts">
 /**
  * 设置页 · 关于栏 —— 格式照搬 BlockHelm InfoSettingsView（用户定稿）：
- * 头区（名称 + v版本号 + GitHub/检查更新按钮）→ 启动器更新（通道占位）→
+ * 头区（名称 + v版本号 + GitHub/检查更新按钮）→ 启动器更新（策略单选组 + 通道占位）→
  * 版权及法律声明（版权/开源协议/用户协议三行）→ 引用的项目列表。
  * 许可证均经实查不虚构：上游四项目 LICENSE 逐字为 GPL-3.0，Vue/Electron=MIT，Lucide=ISC。
  * 外链走 openExternalUrl（宿主白名单校验；浏览器 mock 直放 window.open，demo 可用）；
  * 打开失败（无默认浏览器等）经 useExternalLink 全局弹窗显式报错，不再静默。
+ * 检查更新（2026-10-25「更新 UI」定稿）：手动按钮走 checkManually（无视策略与忽略账恒显弹窗），
+ * 结果弹窗全局挂 App 层（UpdateDialog），本页只留红点徽标与策略选择。
  */
-import { ref } from 'vue';
-import type { UpdateCheckResult } from '@attic/core-spec';
 import { useI18n } from '../i18n';
+import type { UpdatePolicy } from '@attic/core-spec';
 import { useExternalLink } from '../composables/useExternalLink';
+import { useSettings } from '../composables/useSettings';
 import { useSysInfo } from '../composables/useSysInfo';
 import { useUpdateCheck } from '../composables/useUpdateCheck';
 import { isDemo } from '../dev/demo';
-import AppDialog from './AppDialog.vue';
 import AppSelect from './AppSelect.vue';
 import appIcon from '../assets/app-icon.png';
 
 const { t } = useI18n();
 const { openExternal } = useExternalLink();
 const { info } = useSysInfo();
-const { busy: checkingBusy, hasUpdate, check: runCheck } = useUpdateCheck();
+const { settings, patch } = useSettings();
+const { busy: checkingBusy, hasUpdate, checkManually } = useUpdateCheck();
 
-// —— 检查更新弹窗（AppDialog 壳，ConfirmDialog 同款三段式；四分支全可见呈现）——
-const dialogOpen = ref(false);
-const dialogResult = ref<UpdateCheckResult | null>(null);
-
-/** 发布说明纯文本截断（GitHub body 是 markdown，弹窗不渲染；超长截尾防弹窗被淹没）。 */
-const NOTES_LIMIT = 600;
-function displayNotes(notes: string): string {
-  const trimmed = notes.trim();
-  return trimmed.length > NOTES_LIMIT ? `${trimmed.slice(0, NOTES_LIMIT)}…` : trimmed;
-}
-
-async function onCheckUpdate(): Promise<void> {
-  const res = await runCheck();
-  if (!res) return; // 在途重入：不弹第二发
-  dialogResult.value = res;
-  dialogOpen.value = true;
-}
-
-/** 打开发布页：走 openExternal 通道（宿主白名单校验），失败经 useExternalLink 全局弹窗报错。 */
-function openReleasePage(url: string): void {
-  openExternal(url);
-  dialogOpen.value = false;
-}
+/** 更新策略枚举（与 core-spec UpdatePolicy 同序；即选即存，缺省 startup 由消费端 ?? 兜底）。 */
+const policies: readonly UpdatePolicy[] = ['startup', 'off'];
 
 const REPO_URL = 'https://github.com/CreatorCSIE/Attic-Minecraft-Launcher';
 const LICENSE_URL = `${REPO_URL}/blob/HEAD/LICENSE`;
@@ -96,17 +77,34 @@ function openUrl(url: string): void {
       </div>
       <div class="head-actions">
         <button class="mini" @click="openUrl(REPO_URL)">{{ t('settings.about.ghRepo') }}</button>
-        <!-- 检查更新：手动触发 + 结果弹窗（启动静默检查的红点徽标由 useUpdateCheck 共享） -->
-        <button class="mini" :disabled="checkingBusy" @click="onCheckUpdate">
+        <!-- 检查更新：手动触发（无视策略与忽略账恒显弹窗，UpdateDialog 全局挂载呈现） -->
+        <button class="mini" :disabled="checkingBusy" @click="void checkManually()">
           {{ checkingBusy ? t('settings.about.checking') : t('settings.about.checkUpdate') }}
           <span v-if="hasUpdate" class="update-dot">{{ t('settings.about.newBadge') }}</span>
         </button>
       </div>
     </div>
 
-    <!-- 启动器更新（未来更新系统的挂载点，现占位） -->
+    <!-- 启动器更新：策略单选组（即选即存）+ 更新通道占位（未来更新系统挂载点） -->
     <div class="card">
       <h4 class="group-title">{{ t('settings.about.updateSection') }}</h4>
+      <div class="row">
+        <div class="row-info">
+          <span class="row-name">{{ t('settings.about.updatePolicy.label') }}</span>
+          <p class="row-desc">{{ t('settings.about.updatePolicy.desc') }}</p>
+        </div>
+        <div class="segmented" role="group" :aria-label="t('settings.about.updatePolicy.label')">
+          <button
+            v-for="p in policies"
+            :key="p"
+            class="seg"
+            :class="{ 'seg--active': (settings.updatePolicy ?? 'startup') === p }"
+            @click="void patch({ updatePolicy: p })"
+          >
+            {{ t(`settings.about.updatePolicy.${p}`) }}
+          </button>
+        </div>
+      </div>
       <div class="row">
         <div class="row-info">
           <span class="row-name">{{ t('settings.about.updateChannel') }}</span>
@@ -166,44 +164,6 @@ function openUrl(url: string): void {
         <button class="mini" @click="openUrl(p.url)">{{ t('settings.about.view') }}</button>
       </div>
     </div>
-
-    <!-- 检查更新结果弹窗：update/upToDate/unconfigured/error 四分支全可见呈现（不静默） -->
-    <AppDialog :open="dialogOpen" @close="dialogOpen = false">
-      <header class="upd-head">
-        <h2 class="upd-title">{{ t('settings.about.updateDialog.title') }}</h2>
-        <template v-if="dialogResult">
-          <p v-if="dialogResult.status === 'upToDate'" class="upd-body">
-            {{ t('settings.about.updateDialog.upToDate', { version: dialogResult.current }) }}
-          </p>
-          <template v-else-if="dialogResult.status === 'update'">
-            <p class="upd-body">{{ t('settings.about.updateDialog.found', { version: dialogResult.version }) }}</p>
-            <p v-if="dialogResult.publishedAt" class="upd-date">
-              {{ t('settings.about.updateDialog.published', { date: dialogResult.publishedAt.slice(0, 10) }) }}
-            </p>
-            <pre v-if="dialogResult.notes" class="upd-notes">{{ displayNotes(dialogResult.notes) }}</pre>
-          </template>
-          <p v-else-if="dialogResult.status === 'unconfigured'" class="upd-body">
-            {{ t('settings.about.updateDialog.unconfigured') }}
-          </p>
-          <p v-else class="upd-body upd-failed">
-            {{ t('settings.about.updateDialog.failed', { message: dialogResult.message }) }}
-          </p>
-        </template>
-      </header>
-      <footer class="upd-foot">
-        <button class="ghost" type="button" @click="dialogOpen = false">
-          {{ t('settings.about.updateDialog.close') }}
-        </button>
-        <button
-          v-if="dialogResult && dialogResult.status === 'update' && dialogResult.url"
-          class="primary"
-          type="button"
-          @click="openReleasePage(dialogResult.url)"
-        >
-          {{ t('settings.about.updateDialog.openReleases') }}
-        </button>
-      </footer>
-    </AppDialog>
   </section>
 </template>
 
@@ -329,84 +289,32 @@ function openUrl(url: string): void {
   border: 1px solid var(--danger);
   border-radius: var(--radius-pill);
 }
-/* —— 检查更新弹窗（ConfirmDialog 三段式同构，四分支共用） —— */
-.upd-head {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-.upd-title {
-  margin: 0;
-  font-size: var(--fs-xl);
-  font-weight: 700;
-  color: var(--text-primary);
-}
-.upd-body {
-  margin: 0;
-  font-size: var(--fs-md);
-  color: var(--text-secondary);
-  overflow-wrap: anywhere;
-}
-.upd-failed {
-  color: var(--danger);
-}
-.upd-date {
-  margin: 0;
-  font-size: var(--fs-xs);
-  color: var(--text-muted);
-}
-/* 发布说明：纯文本 pre（markdown 不渲染，截断在脚本侧），超高内滚 */
-.upd-notes {
-  margin: 0;
-  padding: var(--space-3);
-  max-height: 220px;
-  overflow-y: auto;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  font-family: var(--font-mono);
-  font-size: var(--fs-xs);
-  line-height: 1.6;
-  color: var(--text-secondary);
+/* 更新策略分段单选器（SettingsPanel 主题模式选择器同款样式，弹窗已迁出本页） */
+.segmented {
+  display: inline-flex;
+  gap: var(--space-1);
+  padding: var(--space-1);
   background: var(--surface-1);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-}
-.upd-foot {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  gap: var(--space-3);
-}
-.ghost {
-  padding: var(--space-2) var(--space-5);
-  background: var(--surface-3);
-  border: 1px solid var(--card-border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--inset-bottom);
-  color: var(--text-primary);
-  cursor: pointer;
-  transition: background var(--dur-fast) var(--ease-out);
-}
-.ghost:hover {
-  background: var(--surface-4);
-}
-.primary {
-  padding: var(--space-2) var(--space-5);
-  background: var(--accent);
-  color: var(--accent-ink);
   border: none;
   border-radius: var(--radius-md);
-  font-weight: 600;
+  box-shadow: var(--input-inset);
+  width: fit-content;
+}
+.seg {
+  padding: var(--space-2) var(--space-4);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
   cursor: pointer;
-  transition:
-    filter var(--dur-fast) var(--ease-out),
-    transform var(--dur-fast) var(--ease-out);
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
 }
-.primary:hover {
-  filter: brightness(1.12);
+.seg:hover {
+  background: var(--surface-3);
 }
-.primary:active {
-  transform: scale(0.97);
+.seg--active {
+  background: var(--surface-4);
+  color: var(--text-primary);
 }
 .mini {
   flex: 0 0 auto;

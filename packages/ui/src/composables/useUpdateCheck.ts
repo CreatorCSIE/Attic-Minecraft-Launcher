@@ -1,29 +1,34 @@
 /**
  * useUpdateCheck —— 检查更新共享状态（UPDATE_CHECK 通道唯一消费点，模块级单例）。
- * 启动一次性静默检查 + 24h 周期轮询（App.vue onMounted 挂载，控制台窗不挂）；
- * 自动结果不打扰用户——有新版只点亮关于页按钮红点徽标，弹窗由手动检查驱动。
+ * 策略语义（settings.updatePolicy，缺省 startup）：startup = 启动时自动检查一次；off = 从不自动检查。
+ * 24h 轮询已删（2026-10-25「更新 UI」设计定稿）——策略语义即「启动时一次」，跨会话靠下次启动。
+ * 自动结果打扰门 = shouldPromptUpdate（runtime updatePolicy.ts 纯函数，测试覆盖）：
+ * update ∧ 版本≠忽略账 → 弹更新弹窗 + 红点；命中忽略账 → 全静默（不弹不红点）。
+ * 手动检查（关于页按钮入口）：无视策略与忽略账，恒显结果弹窗。
+ * 弹窗状态放本单例（dialogOpen/dialogResult），UpdateDialog 全局挂 App 层消费——关于页外也要能弹。
  * 桥面 err（无桥/壳未接线）也归一化为 error 分支：弹窗可见呈现，不静默。
  */
 
-import { computed, ref } from 'vue';
+import { computed, ref, watch, type Ref } from 'vue';
 import type { UpdateCheckResult } from '@attic/core-spec';
+import { shouldPromptUpdate } from '@attic/runtime/updatePolicy';
 import { useBridge } from './useBridge';
+import { useSettings } from './useSettings';
 
 const { bridge } = useBridge();
 
-/** 周期轮询间隔（24h，plan 拍板；跨日在线即再查一次，无需精确调度）。 */
-const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
-
-/** 最近一次检查结果（null = 尚未出结果）；启动静默检查与手动检查共用同一份。 */
+/** 最近一次检查结果（null = 尚未出结果）；自动检查与手动检查共用同一份。 */
 const result = ref<UpdateCheckResult | null>(null);
 /** 检查在途（手动按钮禁用 + 文案切「检查中」）。 */
 const busy = ref(false);
 let started = false;
-let timer: ReturnType<typeof setInterval> | null = null;
+
+// —— 弹窗状态（UpdateDialog 全局挂载消费；自动=打扰门裁决后弹，手动=恒弹） ——
+const dialogOpen = ref(false);
+const dialogResult = ref<UpdateCheckResult | null>(null);
 
 /**
- * 执行一次检查（静默轮询与手动点击共用一条路径，弹窗决策在调用方 = 关于页）；
- * 返回值供手动路径弹窗展示（busy 重入时返回 null = 调用方不弹窗）。
+ * 执行一次检查（自动/手动共用一条路径，返回结果供调用方决策；busy 重入返回 null = 不弹第二发）。
  */
 async function check(): Promise<UpdateCheckResult | null> {
   if (busy.value) return null;
@@ -38,17 +43,81 @@ async function check(): Promise<UpdateCheckResult | null> {
   }
 }
 
-/** 有新版 = 红点徽标数据源（error/unconfigured 不打红点——误报比漏报烦人）。 */
-const hasUpdate = computed(() => result.value?.status === 'update');
+function openDialog(res: UpdateCheckResult): void {
+  dialogResult.value = res;
+  dialogOpen.value = true;
+}
 
-/** 启动后台检查链（幂等）：立即静默查一次 + 24h 周期；App.vue 主页挂载。 */
+/** 关窗（取消/Esc/遮罩同路）：红点数据源在 result+忽略账，不随关窗清除。 */
+function closeDialog(): void {
+  dialogOpen.value = false;
+}
+
+/**
+ * 红点徽标数据源 = 打扰门口径：update ∧ 版本≠忽略账（error/unconfigured 不打——误报比漏报烦人；
+ * 忽略即静默，写账后本 computed 随 settings 响应自然熄灭）。
+ */
+const hasUpdate = computed(
+  () =>
+    result.value !== null &&
+    result.value.status === 'update' &&
+    result.value.version !== useSettings().settings.value.updateIgnoreVersion,
+);
+
+/** 手动检查（关于页按钮入口）：无视策略与忽略账，恒显结果弹窗。 */
+async function checkManually(): Promise<void> {
+  const res = await check();
+  if (res) openDialog(res);
+}
+
+/** 「忽略此版本」：把当前弹窗对应的版本写进单槽账并关窗；红点随 hasUpdate 重算熄灭。 */
+async function ignoreCurrent(): Promise<void> {
+  const r = dialogResult.value;
+  if (!r || r.status !== 'update') return;
+  await useSettings().patch({ updateIgnoreVersion: r.version });
+  dialogOpen.value = false;
+}
+
+/** 等设置就绪（策略与忽略账都是数据门，load 异步；已就绪立即 resolve）。 */
+function settingsLoadedOnce(loaded: Ref<boolean>): Promise<void> {
+  if (loaded.value) return Promise.resolve();
+  return new Promise((resolve) => {
+    const stop = watch(loaded, (v) => {
+      if (v) {
+        stop();
+        resolve();
+      }
+    });
+  });
+}
+
+/**
+ * 启动自动检查链（幂等；App.vue 主页 onMounted 挂载，控制台窗不挂）：
+ * 等设置就绪读策略 → off 不查；startup 查一次，结果过打扰门才打扰（弹窗+红点）。
+ */
 function start(): void {
   if (started) return;
   started = true;
-  void check();
-  timer = setInterval(() => void check(), CHECK_INTERVAL_MS);
+  const { settings, loaded } = useSettings();
+  void settingsLoadedOnce(loaded).then(async () => {
+    const policy = settings.value.updatePolicy ?? 'startup';
+    if (policy === 'off') return;
+    const res = await check();
+    if (!res) return;
+    if (shouldPromptUpdate(res, settings.value.updateIgnoreVersion, policy)) openDialog(res);
+  });
 }
 
 export function useUpdateCheck() {
-  return { result, busy, hasUpdate, check, start };
+  return {
+    result,
+    busy,
+    hasUpdate,
+    checkManually,
+    start,
+    dialogOpen,
+    dialogResult,
+    closeDialog,
+    ignoreCurrent,
+  };
 }

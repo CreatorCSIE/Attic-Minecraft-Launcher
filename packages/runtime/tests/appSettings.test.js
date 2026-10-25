@@ -67,6 +67,28 @@ test('wizardDone 回环（首启向导完成标记）：true/false 显式保留�
   assert.equal('wizardDone' in applySettingsToProps({ wizardDone: 'true' }, { wizardDone: undefined }), false);
 });
 
+test('updatePolicy/updateIgnoreVersion 回环（2026-10-25 更新 UI 设计两新键）：读写往返、undefined 删键、存量档案缺键 = startup 缺省', () => {
+  // 读出：合法值映射、非法值缺省省略、空串视同无键
+  assert.equal(settingsFromProps({}).updatePolicy, undefined, '缺键 = undefined（消费端 ?? startup）');
+  assert.equal(settingsFromProps({ updatePolicy: 'startup' }).updatePolicy, 'startup');
+  assert.equal(settingsFromProps({ updatePolicy: 'off' }).updatePolicy, 'off');
+  assert.equal(settingsFromProps({ updatePolicy: 'bogus' }).updatePolicy, undefined, '非法值不进视图');
+  assert.equal(settingsFromProps({ updateIgnoreVersion: '0.1.0' }).updateIgnoreVersion, '0.1.0');
+  assert.equal(settingsFromProps({ updateIgnoreVersion: '' }).updateIgnoreVersion, undefined, '空串 = 无忽略');
+  // 写回：同名键、有值则写
+  const props = applySettingsToProps({}, { updatePolicy: 'off', updateIgnoreVersion: '0.2.0' });
+  assert.equal(props['updatePolicy'], 'off');
+  assert.equal(props['updateIgnoreVersion'], '0.2.0');
+  assert.deepEqual(settingsFromProps(props), { updatePolicy: 'off', updateIgnoreVersion: '0.2.0' });
+  // undefined 不落键（托管键删键纪律）
+  assert.equal('updatePolicy' in applySettingsToProps({ updatePolicy: 'off' }, { updatePolicy: undefined }), false);
+  assert.equal('updateIgnoreVersion' in applySettingsToProps({ updateIgnoreVersion: '0.1.0' }, { updateIgnoreVersion: undefined }), false);
+  // 存量档案（不带两新键）读出 = 缺省 startup 语义（消费端 ?? 兜底，视图省略键）
+  const legacy = settingsFromProps({ javaPath: 'C:/java/bin/java.exe', theme: 'dark' });
+  assert.equal(legacy.updatePolicy, undefined);
+  assert.equal(legacy.updateIgnoreVersion, undefined);
+});
+
 test('estimateMaxMemoryMb：40% 取 128 步长夹 [512,2048]，无宿主数据回落 1024', () => {
   assert.equal(estimateMaxMemoryMb(16384), 2048);
   assert.equal(estimateMaxMemoryMb(4096), 1664);

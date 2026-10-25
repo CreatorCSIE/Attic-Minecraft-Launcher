@@ -129,16 +129,43 @@ export const demoSysInfo: SystemInfo = {
 };
 
 /**
- * 假检查更新回包（demo 演练 update 态：关于页红点徽标 + 弹窗「打开发布页」链路可排）；
- * 换 upToDate/unconfigured/error 态直接改本字面量（demo 无网络语义，恒回固定包）。
+ * 假检查更新回包（demo 演练 update 态：三钮弹窗/红点/忽略账/发布页出门链路可排）；
+ * notes 为真实结构 markdown（标题+列表+链接+围栏代码块），演练 md 子集渲染面。
+ * 触发口径见 isDemoUpdate()；换 upToDate/unconfigured/error 态直接改本字面量。
  */
 export const demoUpdateCheck: UpdateCheckResult = {
   status: 'update',
   version: '0.1.0',
   url: 'https://github.com/CreatorCSIE/Attic-Minecraft-Launcher/releases/latest',
-  notes: '演示假发布说明：\n- 检查更新全链可演练（弹窗/红点/打开发布页）\n- 本包为 demo 固定回包，无网络语义',
+  notes: [
+    '# Attic 0.1.0 演示发布',
+    '',
+    '这是**演示**发布说明，含*真实 markdown 结构*（`UpdateDialog` 子集渲染演练面）。',
+    '',
+    '## 新增',
+    '- 更新策略设置：启动时检查 / 从不检查',
+    '- 三钮更新弹窗 + 单槽忽略版本账',
+    '- 详见 [发布页](https://github.com/CreatorCSIE/Attic-Minecraft-Launcher/releases)',
+    '',
+    '## 修复',
+    '移除 24h 轮询：启动时按策略自动检查一次即可。',
+    '',
+    '```',
+    'pnpm -r test',
+    '// 围栏代码块原样呈现，**不解析** markdown 标记',
+    '```',
+  ].join('\n'),
   publishedAt: '2026-10-20T12:00:00Z',
 };
+
+/**
+ * 更新演练开关：?demo=1 之上再带 update=1 → checkUpdate 回假 update 包
+ * （三钮弹窗与忽略账可演）；不带则回 upToDate——避免日常 demo 排版被自动弹窗打扰。
+ */
+export function isDemoUpdate(): boolean {
+  if (!isDemo()) return false;
+  return new URLSearchParams(window.location.search).get('update') === '1';
+}
 
 /** 便携演练开关：?demo=1 之上再带 portable=1 → sysinfo 进便携态（门之三 flavor 感知演练面）。 */
 export function isDemoPortable(): boolean {

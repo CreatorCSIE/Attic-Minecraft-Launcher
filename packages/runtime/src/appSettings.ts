@@ -16,6 +16,7 @@ const ENDPOINT_KEYS: (keyof EndpointOverrides)[] = [
 ];
 const THEMES: ThemeMode[] = ['dark', 'light', 'system'];
 const MEMORY_MODES: string[] = ['auto', 'manual'];
+const UPDATE_POLICIES: string[] = ['startup', 'off'];
 
 /** properties 布尔三态：'true'→true / 'false'→false / 其他（含缺失）→undefined（= 消费端缺省）。 */
 function boolFromProps(v: string | undefined): boolean | undefined {
@@ -65,6 +66,12 @@ export function settingsFromProps(props: Record<string, string>): AppSettings {
   const portableFallback = boolFromProps(props['portableFallback']);
   if (portableFallback !== undefined) out.portableFallback = portableFallback;
   if (props['levelServer']) out.levelServer = props['levelServer'];
+  // 更新策略/忽略账（2026-10-25「更新 UI」设计）：非法值缺省省略（消费端 ?? 'startup'）；
+  // updateIgnoreVersion 空串视同无键（与其余字符串 managed 键同纪律）。
+  if (UPDATE_POLICIES.includes(props['updatePolicy'] ?? '')) {
+    out.updatePolicy = props['updatePolicy'] as 'startup' | 'off';
+  }
+  if (props['updateIgnoreVersion']) out.updateIgnoreVersion = props['updateIgnoreVersion'];
 
   const endpoints: EndpointOverrides = {};
   let hasEndpoint = false;
@@ -113,6 +120,8 @@ export function applySettingsToProps(
   put('lastPortableRoot', settings.lastPortableRoot);
   put('portableFallback', settings.portableFallback === undefined ? undefined : String(settings.portableFallback));
   put('levelServer', settings.levelServer);
+  put('updatePolicy', settings.updatePolicy);
+  put('updateIgnoreVersion', settings.updateIgnoreVersion);
 
   for (const key of ENDPOINT_KEYS) {
     put(`${ENDPOINT_PREFIX}${key}`, settings.endpoints?.[key]);

@@ -1,10 +1,15 @@
 /**
  * 检查更新数据面（GitHub Releases，零依赖自包含）。
- * 事实来源：`https://api.github.com/repos/{owner}/{repo}/releases/latest`
- * —— /latest 端点天然排除 draft/prerelease，不消费 latest.json（无自托管清单依赖）。
- * semver 比较自研：数字段逐位比较（缺段按 0：1.0 == 1.0.0）；tag 去 v 前缀；
- * 预发布纪律：自身或 latest 含 `-`（预发布/构建后缀）→ 永不提示（归 upToDate，
- * 数字段对预发布比较无意义，误报比漏报烦人）。
+ * 事实来源按当前构件轨分流：
+ * - stable 构件（版本号无 `-`）= `https://api.github.com/repos/{owner}/{repo}/releases/latest`
+ *   —— /latest 端点天然排除 draft/prerelease，不消费 latest.json（无自托管清单依赖）；
+ * - nightly 构件（版本号含 `-nightly.`）= `.../releases?per_page=30` 列表轨中匹配
+ *   —— 候选 = prerelease=true ∧ draft≠true ∧ tag 含 `-nightly.`（跨 base 允许、永不混 stable 轨）。
+ * semver 比较自研（semver 2.0 完整预发布序）：主段数字逐位比较（缺段按 0：1.0 == 1.0.0）；
+ * tag 去 v 前缀；预发布段：有预发布 < 无预发布（0.1.0-nightly.X < 0.1.0），
+ * 标识符逐个比较（纯数字按数值、字母数字按 ASCII、数字恒小于字母数字、全等则短者小）。
+ * 预发布纪律：其余预发布构件（0.0.x 短命试装轨、-rc 等，不含 `-nightly.`）→ 永不提示
+ * （归 upToDate，手动跟 Releases 页）；stable 构件遇 latest tag 含 `-` → 同样永不提示（防御双保险）。
  * UA 纪律：GitHub API 无 User-Agent 一律 403 —— 请求头带 `Attic/<version>`（契约门面注入）。
  */
 
@@ -21,48 +26,121 @@ export interface UpdateCheckDeps {
   fetchImpl: FetchImpl;
 }
 
-/** releases/latest 响应中消费的字段（其余原样忽略）。 */
-interface LatestReleaseRaw {
+/** Release 响应中消费的字段（/latest 单对象与 /releases 列表项同形状，其余原样忽略）。 */
+interface ReleaseRaw {
   tag_name?: unknown;
   html_url?: unknown;
   body?: unknown;
   published_at?: unknown;
+  prerelease?: unknown;
+  draft?: unknown;
 }
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-/** 版本号拆数字段（v 前缀剥离；非数字段按 0 —— 预发布拦截在调用方，不进本函数语义面）。 */
-function numericSegments(version: string): number[] {
-  return version
-    .trim()
-    .replace(/^v/i, '')
-    .split('.')
-    .map((seg) => {
-      const n = Number.parseInt(seg, 10);
-      return Number.isFinite(n) && n > 0 ? n : 0;
-    });
+/** 版本拆主段与预发布标识符（v 前缀剥离、trim；首个 `-` 后为预发布段，无则 null）。 */
+function splitVersion(version: string): { core: string[]; pre: string[] | null } {
+  const v = version.trim().replace(/^v/i, '');
+  const dash = v.indexOf('-');
+  if (dash < 0) return { core: v.split('.'), pre: null };
+  return { core: v.slice(0, dash).split('.'), pre: v.slice(dash + 1).split('.') };
+}
+
+/** 主段数字值（非数字按 0 —— 非法输入维持现行为）。 */
+function segmentNumber(seg: string | undefined): number {
+  const n = Number.parseInt(seg ?? '', 10);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+/** 预发布标识符比较（semver 2.0 §11）：纯数字按数值、字母数字按 ASCII，数字恒小于字母数字标识符。 */
+function compareIdentifiers(a: string, b: string): number {
+  const aNum = /^\d+$/.test(a);
+  const bNum = /^\d+$/.test(b);
+  if (aNum && bNum) {
+    const x = Number(a);
+    const y = Number(b);
+    if (x !== y) return x < y ? -1 : 1;
+    return 0;
+  }
+  if (aNum !== bNum) return aNum ? -1 : 1;
+  return a < b ? -1 : a > b ? 1 : 0;
 }
 
 /**
- * semver 数字段比较：a<b → -1，相等 → 0，a>b → 1。
- * 长度不齐缺段按 0 补齐（0.0.9 < 0.1.0、1.9.0 < 1.10.0 均按数值位而非字典序）。
+ * semver 2.0 比较（含完整预发布序）：a<b → -1，相等 → 0，a>b → 1。
+ * 主段：长度不齐缺段按 0 补齐（0.0.9 < 0.1.0、1.9.0 < 1.10.0 均按数值位而非字典序）。
+ * 预发布段：有预发布 < 无预发布（0.1.0-nightly.99999999 < 0.1.0）；标识符逐个比较
+ * （nightly.2 < nightly.10 数值序；nightly.20261025 < nightly.20261026；全等则短者小 nightly.1 < nightly.1.1）。
  */
 export function compareSemver(a: string, b: string): number {
-  const sa = numericSegments(a);
-  const sb = numericSegments(b);
-  const len = Math.max(sa.length, sb.length);
+  const pa = splitVersion(a);
+  const pb = splitVersion(b);
+  const len = Math.max(pa.core.length, pb.core.length);
   for (let i = 0; i < len; i++) {
-    const x = sa[i] ?? 0;
-    const y = sb[i] ?? 0;
+    const x = segmentNumber(pa.core[i]);
+    const y = segmentNumber(pb.core[i]);
     if (x !== y) return x < y ? -1 : 1;
   }
-  return 0;
+  if (pa.pre === null || pb.pre === null) {
+    if (pa.pre === pb.pre) return 0;
+    return pa.pre === null ? 1 : -1;
+  }
+  const shared = Math.min(pa.pre.length, pb.pre.length);
+  for (let i = 0; i < shared; i++) {
+    const c = compareIdentifiers(pa.pre[i] ?? '', pb.pre[i] ?? '');
+    if (c !== 0) return c;
+  }
+  if (pa.pre.length === pb.pre.length) return 0;
+  return pa.pre.length < pb.pre.length ? -1 : 1;
+}
+
+/** 组装 update 分支（url/notes/publishedAt 缺字段空串容忍；stable/nightly 两轨同形状）。 */
+function toUpdateResult(raw: ReleaseRaw, version: string): UpdateCheckResult {
+  return {
+    status: 'update',
+    version,
+    url: typeof raw.html_url === 'string' ? raw.html_url : '',
+    notes: typeof raw.body === 'string' ? raw.body : '',
+    publishedAt: typeof raw.published_at === 'string' ? raw.published_at : '',
+  };
 }
 
 /**
- * 拉取 GitHub 最新 Release 并与当前版本比较。
+ * nightly 轨中匹配：从 /releases 列表（GitHub 序 = 创建时间新在前，per_page=30 窗口）取
+ * prerelease=true ∧ draft≠true ∧ tag 含 `-nightly.` 的最大候选——跨 base 允许
+ * （0.2.0-nightly.* 对 0.1.0-nightly.* 也是更新，仍锁 nightly 轨不混 stable）。
+ * 列表空/无候选/最大者不高于 current → upToDate；响应形状非法 → error（与 /latest 路径同口径）。
+ */
+async function pickNightlyRelease(res: Response, current: string): Promise<UpdateCheckResult> {
+  let list: unknown;
+  try {
+    list = await res.json();
+  } catch (error) {
+    return { status: 'error', message: `检查更新失败：响应不是合法 JSON（${messageOf(error)}）` };
+  }
+  if (!Array.isArray(list)) return { status: 'error', message: '检查更新失败：Release 列表响应不是数组' };
+  let best: ReleaseRaw | null = null;
+  let bestVersion = '';
+  for (const item of list as unknown[]) {
+    if (!item || typeof item !== 'object') continue;
+    const rel = item as ReleaseRaw;
+    if (rel.prerelease !== true || rel.draft === true) continue;
+    const tag = typeof rel.tag_name === 'string' ? rel.tag_name.trim() : '';
+    if (!tag.includes('-nightly.')) continue;
+    const version = tag.replace(/^v/i, '');
+    if (!best || compareSemver(version, bestVersion) > 0) {
+      best = rel;
+      bestVersion = version;
+    }
+  }
+  if (!best || compareSemver(bestVersion, current) <= 0) return { status: 'upToDate', current };
+  return toUpdateResult(best, bestVersion);
+}
+
+/**
+ * 拉取 GitHub 最新 Release 并与当前版本比较（轨分流见文件头）。
  * 全分支数据化返回（不抛）：仓库未配置 = unconfigured；格式非法/网络炸/非 2xx/响应缺 tag_name = error。
  */
 export async function checkLatestRelease(deps: UpdateCheckDeps): Promise<UpdateCheckResult> {
@@ -73,7 +151,11 @@ export async function checkLatestRelease(deps: UpdateCheckDeps): Promise<UpdateC
     return { status: 'error', message: `发布仓库格式非法：${JSON.stringify(repo)}（期望 "owner/repo"）` };
   }
   const [owner, name] = parts as [string, string];
-  const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/releases/latest`;
+  const current = deps.currentVersion;
+  // 轨分流：nightly 构件走列表轨中匹配；stable 与其余预发布构件照旧 /latest 单请求（行为零变化）。
+  const nightlyTrack = current.includes('-nightly.');
+  const repoBase = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`;
+  const url = nightlyTrack ? `${repoBase}/releases?per_page=30` : `${repoBase}/releases/latest`;
   let res: Response;
   try {
     res = await deps.fetchImpl(url, {
@@ -90,24 +172,19 @@ export async function checkLatestRelease(deps: UpdateCheckDeps): Promise<UpdateC
     const hint = res.status === 404 ? '（仓库不存在或尚无 Release）' : res.status === 403 ? '（限流或 UA 被拒）' : '';
     return { status: 'error', message: `检查更新失败：GitHub API HTTP ${res.status}${hint}` };
   }
-  let raw: LatestReleaseRaw;
+  if (nightlyTrack) return pickNightlyRelease(res, current);
+  let raw: ReleaseRaw;
   try {
-    raw = (await res.json()) as LatestReleaseRaw;
+    raw = (await res.json()) as ReleaseRaw;
   } catch (error) {
     return { status: 'error', message: `检查更新失败：响应不是合法 JSON（${messageOf(error)}）` };
   }
   const tag = typeof raw.tag_name === 'string' ? raw.tag_name.trim() : '';
   if (!tag) return { status: 'error', message: '检查更新失败：Release 响应缺少 tag_name' };
-  const current = deps.currentVersion;
-  // 预发布纪律（见文件头）：任一侧含 `-` → 永不提示。
+  // 预发布纪律（见文件头）：自身为其余预发布（不含 -nightly.，0.0.x 短命试装轨手动跟 Releases 页）
+  // 或 latest tag 含 `-`（防御双保险）→ 永不提示。
   if (current.includes('-') || tag.includes('-')) return { status: 'upToDate', current };
   const version = tag.replace(/^v/i, '');
   if (compareSemver(version, current) <= 0) return { status: 'upToDate', current };
-  return {
-    status: 'update',
-    version,
-    url: typeof raw.html_url === 'string' ? raw.html_url : '',
-    notes: typeof raw.body === 'string' ? raw.body : '',
-    publishedAt: typeof raw.published_at === 'string' ? raw.published_at : '',
-  };
+  return toUpdateResult(raw, version);
 }
