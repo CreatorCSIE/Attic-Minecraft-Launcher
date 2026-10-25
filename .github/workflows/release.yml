@@ -11,16 +11,33 @@ name: Release（全平台矩阵）
 # 与安装器同载荷、零预带 .attic、顶层收进 amcl-<shell>-windows-<arch>-<ver>/ 文件夹、程序目录 marker 位
 # 写出厂 portable.ini、根附「先解压再运行.txt」防呆）；linux tar.xz 与 MSI 双轨 = 后续条目（plan.md）。
 #
-# 触发与两种形态（2026-10 开放 artifacts 通道）：
-#  · tag v*  = 正式发版形态（全签名 + updater 产物）。
+# 触发与三种形态（2026-10 开放 artifacts 通道；2026-10-25 补 workflow_call 供 nightly 复用）：
+#  · tag v*  = 正式发版形态（全签名 + updater 产物 + release job 建 GitHub Release）。
 #  · workflow_dispatch（或直推分支）= 编译+打包测试形态：版本一律钉 0.0.0、
 #    无 Secrets 时自动跳过 Windows signer 签名步骤、mac/linux 构建带
 #    createUpdaterArtifacts=false 覆盖（updater 产物需私钥，无钥即构建炸）。
+#  · workflow_call（nightly.yml 消费）= 构建腿复用形态：version 输入驱动构件命名、
+#    release_mode 输入决定 release job 是否建 Release（nightly 传 none = 只要产物，
+#    Release 由 nightly.yml 自己的 publish job 建——GITHUB_TOKEN 推 tag 不级联触发
+#    push 事件，tag push 触发这条路对 nightly 不存在，机制事实详见 nightly.yml 头注）。
 # 文档/媒体免触发（2026-10-25）：纯 .md / 图片改动只走 ci.yml，不起全平台矩阵——
 # paths-ignore 对 tag push 同样生效（tag 与上一 tag 的 diff 若纯文档也不出构件），
 # 真要发版被误拦时 workflow_dispatch 手动兜底。
 on:
   workflow_dispatch: {}
+  workflow_call:
+    inputs:
+      # 构件命名版本（如 0.1.0-nightly.20261025）；非 workflow_call 语境恒空
+      version:
+        type: string
+        required: false
+        default: ""
+      # none = 不建 Release（nightly / dispatch 试装）；draft = 建草稿（stable 人审 Publish）；
+      # auto = 直接发布（prerelease 试装轨）。tag push 语境本输入不存在，mode 由 meta 按 semver 推导。
+      release_mode:
+        type: string
+        required: false
+        default: "none"
   push:
     branches: ['**']
     tags: ['v*']
@@ -35,6 +52,68 @@ on:
       - '**.webp'
 
 jobs:
+  # 版本与发布形态单点判定（plan「更新通道设计」版本轨语义条 2026-10-25 拍板）：
+  # 原先六处版本展开点各自从 GITHUB_REF_TYPE 推导，workflow_call 语境（ref=branch）会错钉 0.0.0——
+  # 收拢到本 job 一次算清，各腿经 env ATTIC_VERSION 消费。
+  # prerelease 判定规则（钉死，禁手滑标错轨）= semver < 0.1.0 ∨ 含预发布标识（-nightly/-rc 等）。
+  # 样例期望（node 判定函数本地跑过，见同构脚本注释）：
+  #   0.0.1                  → prerelease（0.0.x < 0.1.0，试装轨）
+  #   0.1.0                  → stable（首个 stable，latest.json 通道准入）
+  #   0.1.0-nightly.20261025 → prerelease（含预发布标识）
+  #   0.2.0-rc.1             → prerelease（含预发布标识）
+  meta:
+    name: 版本与发布形态判定
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+      tag: ${{ steps.ver.outputs.tag }}
+      prerelease: ${{ steps.ver.outputs.prerelease }}
+      stable: ${{ steps.ver.outputs.stable }}
+      mode: ${{ steps.ver.outputs.mode }}
+    steps:
+      - name: 判定
+        id: ver
+        run: |
+          set -euo pipefail
+          event="${{ github.event_name }}"
+          if [[ "$event" == "push" && "${{ github.ref_type }}" == "tag" ]]; then
+            ver="${GITHUB_REF_NAME#v}"
+            tag="${GITHUB_REF_NAME}"
+          elif [[ "$event" == "workflow_call" ]]; then
+            ver="${{ inputs.version }}"
+            tag="v${ver}"
+            if [[ -z "$ver" ]]; then echo "::error::workflow_call 语境 version 输入为空"; exit 1; fi
+          else
+            # workflow_dispatch / 分支 push = 测试形态：版本钉 0.0.0、不建 Release
+            ver="0.0.0"
+            tag="v0.0.0"
+          fi
+          # 纯判定函数（同构可单测）：合法 semver 且 (含预发布标识 ∨ major.minor == 0.0) ⇒ prerelease
+          verdict="$(
+            VER="$ver" node <<'JS'
+          const v = process.env.VER;
+          const m = /^(\d+)\.(\d+)\.(\d+)(-[0-9A-Za-z][0-9A-Za-z.-]*)?$/.exec(v);
+          if (!m) { console.error(`非法 semver: ${v}`); process.exit(2); }
+          const pre = m[4] !== undefined || (Number(m[1]) === 0 && Number(m[2]) === 0);
+          console.log(pre ? 'prerelease' : 'stable');
+          JS
+          )"
+          if [[ "$event" == "push" && "${{ github.ref_type }}" == "tag" ]]; then
+            # tag 语境 mode 由 semver 推导：stable = draft（changelog 人审 Publish，CI 只占坑）；
+            # prerelease（0.0.x / -rc / -nightly 直推 tag）= auto 直发
+            if [[ "$verdict" == "stable" ]]; then mode="draft"; else mode="auto"; fi
+          elif [[ "$event" == "workflow_call" ]]; then
+            mode="${{ inputs.release_mode }}"
+          else
+            mode="none"
+          fi
+          echo "version=$ver" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$([[ "$verdict" == prerelease ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "stable=$([[ "$verdict" == stable ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+          echo "meta: version=$ver tag=$tag verdict=$verdict mode=$mode"
+
   gates:
     name: 发布前置闸门（全绿才出构件）
     runs-on: ubuntu-latest
@@ -76,7 +155,7 @@ jobs:
   tauri-windows:
     name: Tauri Inno · windows-${{ matrix.arch }}（x64 主发布轨 + arm64 持续线）
     runs-on: windows-latest
-    needs: gates
+    needs: [gates, meta]
     strategy:
       # arm64 腿依赖 runner 的 MSVC ARM64 组件（缺失首跑即在此报错，装组件即可）——
       # 不许连坐 x64 主发布轨
@@ -93,6 +172,8 @@ jobs:
       # updater minisign 私钥只在发版 CI 注入（公钥已入 tauri.conf.json，plan 发版 SOP）
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_UPDATER_PRIVATE_KEY }}
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_UPDATER_PRIVATE_KEY_PASSWORD }}
+      # 构件命名版本单点（meta 判定；tag=去v tag名 / workflow_call=version输入 / 其余=0.0.0）
+      ATTIC_VERSION: ${{ needs.meta.outputs.version }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -151,7 +232,7 @@ jobs:
       - name: Portable zip
         shell: pwsh
         run: |
-          if ($env:GITHUB_REF_TYPE -eq 'tag') { $ver = $env:GITHUB_REF_NAME.TrimStart('v') } else { $ver = '0.0.0' }
+          $ver = $env:ATTIC_VERSION
           $folder = "amcl-tauri-windows-${{ matrix.arch }}-$ver"
           $zip = "portable-dist\$folder-portable.zip"
           # 守卫①：安装器载荷必须干净——portable.ini 只许出现在便携 staging 副本里
@@ -198,9 +279,9 @@ jobs:
         # 安装器图标两壳皆 Inno 缺省（用户终拍，不传 SetupIconFile）。
         # CI 首跑教训（2026-10）：bash 腿 = Git Bash，MSYS 会把 `/DATTIC_*=...` 当 POSIX 路径
         # 重写成 C:/Program Files/Git/DATTIC_*=... → ISCC 见多个"脚本文件名" exit 2；改 pwsh 根除。
-        # 版本两形态：tag 用去 v 的 tag 名；非 tag（测试形态）钉 0.0.0（版本号未收口）。
+        # 版本 = env ATTIC_VERSION（meta 单点判定，workflow_call 语境亦可驱动构件命名）。
         run: |
-          if ($env:GITHUB_REF_TYPE -eq 'tag') { $ver = $env:GITHUB_REF_NAME.TrimStart('v') } else { $ver = '0.0.0' }
+          $ver = $env:ATTIC_VERSION
           & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' `
             "/DATTIC_FLAVOR=tauri" "/DATTIC_PAYLOAD=$PWD\stage" `
             "/DATTIC_VERSION=$ver" "/DATTIC_ARCH=${{ matrix.arch }}" `
@@ -211,7 +292,7 @@ jobs:
         if: env.TAURI_SIGNING_PRIVATE_KEY != ''
         shell: bash
         run: |
-          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then ver="${GITHUB_REF_NAME#v}"; else ver="0.0.0"; fi
+          ver="${ATTIC_VERSION}"
           pnpm --filter @attic/tauri exec tauri signer sign "installer/dist/amcl-tauri-windows-${{ matrix.arch }}-${ver}-setup.exe"
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -228,7 +309,9 @@ jobs:
   electron-windows:
     name: Electron 壳 Inno · x64（可选形态）
     runs-on: windows-latest
-    needs: gates
+    needs: [gates, meta]
+    env:
+      ATTIC_VERSION: ${{ needs.meta.outputs.version }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -254,7 +337,7 @@ jobs:
       - name: Portable zip
         shell: pwsh
         run: |
-          if ($env:GITHUB_REF_TYPE -eq 'tag') { $ver = $env:GITHUB_REF_NAME.TrimStart('v') } else { $ver = '0.0.0' }
+          $ver = $env:ATTIC_VERSION
           $folder = "amcl-electron-windows-x64-$ver"
           $zip = "portable-dist\$folder-portable.zip"
           $payload = 'apps\electron\release\win-unpacked'
@@ -295,7 +378,7 @@ jobs:
         shell: pwsh
         # pwsh 戒律同主壳（Git Bash MSYS 会重写 /D 参数）；载荷路径绝对化
         run: |
-          if ($env:GITHUB_REF_TYPE -eq 'tag') { $ver = $env:GITHUB_REF_NAME.TrimStart('v') } else { $ver = '0.0.0' }
+          $ver = $env:ATTIC_VERSION
           & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' `
             "/DATTIC_FLAVOR=electron" "/DATTIC_PAYLOAD=$PWD\apps\electron\release\win-unpacked" `
             "/DATTIC_VERSION=$ver" "/DATTIC_ARCH=x64" `
@@ -312,10 +395,11 @@ jobs:
   tauri-macos-arm64:
     name: Tauri DMG · macOS arm64（持续线，Apple Silicon）
     runs-on: macos-latest # GitHub 托管 arm64 runner
-    needs: gates
+    needs: [gates, meta]
     env:
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_UPDATER_PRIVATE_KEY }}
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_UPDATER_PRIVATE_KEY_PASSWORD }}
+      ATTIC_VERSION: ${{ needs.meta.outputs.version }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -345,7 +429,7 @@ jobs:
         shell: bash
         run: |
           shopt -s nullglob
-          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then ver="${GITHUB_REF_NAME#v}"; else ver="0.0.0"; fi
+          ver="${ATTIC_VERSION}"
           cd apps/tauri/src-tauri/target/aarch64-apple-darwin/release/bundle
           for f in dmg/*.dmg; do mv "$f" "dmg/amcl-tauri-macos-arm64-${ver}.dmg"; done
           for f in macos/*.app.tar.gz; do mv "$f" "macos/amcl-tauri-macos-arm64-${ver}.app.tar.gz"; done
@@ -361,10 +445,11 @@ jobs:
   tauri-linux-x64:
     name: Tauri DEB · linux-x64（持续线，Debian 系优先）
     runs-on: ubuntu-22.04
-    needs: gates
+    needs: [gates, meta]
     env:
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_UPDATER_PRIVATE_KEY }}
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_UPDATER_PRIVATE_KEY_PASSWORD }}
+      ATTIC_VERSION: ${{ needs.meta.outputs.version }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -395,7 +480,7 @@ jobs:
         shell: bash
         run: |
           shopt -s nullglob
-          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then ver="${GITHUB_REF_NAME#v}"; else ver="0.0.0"; fi
+          ver="${ATTIC_VERSION}"
           cd apps/tauri/src-tauri/target/release/bundle
           for f in deb/*.deb; do mv "$f" "deb/amcl-tauri-linux-x64-${ver}.deb"; done
           for f in appimage/*.AppImage; do mv "$f" "appimage/amcl-tauri-linux-x64-${ver}.AppImage"; done
@@ -412,7 +497,9 @@ jobs:
   electron-legacy-windows:
     name: Electron 22 兜底 Inno · x64+ia32
     runs-on: windows-latest
-    needs: gates
+    needs: [gates, meta]
+    env:
+      ATTIC_VERSION: ${{ needs.meta.outputs.version }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -436,7 +523,7 @@ jobs:
         shell: pwsh
         # pwsh 戒律同主壳（Git Bash MSYS 会重写 /D 参数）；两架构目录构件各出一只 Inno 安装器
         run: |
-          if ($env:GITHUB_REF_TYPE -eq 'tag') { $ver = $env:GITHUB_REF_NAME.TrimStart('v') } else { $ver = '0.0.0' }
+          $ver = $env:ATTIC_VERSION
           foreach ($pair in @('x64|win-unpacked', 'ia32|win-ia32-unpacked')) {
             $arch, $dir = $pair -split '\|'
             & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' `
@@ -450,7 +537,7 @@ jobs:
       - name: Portable zip (x64)
         shell: pwsh
         run: |
-          if ($env:GITHUB_REF_TYPE -eq 'tag') { $ver = $env:GITHUB_REF_NAME.TrimStart('v') } else { $ver = '0.0.0' }
+          $ver = $env:ATTIC_VERSION
           $folder = "amcl-legacy-windows-x64-$ver"
           $zip = "portable-dist\$folder-portable.zip"
           $payload = 'apps\electron-legacy\release\win-unpacked'
@@ -493,5 +580,126 @@ jobs:
             installer/dist/amcl-legacy-windows-*-setup.exe
             portable-dist/amcl-legacy-windows-x64-*-portable.zip
 
-  # TODO(发版 SOP)：latest.json（minisign 验签清单）生成与 GitHub Release 发布步骤；
-  # sidecar 便携 node 随装策略（exe 目录 node.exe 或安装包内嵌）在此定稿。
+  # Release 创建 + latest.json 通道（plan「更新通道设计」版本轨语义条 + 「Nightly 分发轨道」条
+  # changelog 分工条落实；原文件尾 TODO 收口）。触发条件 = meta.mode ≠ none：
+  #  · tag push：stable（≥0.1.0 且无预发布标识）→ draft 占坑（详细 changelog = Trae agent 归纳 +
+  #    人审 Publish，CI 只写占位模板与构件清单）；prerelease（0.0.x / -rc / -nightly）→ auto 直发。
+  #  · workflow_call release_mode=draft|auto：预留编排面（nightly 现走 none，Release 由 nightly.yml
+  #    自产）；此语境 tag = v<version> 输入合成，gh 会在 HEAD 建缺失 tag——仅试装演练用。
+  #  · workflow_dispatch / 分支 push：mode=none，本 job 整体跳过（测试形态不出 Release）。
+  release:
+    name: 建 GitHub Release（+ stable latest.json）
+    runs-on: ubuntu-latest
+    needs: [meta, gates, tauri-windows, electron-windows, tauri-macos-arm64, tauri-linux-x64, electron-legacy-windows]
+    if: needs.meta.outputs.mode != 'none'
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ needs.meta.outputs.tag }}
+      VER: ${{ needs.meta.outputs.version }}
+      MODE: ${{ needs.meta.outputs.mode }}
+      PRERELEASE: ${{ needs.meta.outputs.prerelease }}
+      STABLE: ${{ needs.meta.outputs.stable }}
+      REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: 下载全部构件
+        uses: actions/download-artifact@v4
+        with:
+          pattern: 'amcl-*'
+          path: dist
+      - name: 创建 Release（notes = 占位/试装声明 + 构件清单）
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t files < <(find dist -type f | sort)
+          if [[ "${#files[@]}" -eq 0 ]]; then echo "::error::无任何 amcl-* 构件可挂"; exit 1; fi
+          url_base="https://github.com/${REPO}/releases/download/${TAG}"
+          : > notes.md
+          if [[ "$STABLE" == "true" ]]; then
+            echo '## 更新说明（占位）' >> notes.md
+            echo '> stable 发布说明 = Trae agent 按 tag 区间 git log 归纳 + 人审 Publish（plan「发布说明（Changelog）供给设计」条）。' >> notes.md
+            echo '> CI 只建 draft 占坑——本段由详细稿覆写后再 Publish。' >> notes.md
+          else
+            echo '> 试装构件（prerelease 轨：semver < 0.1.0 ∨ 含预发布标识）——不进 updater latest.json 通道（plan「更新通道设计」版本轨语义条）。' >> notes.md
+          fi
+          echo '' >> notes.md
+          echo '## 构件清单' >> notes.md
+          for f in "${files[@]}"; do
+            n="$(basename "$f")"
+            echo "- [${n}](${url_base}/${n})" >> notes.md
+          done
+          args=()
+          if [[ "$PRERELEASE" == "true" ]]; then args+=(--prerelease); fi
+          if [[ "$MODE" == "draft" ]]; then args+=(--draft); fi
+          # 不可变纪律同 nightly：不加 --clobber，Release 已存在（重跑）= 此处炸，人工核对
+          gh release create "$TAG" --title "$TAG" --notes-file notes.md "${args[@]}" "${files[@]}"
+      - name: latest.json（updater 通道清单，仅 stable）
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$STABLE" != "true" ]]; then
+            echo "跳过 latest.json：${VER} 判为 prerelease（规则 = semver < 0.1.0 ∨ 含预发布标识；0.0.x 与 nightly 永不进通道，plan「更新通道设计」版本轨语义条①）"
+            exit 0
+          fi
+          # tauri v2 updater manifest；平台键以本文件实际构建腿为准（win x64/arm64、mac arm64、
+          # linux x64；darwin-x86_64 无腿不入表）。updater 消费件：win = setup.exe（Inno 改道，
+          # CI `tauri signer sign` 手动产 .sig）、mac = .app.tar.gz（非 dmg）、linux = AppImage
+          # （deb 无 updater 通道）。electron/legacy zip 无通道、不进表（plan「本体·兜底壳」条）。
+          # 分轨对账：缺 .sig（Secrets 未登记）= 该平台键跳过 + 显式列出「静默收不到更新」清单，
+          # 绝不静默吞（plan「Updater 分轨」SOP）。
+          DIST=dist node <<'JS'
+          const fs = require('fs');
+          const path = require('path');
+          const { VER, TAG, REPO, DIST } = process.env;
+          const specs = [
+            ['windows-x86_64', `amcl-tauri-windows-x64-${VER}-setup.exe`],
+            ['windows-aarch64', `amcl-tauri-windows-arm64-${VER}-setup.exe`],
+            ['darwin-aarch64', `amcl-tauri-macos-arm64-${VER}.app.tar.gz`],
+            ['linux-x86_64', `amcl-tauri-linux-x64-${VER}.AppImage`],
+          ];
+          const find = (dir, name) => {
+            for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+              const p = path.join(dir, e.name);
+              if (e.isDirectory()) { const r = find(p, name); if (r) return r; }
+              else if (e.name === name) return p;
+            }
+            return null;
+          };
+          const base = `https://github.com/${REPO}/releases/download/${TAG}/`;
+          const platforms = {};
+          const skipped = [];
+          for (const [key, artifact] of specs) {
+            const sigPath = find(DIST, artifact + '.sig');
+            if (!sigPath) { skipped.push(`${key}：缺 ${artifact}.sig（TAURI_UPDATER_PRIVATE_KEY Secrets 未登记？）`); continue; }
+            if (!find(DIST, artifact)) { skipped.push(`${key}：缺构件本体 ${artifact}`); continue; }
+            // signature = .sig 文件内容原文（minisign base64）
+            platforms[key] = { url: base + artifact, signature: fs.readFileSync(sigPath, 'utf8').trim() };
+          }
+          if (skipped.length > 0) {
+            console.log('::warning::以下平台未进 latest.json —— 该平台已装用户将静默收不到更新，须补签名后重发：');
+            for (const s of skipped) console.log('  - ' + s);
+          }
+          if (Object.keys(platforms).length === 0) {
+            console.error('::warning::latest.json 零平台（Secrets 未登记或构件缺失）——不上架空清单，跳过上传');
+            process.exit(0);
+          }
+          const manifest = {
+            // 裸 semver（不带 v 前缀）：tauri v2 updater 用 semver::Version::parse 解此字段，
+            // 前导 v 解析失败 = 通道首用即死（官方 manifest 示例同为裸版本）。
+            version: VER,
+            notes: `Attic ${TAG}`,
+            pub_date: new Date().toISOString(),
+            platforms,
+          };
+          fs.writeFileSync('latest.json', JSON.stringify(manifest, null, 2) + '\n');
+          console.log('latest.json 平台键：' + Object.keys(platforms).join(', '));
+          JS
+          if [[ -f latest.json ]]; then
+            # latest.json 与 .sig 并存挂同一 Release；draft 语境 URL 在 Publish 后才可达（通道生效点 = Publish）
+            gh release upload "$TAG" latest.json
+            echo "latest.json 已上传为 $TAG 的 asset"
+          fi
+
+  # TODO(发版 SOP)：sidecar 便携 node 随装策略（exe 目录 node.exe 或安装包内嵌）在此定稿
+  # （node.exe 随装本体已落 p4 首件，见 tauri-windows Stage 步；策略定稿 = 文档面）。

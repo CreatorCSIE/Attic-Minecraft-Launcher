@@ -31,6 +31,7 @@
     "attic:shell:open-url",
     "attic:status",
     "attic:sys:info",
+    "attic:update:check",
     "attic:version:probe-class",
     "attic:versions:json",
     "attic:versions:list",
@@ -73,6 +74,7 @@
     "attic:settings:set",
     "attic:status",
     "attic:sys:info",
+    "attic:update:check",
     "attic:version:probe-class",
     "attic:versions:json",
     "attic:versions:list"

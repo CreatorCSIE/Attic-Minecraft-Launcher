@@ -22,6 +22,7 @@ import SettingsPanel from './components/SettingsPanel.vue';
 import ExternalLinkErrorDialog from './components/ExternalLinkErrorDialog.vue';
 import WelcomeWizard from './components/WelcomeWizard.vue';
 import { goSection } from './composables/useSettingsNav';
+import { useUpdateCheck } from './composables/useUpdateCheck';
 
 /** 独立控制台窗模式：主进程以 ?window=console 加载同一 UI，只渲染控制台。 */
 const isConsoleWindow =
@@ -104,8 +105,15 @@ async function loadCreatorAvatar(): Promise<void> {
   }
 }
 
+// 检查更新链（启动静默一次 + 24h 周期）：只挂主页，控制台窗不重复发请求；
+// 自动结果不打扰——有新版仅点亮设置页关于栏红点（useUpdateCheck 模块级单例共享）。
+const updateCheck = useUpdateCheck();
+
 onMounted(() => {
-  if (!isConsoleWindow) void loadCreatorAvatar();
+  if (!isConsoleWindow) {
+    void loadCreatorAvatar();
+    updateCheck.start();
+  }
 });
 </script>
 

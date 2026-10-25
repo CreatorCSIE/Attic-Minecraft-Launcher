@@ -13,6 +13,7 @@ import type {
   JavaInstall,
   ModCategoryView,
   SystemInfo,
+  UpdateCheckResult,
   VersionRef,
 } from '@attic/core-spec';
 
@@ -124,6 +125,19 @@ export const demoSysInfo: SystemInfo = {
   logsDir: 'C:\\Users\\Player\\AppData\\Roaming\\.attic\\launcher\\logs',
   totalMemMb: 16384,
   freeMemMb: 8192,
+  shell: 'electron',
+};
+
+/**
+ * 假检查更新回包（demo 演练 update 态：关于页红点徽标 + 弹窗「打开发布页」链路可排）；
+ * 换 upToDate/unconfigured/error 态直接改本字面量（demo 无网络语义，恒回固定包）。
+ */
+export const demoUpdateCheck: UpdateCheckResult = {
+  status: 'update',
+  version: '0.1.0',
+  url: 'https://github.com/CreatorCSIE/Attic-Minecraft-Launcher/releases/latest',
+  notes: '演示假发布说明：\n- 检查更新全链可演练（弹窗/红点/打开发布页）\n- 本包为 demo 固定回包，无网络语义',
+  publishedAt: '2026-10-20T12:00:00Z',
 };
 
 /** 便携演练开关：?demo=1 之上再带 portable=1 → sysinfo 进便携态（门之三 flavor 感知演练面）。 */

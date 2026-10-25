@@ -335,8 +335,10 @@ app.whenReady().then(() => {
   // jar 与基座合成延迟到启动期（点 Play 才补全）。
   handle(IPC_CHANNELS.MODS_LIST, () => runtime.listMods());
   handle(IPC_CHANNELS.MODS_INSTALL, (request: ModInstallRequest) => runtime.installMod(request));
-  // —— 设置页宿主能力面（SYS_INFO/目录/日志/对话框/外链）——
+  // —— 设置页宿主能力面（SYS_INFO/检查更新/目录/日志/对话框/外链）——
   handle(IPC_CHANNELS.SYS_INFO, () => runtime.getSystemInfo());
+  // 检查更新：runtime 全分支数据化返回（unconfigured/error 也在 value 内），UI 弹窗呈现。
+  handle(IPC_CHANNELS.UPDATE_CHECK, () => runtime.checkUpdate());
   // 打开特殊目录：白名单枚举、路径宿主解析（渲染侧给不出任意路径）；logs 未生成时先建再开。
   handle(IPC_CHANNELS.SHELL_OPEN_DIR, async (target: SpecialDir) => {
     const dir = target === 'logs-dir' ? path.join(launcherDir(runtime.root), 'logs') : runtime.root;

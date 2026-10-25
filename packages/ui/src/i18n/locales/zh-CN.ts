@@ -386,6 +386,18 @@ export const zhCN: Record<string, unknown> = {
     about: {
       ghRepo: '查看 GitHub 仓库',
       checkUpdate: '检查更新',
+      checking: '检查中…',
+      newBadge: '新版',
+      updateDialog: {
+        title: '检查更新',
+        upToDate: '当前已是最新版本（v{version}）。',
+        found: '发现新版本 v{version}！',
+        published: '发布于 {date}',
+        unconfigured: '尚未配置发布仓库（owner/repo），无法检查更新。',
+        failed: '检查更新失败：{message}',
+        openReleases: '打开发布页',
+        close: '关闭',
+      },
       updateSection: '启动器更新',
       updateChannel: '更新通道',
       updateSoon: '启动器自动更新系统尚未上线，通道暂不可选。',

@@ -28,6 +28,7 @@ import {
   type LaunchRequest,
   type ModCategoryView,
   type ModInstallRequest,
+  type UpdateCheckResult,
   type VersionJson,
   type VersionManifest,
   type VersionRef,
@@ -96,6 +97,7 @@ import {
   writePropertiesFile,
   zuluJavaDir,
 } from './storage';
+import { checkLatestRelease } from './updateCheck';
 import { canonicalLaunchMethod, detectLaunchMethod, probeIndevEntry, probePreclassicEntry } from './wrapperDetector';
 import { extractZipTo, listZipEntryNames } from './zip';
 import { findJavaExecutable, installZuluPackage, queryZuluPackages } from './zulu';
@@ -123,6 +125,10 @@ export interface AtticRuntimeOptions {
   exeDir?: string;
   /** portable marker ini 候选（相对 exeDir；tauri=['sidecar/portable.ini']、electron/legacy=['resources/portable.ini']）。 */
   portableMarkers?: string[];
+  /** 检查更新发布仓库 "owner/repo"（缺省回落 env ATTIC_RELEASE_REPO；两缺 = unconfigured，检查不炸只明示）。 */
+  releaseRepo?: string;
+  /** 壳形态（SYS_INFO shell 字段数据源；宿主构造注入，缺省 'electron' 保守）。 */
+  shell?: 'tauri' | 'electron';
 }
 
 function messageOf(error: unknown): string {
@@ -196,6 +202,10 @@ export class AtticRuntime {
   readonly endpoints: Endpoints;
   /** 启动器版本（宿主注入，SYS_INFO/关于页消费）。 */
   readonly version: string;
+  /** 检查更新发布仓库 "owner/repo"（构造选项 > env ATTIC_RELEASE_REPO；两缺 = unconfigured）。 */
+  private readonly releaseRepo: string | undefined;
+  /** 壳形态（SYS_INFO 透传；构造缺省 'electron' 保守）。 */
+  private readonly shell: 'tauri' | 'electron';
   private readonly platform: NodeJS.Platform;
   private readonly fetchImpl: FetchImpl;
   private readonly client: BetacraftClient;
@@ -235,6 +245,9 @@ export class AtticRuntime {
     this.portableRootPopulated = this.portable?.active ? hasUserData(this.root) : false;
     ensureLayout(this.root);
     this.version = options.version ?? '0.0.0';
+    // 检查更新仓库：构造参数 > env 兜底（发布产线注入占位；两缺 = unconfigured 数据分支，不炸）。
+    this.releaseRepo = options.releaseRepo ?? (options.env ?? process.env)['ATTIC_RELEASE_REPO'];
+    this.shell = options.shell ?? 'electron';
     this.platform = options.platform ?? process.platform;
     // 便携态构造期副作用（幂等、值变才写）：面包屑登记 / 只读回落标记（默认根登记簿，plan.md 终拍②③）。
     if (this.portable?.active) syncPortableRegistry(this.defaultRoot, this.portable);
@@ -1046,6 +1059,7 @@ export class AtticRuntime {
       logsDir: path.join(launcherDir(this.root), 'logs'),
       totalMemMb: Math.round(os.totalmem() / 0x100000),
       freeMemMb: Math.round(os.freemem() / 0x100000),
+      shell: this.shell,
       // portable 便携态（B 期）：安装版缺席本键；rebuilt/pathWarning 仅命中时带出（契约可选字段口径）。
       ...(this.portable?.active
         ? {
@@ -1059,6 +1073,15 @@ export class AtticRuntime {
           }
         : {}),
     };
+  }
+
+  /**
+   * 检查更新（GitHub Releases latest，数据面见 updateCheck.ts）。
+   * 全分支数据化返回（unconfigured/error 也在 value 内，不抛异常）——UI 弹窗可见呈现；
+   * 动作分叉现状 = 全壳统一「提示 + Releases 链接」（tauri updater plugin 闭环待依赖决策，挂账）。
+   */
+  checkUpdate(): Promise<UpdateCheckResult> {
+    return checkLatestRelease({ releaseRepo: this.releaseRepo, currentVersion: this.version, fetchImpl: this.fetchImpl });
   }
 
   /** 清理 launcher/logs 下的 *.log（正在被占用的文件跳过），返回删除个数。 */

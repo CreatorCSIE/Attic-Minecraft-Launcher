@@ -396,6 +396,18 @@ export const en = {
     about: {
       ghRepo: 'View GitHub repository',
       checkUpdate: 'Check for updates',
+      checking: 'Checking…',
+      newBadge: 'new',
+      updateDialog: {
+        title: 'Check for updates',
+        upToDate: 'You are on the latest version (v{version}).',
+        found: 'A new version v{version} is available!',
+        published: 'Published {date}',
+        unconfigured: 'The release repository (owner/repo) is not configured — update check is unavailable.',
+        failed: 'Update check failed: {message}',
+        openReleases: 'Open releases page',
+        close: 'Close',
+      },
       updateSection: 'Launcher Update',
       updateChannel: 'Update channel',
       updateSoon: 'The launcher auto-update system is not online yet; the channel is not selectable.',

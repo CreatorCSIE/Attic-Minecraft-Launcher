@@ -2,6 +2,9 @@
   "name": "attic-launcher",
   "version": "0.0.0",
   "private": true,
+  "attic": {
+    "nightlyBase": "0.1.0"
+  },
   "packageManager": "pnpm@10.34.5",
   "scripts": {
     "dev": "node scripts/dev.mjs",

@@ -22,6 +22,7 @@ export type {
   RendererBridge,
   SpecialDir,
   SystemInfo,
+  UpdateCheckResult,
   WindowAction,
 } from './ipc';
 export type {

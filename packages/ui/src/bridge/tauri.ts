@@ -19,6 +19,7 @@ import {
   type LaunchRequest,
   type ModInstallRequest,
   type RendererBridge,
+  type UpdateCheckResult,
   type WindowAction,
 } from '@attic/core-spec';
 
@@ -81,6 +82,7 @@ export function buildTauriBridge(t: TauriGlobal): RendererBridge {
     listMods: () => forward(C.MODS_LIST),
     installMod: (request: ModInstallRequest) => forward<void>(C.MODS_INSTALL, [request]),
     getSystemInfo: () => forward(C.SYS_INFO),
+    checkUpdate: () => forward<UpdateCheckResult>(C.UPDATE_CHECK),
     openSpecialDir: (target) => host<void>('open_special_dir', { target }),
     clearLogs: () => forward<number>(C.LOGS_CLEAR),
     pickJavaExecutable: () => host<string | null>('pick_path', { kind: 'java-executable' }),

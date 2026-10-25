@@ -46,6 +46,7 @@ const bridge: RendererBridge = {
   listMods: () => invoke(IPC_CHANNELS.MODS_LIST),
   installMod: (request) => invoke(IPC_CHANNELS.MODS_INSTALL, request),
   getSystemInfo: () => invoke(IPC_CHANNELS.SYS_INFO),
+  checkUpdate: () => invoke(IPC_CHANNELS.UPDATE_CHECK),
   openSpecialDir: (target) => invoke(IPC_CHANNELS.SHELL_OPEN_DIR, target),
   clearLogs: () => invoke(IPC_CHANNELS.LOGS_CLEAR),
   pickJavaExecutable: () => invoke(IPC_CHANNELS.DIALOG_PICK, 'java-executable'),

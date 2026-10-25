@@ -148,7 +148,7 @@ Attic-Minecraft-Launcher
 
 ### 4. 免编译获取 CI 构件（nightly.link）
 
-不想搭构建环境的话，每次推送到 main 的提交都会由 release CI 产出全平台测试构件（版本号钉 `0.0.0`，非正式发版）。GitHub Actions 构件默认保留 90 天且下载需登录，**[nightly.link](https://nightly.link) 提供免登录的"永远指向最新成功构建"直链**，形态：
+不想搭构建环境的话，推送到任意分支都会由 release CI 产出全平台**测试构件**——仅供尝鲜与验证，不是正式发布；正式构件以 GitHub Releases 的 `v*` tag 发版为准。GitHub Actions 构件默认保留 90 天且下载需登录，**[nightly.link](https://nightly.link) 提供免登录的"永远指向最新成功构建"直链**，形态：
 
 ```text
 https://nightly.link/CreatorCSIE/Attic-Minecraft-Launcher/workflows/release/main/<构件名>
@@ -193,7 +193,7 @@ https://nightly.link/CreatorCSIE/Attic-Minecraft-Launcher/workflows/release/main
 不在，也不会分发。客户端 jar 与资产在首次启动时从 Betacraft 公共端点下载到本地数据目录，仓库不含任何 Mojang 版权内容（见许可证一节）。
 
 ### Q4：需要自己装 Java 吗？
-，dan
+
 不一定。游戏侧需要 Java 8（推荐 64 位），启动器不捆绑 JRE，但会自动探测机器上已有的 Java（注册表 / 常见目录 / `JAVA_HOME` / `PATH` 逐个实测版本与架构）；**一台 Java 8 都没有时会自动从 Azul 官方接口下载 Zulu JDK 8 到数据目录**（带 sha256 校验，下载一次后缓存复用，不会每次启动重下）。想指定别的 Java，可在设置页手动选 Java 路径。
 
 ### Q5：老系统（Win7 / Win8）能装吗？

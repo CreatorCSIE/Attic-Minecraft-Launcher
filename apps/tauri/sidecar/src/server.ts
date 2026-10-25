@@ -61,6 +61,8 @@ const runtime = new AtticRuntime({
   rootDir: bootstrapRootDir(),
   version: process.env['ATTIC_LAUNCHER_VERSION'] ?? '0.0.0',
   installDir: INSTALL_DIR,
+  // 壳形态：sidecar 只在 tauri 壳下拉起（SYS_INFO shell 字段数据源）。
+  shell: 'tauri',
   ...(PORTABLE_EXE_DIR
     ? { exeDir: PORTABLE_EXE_DIR, portableMarkers: [PORTABLE_INI ?? 'sidecar/portable.ini'] }
     : {}),
@@ -215,6 +217,8 @@ async function dispatch(method: string, params: Params): Promise<unknown> {
       return runtime.installMod(s(0));
     case C.SYS_INFO:
       return runtime.getSystemInfo();
+    case C.UPDATE_CHECK:
+      return runtime.checkUpdate();
     case C.LOGS_CLEAR:
       return runtime.clearLogs();
     // —— attic:internal:*（非契约通道：Rust 宿主动作的路径/入参拆分面）——

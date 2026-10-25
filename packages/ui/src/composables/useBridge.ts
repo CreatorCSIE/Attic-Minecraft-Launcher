@@ -25,9 +25,10 @@ import type {
   ModInstallRequest,
   RendererBridge,
   SystemInfo,
+  UpdateCheckResult,
   VersionJson,
 } from '@attic/core-spec';
-import { demoInstances, demoJavaInstall, demoJavaReport, demoModCategories, demoSettings, demoSysInfo, demoSysInfoPortable, demoVersions, isDemo, isDemoPortable } from '../dev/demo';
+import { demoInstances, demoJavaInstall, demoJavaReport, demoModCategories, demoSettings, demoSysInfo, demoSysInfoPortable, demoUpdateCheck, demoVersions, isDemo, isDemoPortable } from '../dev/demo';
 import { buildTauriBridge } from '../bridge/tauri';
 
 const NO_BRIDGE = 'no-bridge';
@@ -96,8 +97,9 @@ const mockBridge: RendererBridge = {
   // Mods 仓库属网络 + fs 宿主语义：mock 列表回空（空态分支可排），安装可见失败。
   listMods: async () => ok<ModCategoryView[]>([]),
   installMod: async () => err<void>(NO_BRIDGE),
-  // —— 设置页宿主能力面：fs/对话框/内存属宿主语义，浏览器无真值（err 可见失败）——
+  // —— 设置页宿主能力面：fs/对话框/内存/检查更新属宿主语义，浏览器无真值（err 可见失败）——
   getSystemInfo: async () => err<SystemInfo>(NO_BRIDGE),
+  checkUpdate: async () => err<UpdateCheckResult>(NO_BRIDGE),
   openSpecialDir: async () => err<void>(NO_BRIDGE),
   clearLogs: async () => err<number>(NO_BRIDGE),
   pickJavaExecutable: async () => err<string | null>(NO_BRIDGE),
@@ -137,6 +139,8 @@ function demoBridge(): RendererBridge {
     detectJava: async () => ok<JavaDetectionReport>(demoJavaReport),
     // 假宿主快照：让设置页通用/内存/关于栏在浏览器里排出真稿（动作类仍走 mock err）。
     getSystemInfo: async () => ok<SystemInfo>(isDemoPortable() ? demoSysInfoPortable : demoSysInfo),
+    // 假检查更新：关于页「有新版」弹窗与红点徽标可演练（固定回包，无网络语义）。
+    checkUpdate: async () => ok<UpdateCheckResult>(demoUpdateCheck),
     // 首启向导演练面：建号/目录选择器/Java 选择器给假值可走通三步。
     addAccount: async (name: string) => ok<AccountView>({ id: `demo-${name.toLowerCase()}`, name, type: 'offline' }),
     // demo 假安装目录：演练护栏口径——rootOverride 落进它内即拒绝（文案与 runtime 护栏一致；

@@ -82,6 +82,8 @@ export const IPC_CHANNELS = {
   MODS_INSTALL: 'attic:mods:install',
   /** 系统/宿主快照（设置页一次性取：启动器版本/平台/数据根/日志目录/总内存/可用内存）。 */
   SYS_INFO: 'attic:sys:info',
+  /** 检查更新（GitHub Releases latest；未配置/失败也以数据返回，UI 弹窗可见呈现）。 */
+  UPDATE_CHECK: 'attic:update:check',
   /** 打开特殊目录（数据根/日志目录；枚举参数，渲染侧不传任意路径——openPath 面收紧到白名单目标）。 */
   SHELL_OPEN_DIR: 'attic:shell:open-dir',
   /** 清理启动器日志目录（只删 launcher/logs 下的 *.log；返回删除个数）。 */
@@ -116,6 +118,8 @@ export interface SystemInfo {
   totalMemMb: number;
   /** 系统当前可用内存 MB（取不到 = 0）。 */
   freeMemMb: number;
+  /** 壳形态（宿主构造注入：tauri = sidecar 传 'tauri'；electron/legacy 缺省 'electron' 保守）。 */
+  shell: 'tauri' | 'electron';
   /**
    * portable 便携态（B 期，plan.md 2026-10-25 终拍；安装版省略本键）：
    * 宿主显式传程序目录（sidecar 的 process.execPath = node.exe 不可信，硬纪律），
@@ -139,6 +143,27 @@ export interface SystemInfo {
     pathWarning?: 'non_ascii' | 'space' | 'long';
   };
 }
+
+/**
+ * 检查更新结果（判别联合；全部分支以数据返回、不抛异常——UI 弹窗可见呈现）。
+ * 数据源 = GitHub Releases API `/releases/latest`（天然排除 draft/prerelease）；
+ * 预发布纪律：自身或 latest 含 `-`（预发布/构建后缀）→ 永不提示，归入 upToDate。
+ */
+export type UpdateCheckResult =
+  | {
+      status: 'update';
+      /** 新版本号（tag 去 v 前缀）。 */
+      version: string;
+      /** 发布页 URL（html_url；「打开发布页」动作面）。 */
+      url: string;
+      /** 发布说明（body 原样纯文本，可空串）。 */
+      notes: string;
+      /** 发布时间（GitHub published_at 原样 ISO 字符串，可空串）。 */
+      publishedAt: string;
+    }
+  | { status: 'upToDate'; /** 当前版本（宿主注入）。 */ current: string }
+  | { status: 'unconfigured' }
+  | { status: 'error'; /** 可读失败原因（网络/HTTP 状态/响应形状/仓库格式）。 */ message: string };
 
 /** 窗口控制动作：toggle-maximize 由宿主在最大化/还原间切换。 */
 export type WindowAction = 'minimize' | 'toggle-maximize' | 'close';
@@ -298,6 +323,8 @@ export interface RendererBridge {
   installMod(request: ModInstallRequest): Promise<IpcResult<void>>;
   /** 宿主环境快照（版本/数据根/日志目录/内存——设置页多栏共用）。 */
   getSystemInfo(): Promise<IpcResult<SystemInfo>>;
+  /** 检查更新（GitHub Releases latest；未配置/失败也在 value 分支内，不占 error 封装）。 */
+  checkUpdate(): Promise<IpcResult<UpdateCheckResult>>;
   /** 在系统文件管理器打开特殊目录（白名单枚举，路径宿主解析）。 */
   openSpecialDir(target: SpecialDir): Promise<IpcResult<void>>;
   /** 清理启动器日志（launcher/logs 下 *.log），返回删除个数。 */

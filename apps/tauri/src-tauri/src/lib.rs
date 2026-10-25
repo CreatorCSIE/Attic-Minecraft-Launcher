@@ -55,6 +55,7 @@ pub mod channels {
         "attic:mods:list",
         "attic:mods:install",
         "attic:sys:info",
+        "attic:update:check",
         "attic:shell:open-dir",
         "attic:logs:clear",
         "attic:dialog:pick",
@@ -100,6 +101,7 @@ pub mod channels {
         "attic:mods:list",
         "attic:mods:install",
         "attic:sys:info",
+        "attic:update:check",
         "attic:logs:clear",
     ];
     /// Rust↔sidecar 私有延伸方法（非契约通道）。
