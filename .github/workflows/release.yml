@@ -7,7 +7,9 @@ name: Release（全平台矩阵）
 # 分发口径（用户拍板 2026-10-23）：Win/Mac arm64 照常发（壳原生，游戏侧走 x64 模拟 / Rosetta，
 # 见 depends.ts 闸门）；Linux 优先 Debian 系（deb，arch/redhat 有需求再说），linux arm64 不分发
 # （LWJGL2 无 arm64 原生库且无系统级模拟）。
-# portable 目录构件（win zip / linux tar.xz）与 MSI 双轨 = 后续条目（plan.md）。
+# portable 目录构件 = Windows 四腿（tauri x64/arm64、electron x64、legacy x64；B 期 2026-10-25 终拍①：
+# 与安装器同载荷、零预带 .attic、顶层收进 amcl-<shell>-windows-<arch>-<ver>/ 文件夹、程序目录 marker 位
+# 写出厂 portable.ini、根附「先解压再运行.txt」防呆）；linux tar.xz 与 MSI 双轨 = 后续条目（plan.md）。
 #
 # 触发与两种形态（2026-10 开放 artifacts 通道）：
 #  · tag v*  = 正式发版形态（全签名 + updater 产物）。
@@ -111,6 +113,53 @@ jobs:
             Copy-Item "$env:RUNNER_TEMP\node-arm64\node-$nv-win-arm64\node.exe" stage\node.exe
           }
           Get-Item stage\node.exe | Select-Object Name, Length
+      # —— portable 目录构件（plan.md 2026-10-25 终拍①）：与安装器同载荷、零预带 .attic ——
+      # Compress-Archive 戒律：System.IO.Compression 静默跳过空目录——预带空 .attic 会产"zip 里
+      # 不存在、解压后也无"的幻影；数据根由应用首启 ensureLayout 建，zip 永不含它（守卫③断言）。
+      # 同一戒律的反面推论：marker 必须住非空位——sidecar/ 由 server.cjs 保证非空（electron 腿
+      # = resources/ 由 app.asar 保证非空），marker 绝不落在"靠 zip 自己建出来"的目录里。
+      # 出厂 portable.ini 的 rootDir 留空 = 数据落 exe 旁 .attic（便携缺省）；
+      # 用户经向导/设置页改目录时 runtime writePortablePointer 覆写本文件（相对位按程序目录解析）。
+      - name: Portable zip
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF_TYPE -eq 'tag') { $ver = $env:GITHUB_REF_NAME.TrimStart('v') } else { $ver = '0.0.0' }
+          $folder = "amcl-tauri-windows-${{ matrix.arch }}-$ver"
+          $zip = "portable-dist\$folder-portable.zip"
+          # 守卫①：安装器载荷必须干净——portable.ini 只许出现在便携 staging 副本里
+          # （安装器载荷混入 marker = 安装版被双指纹误判成便携）
+          $dirty = @(Get-ChildItem -Recurse -Force -Path stage -Filter portable.ini)
+          if ($dirty.Count -gt 0) { throw "installer payload contaminated with portable.ini: $($dirty[0].FullName)" }
+          New-Item -ItemType Directory -Force -Path "portable\$folder", portable-dist | Out-Null
+          Copy-Item -Recurse stage\* "portable\$folder\"
+          Set-Content -Path "portable\$folder\sidecar\portable.ini" -Encoding ascii -Value @(
+            '# Attic portable marker - do not delete: portable identity depends on this file.',
+            '# rootDir = portable data root pointer; relative paths resolve against the app folder;',
+            '# leave empty (factory default) to keep data in .attic beside the exe.',
+            'rootDir='
+          )
+          # 根防呆 txt：UTF-8 BOM（Win7 记事本 ANSI 回退面——无 BOM 中文 = 乱码 = 防呆失效）
+          $txt = @"
+          Attic 便携版 —— 请先解压整个文件夹，勿在压缩包里直接运行
+
+          1. 右键本 zip 选「全部解压」，或把 $folder 整个文件夹拖到目标位置（桌面/U 盘），
+             进入文件夹双击其中的启动器 exe 运行。
+          2. 不要在 WinRAR/7-Zip 里直接双击 exe：那会解压到临时目录运行，程序检测到后拒绝启动，
+             数据也会丢在临时目录里。
+          3. 游戏数据默认放在 exe 旁的 .attic 文件夹——整个文件夹拷到哪，数据就跟到哪。
+          4. 新版本下载：https://github.com/CreatorCSIE/Attic-Minecraft-Launcher/releases
+
+          "@
+          [System.IO.File]::WriteAllText("$PWD\portable\先解压再运行.txt", $txt, (New-Object System.Text.UTF8Encoding($true)))
+          Compress-Archive -Path "portable\$folder", "portable\先解压再运行.txt" -DestinationPath $zip -Force
+          # 守卫②：portable zip 缺 marker = fail（marker 丢 = 便携身份蒸发，整包成死包）
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $z = [System.IO.Compression.ZipFile]::OpenRead("$PWD\$zip")
+          try { $names = @($z.Entries | ForEach-Object FullName) } finally { $z.Dispose() }
+          if ($names -notcontains "$folder/sidecar/portable.ini") { throw "portable zip missing marker: $folder/sidecar/portable.ini" }
+          # 守卫③：zip 含 .attic 条目 = fail（预带数据目录 = 构建机数据泄漏 + 空目录幻影面）
+          $leak = @($names | Where-Object { $_ -like '*/.attic/*' -or $_ -like '.attic/*' })
+          if ($leak.Count -gt 0) { throw "portable zip contaminated with .attic entry: $($leak[0])" }
       # 安装器本体 32-bit（ISCC 唯一形态），两架构 runner 都能直接跑；ARCH 标签只决定
       # 64-mode 与 IsWin64 闸门：x64 腿带闸门，arm64 腿不带（arm64/x64 主机皆放行，
       # 载荷本身即 arm64 原生）
@@ -143,6 +192,7 @@ jobs:
           path: |
             installer/dist/amcl-tauri-windows-${{ matrix.arch }}-*-setup.exe
             installer/dist/amcl-tauri-windows-${{ matrix.arch }}-*-setup.exe.sig
+            portable-dist/amcl-tauri-windows-${{ matrix.arch }}-*-portable.zip
 
   # 双壳并进（2026-10-24 用户拍板）：Electron 壳 = Tauri 主壳之外的可选发行形态，
   # 仅 Windows（mac/linux 有社区需求再开）。更新策略 = 检查+提示+手动下载
@@ -170,6 +220,47 @@ jobs:
         run: test -f apps/electron/build/icon.ico
       - name: electron-builder (--dir x64)
         run: pnpm --filter @attic/electron run dist
+      # —— portable 目录构件（B 期终拍①）：与安装器同载荷（win-unpacked）、零预带 .attic；
+      # marker 住 resources/（app.asar 保证非空位）。Compress-Archive 空目录戒律与出厂 rootDir
+      # 留空语义详见 tauri 腿 Portable zip 步头注（同一条戒律，三腿共用口径）——
+      - name: Portable zip
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF_TYPE -eq 'tag') { $ver = $env:GITHUB_REF_NAME.TrimStart('v') } else { $ver = '0.0.0' }
+          $folder = "amcl-electron-windows-x64-$ver"
+          $zip = "portable-dist\$folder-portable.zip"
+          $payload = 'apps\electron\release\win-unpacked'
+          # 守卫①：安装器载荷必须干净（portable.ini 只许在便携 staging 副本里）
+          $dirty = @(Get-ChildItem -Recurse -Force -Path $payload -Filter portable.ini)
+          if ($dirty.Count -gt 0) { throw "installer payload contaminated with portable.ini: $($dirty[0].FullName)" }
+          New-Item -ItemType Directory -Force -Path "portable\$folder", portable-dist | Out-Null
+          Copy-Item -Recurse "$payload\*" "portable\$folder\"
+          Set-Content -Path "portable\$folder\resources\portable.ini" -Encoding ascii -Value @(
+            '# Attic portable marker - do not delete: portable identity depends on this file.',
+            '# rootDir = portable data root pointer; relative paths resolve against the app folder;',
+            '# leave empty (factory default) to keep data in .attic beside the exe.',
+            'rootDir='
+          )
+          $txt = @"
+          Attic 便携版 —— 请先解压整个文件夹，勿在压缩包里直接运行
+
+          1. 右键本 zip 选「全部解压」，或把 $folder 整个文件夹拖到目标位置（桌面/U 盘），
+             进入文件夹双击其中的启动器 exe 运行。
+          2. 不要在 WinRAR/7-Zip 里直接双击 exe：那会解压到临时目录运行，程序检测到后拒绝启动，
+             数据也会丢在临时目录里。
+          3. 游戏数据默认放在 exe 旁的 .attic 文件夹——整个文件夹拷到哪，数据就跟到哪。
+          4. 新版本下载：https://github.com/CreatorCSIE/Attic-Minecraft-Launcher/releases
+
+          "@
+          [System.IO.File]::WriteAllText("$PWD\portable\先解压再运行.txt", $txt, (New-Object System.Text.UTF8Encoding($true)))
+          Compress-Archive -Path "portable\$folder", "portable\先解压再运行.txt" -DestinationPath $zip -Force
+          # 守卫②③：缺 marker = fail；含 .attic 条目 = fail（口径同 tauri 腿）
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $z = [System.IO.Compression.ZipFile]::OpenRead("$PWD\$zip")
+          try { $names = @($z.Entries | ForEach-Object FullName) } finally { $z.Dispose() }
+          if ($names -notcontains "$folder/resources/portable.ini") { throw "portable zip missing marker: $folder/resources/portable.ini" }
+          $leak = @($names | Where-Object { $_ -like '*/.attic/*' -or $_ -like '.attic/*' })
+          if ($leak.Count -gt 0) { throw "portable zip contaminated with .attic entry: $($leak[0])" }
       # flavor="electron" 表在 attic.iss（AppId uk.attic.launcher.electron，与主壳
       # 分离可同机共存）；载荷路径相对基准 = .iss 目录 → $PWD 绝对化戒律同主壳
       - name: ISCC (electron x64)
@@ -186,7 +277,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: amcl-electron-windows-x64
-          path: installer/dist/amcl-electron-windows-x64-*-setup.exe
+          path: |
+            installer/dist/amcl-electron-windows-x64-*-setup.exe
+            portable-dist/amcl-electron-windows-x64-*-portable.zip
 
   tauri-macos-arm64:
     name: Tauri DMG · macOS arm64（持续线，Apple Silicon）
@@ -324,11 +417,53 @@ jobs:
               'installer\attic.iss'
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
+      # —— portable 目录构件（B 期终拍①，legacy 只发 x64 腿——兜底壳 portable 面 ia32 无需求）：
+      # marker 住 resources/（非空位戒律同前两腿，详见 tauri 腿 Portable zip 步头注）——
+      - name: Portable zip (x64)
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF_TYPE -eq 'tag') { $ver = $env:GITHUB_REF_NAME.TrimStart('v') } else { $ver = '0.0.0' }
+          $folder = "amcl-legacy-windows-x64-$ver"
+          $zip = "portable-dist\$folder-portable.zip"
+          $payload = 'apps\electron-legacy\release\win-unpacked'
+          # 守卫①：安装器载荷必须干净（portable.ini 只许在便携 staging 副本里）
+          $dirty = @(Get-ChildItem -Recurse -Force -Path $payload -Filter portable.ini)
+          if ($dirty.Count -gt 0) { throw "installer payload contaminated with portable.ini: $($dirty[0].FullName)" }
+          New-Item -ItemType Directory -Force -Path "portable\$folder", portable-dist | Out-Null
+          Copy-Item -Recurse "$payload\*" "portable\$folder\"
+          Set-Content -Path "portable\$folder\resources\portable.ini" -Encoding ascii -Value @(
+            '# Attic portable marker - do not delete: portable identity depends on this file.',
+            '# rootDir = portable data root pointer; relative paths resolve against the app folder;',
+            '# leave empty (factory default) to keep data in .attic beside the exe.',
+            'rootDir='
+          )
+          $txt = @"
+          Attic 便携版 —— 请先解压整个文件夹，勿在压缩包里直接运行
+
+          1. 右键本 zip 选「全部解压」，或把 $folder 整个文件夹拖到目标位置（桌面/U 盘），
+             进入文件夹双击其中的启动器 exe 运行。
+          2. 不要在 WinRAR/7-Zip 里直接双击 exe：那会解压到临时目录运行，程序检测到后拒绝启动，
+             数据也会丢在临时目录里。
+          3. 游戏数据默认放在 exe 旁的 .attic 文件夹——整个文件夹拷到哪，数据就跟到哪。
+          4. 新版本下载：https://github.com/CreatorCSIE/Attic-Minecraft-Launcher/releases
+
+          "@
+          [System.IO.File]::WriteAllText("$PWD\portable\先解压再运行.txt", $txt, (New-Object System.Text.UTF8Encoding($true)))
+          Compress-Archive -Path "portable\$folder", "portable\先解压再运行.txt" -DestinationPath $zip -Force
+          # 守卫②③：缺 marker = fail；含 .attic 条目 = fail（口径同前两腿）
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $z = [System.IO.Compression.ZipFile]::OpenRead("$PWD\$zip")
+          try { $names = @($z.Entries | ForEach-Object FullName) } finally { $z.Dispose() }
+          if ($names -notcontains "$folder/resources/portable.ini") { throw "portable zip missing marker: $folder/resources/portable.ini" }
+          $leak = @($names | Where-Object { $_ -like '*/.attic/*' -or $_ -like '.attic/*' })
+          if ($leak.Count -gt 0) { throw "portable zip contaminated with .attic entry: $($leak[0])" }
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: amcl-legacy-windows
-          path: installer/dist/amcl-legacy-windows-*-setup.exe
+          path: |
+            installer/dist/amcl-legacy-windows-*-setup.exe
+            portable-dist/amcl-legacy-windows-x64-*-portable.zip
 
   # TODO(发版 SOP)：latest.json（minisign 验签清单）生成与 GitHub Release 发布步骤；
   # sidecar 便携 node 随装策略（exe 目录 node.exe 或安装包内嵌）在此定稿。

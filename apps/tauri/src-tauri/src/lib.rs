@@ -184,6 +184,52 @@ fn resolve_sidecar_launch(app: &AppHandle) -> Result<(PathBuf, PathBuf), String>
     Ok((node, entry))
 }
 
+/// Releases 页（temp 守卫指路位；与 UI 关于页 REPO_URL 同源）。
+const RELEASES_URL: &str = "https://github.com/CreatorCSIE/Attic-Minecraft-Launcher/releases";
+
+/// portable B 期双指纹（plan.md 终拍②，判定单点在 runtime，本函数只负责宿主显式传参）：
+/// 程序目录 marker（`sidecar/portable.ini`）在场 ∨（exe 旁 `.attic` ∧ 其内 `launcher/portable.anchor`）
+/// → 注入 ATTIC_EXE_DIR（程序目录）；marker 在场再加注 ATTIC_PORTABLE_INI（ini 绝对路径）。
+/// 硬纪律：sidecar 的 process.execPath = node.exe 不可信，exeDir 判定面必须由壳显式传。
+/// 返回 None = 非便携（安装版/开发态天然不命中）。
+fn portable_launch_env() -> Option<(PathBuf, Option<PathBuf>)> {
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| strip_verbatim(d.to_path_buf())))?;
+    let marker = exe_dir.join("sidecar").join("portable.ini");
+    let anchor = exe_dir.join(".attic").join("launcher").join("portable.anchor");
+    let marker_hit = marker.is_file();
+    if !marker_hit && !anchor.is_file() {
+        return None;
+    }
+    Some((exe_dir, if marker_hit { Some(marker) } else { None }))
+}
+
+/// temp 守卫特征判定（plan.md 终拍⑤，runtime looksLikeTempExtraction 同款口径）：
+/// exeDir 命中 temp 目录前缀或 `Rar$`/`7z$`/`WinRar$` 特征段 ∧ exe 旁无既有 `.attic` → true。
+/// 小白在压缩包里直接双击：只抽 exe → marker 没跟出来判成安装态写 %APPDATA%；
+/// 整目录抽到 temp → 数据随 temp 蒸发——两坑同由本守卫在 boot 拒服务。
+fn temp_trap_hit() -> bool {
+    let Some(exe_dir) = std::env::current_exe().ok().and_then(|p| p.parent().map(|d| d.to_path_buf())) else {
+        return false;
+    };
+    if exe_dir.join(".attic").exists() {
+        return false;
+    }
+    let lowered = strip_verbatim(exe_dir).to_string_lossy().to_lowercase();
+    let temp = strip_verbatim(std::env::temp_dir())
+        .to_string_lossy()
+        .to_lowercase()
+        .trim_end_matches(['\\', '/'])
+        .to_string();
+    if lowered == temp || lowered.starts_with(&format!("{temp}{}", std::path::MAIN_SEPARATOR)) {
+        return true;
+    }
+    lowered
+        .split(['\\', '/'])
+        .any(|seg| seg.starts_with("rar$") || seg.starts_with("7z$") || seg.starts_with("winrar$"))
+}
+
 /// 剥除 Windows 扩展长度路径前缀 `\\?\`（Tauri resolve 产物）。
 /// node 的模块解析器不识别该前缀，会把 `\\?\E:\...` 退化成盘符相对 `E:` 再 lstat → EISDIR。
 fn strip_verbatim(p: PathBuf) -> PathBuf {
@@ -219,6 +265,13 @@ impl Sidecar {
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())
             .env("ATTIC_LAUNCHER_VERSION", &version);
+        // portable B 期：双指纹命中才注入（缺席 = sidecar 走安装/开发形态，判定复核在 runtime）
+        if let Some((exe_dir, marker)) = portable_launch_env() {
+            cmd.env("ATTIC_EXE_DIR", &exe_dir);
+            if let Some(ini) = marker {
+                cmd.env("ATTIC_PORTABLE_INI", &ini);
+            }
+        }
         hide_console(&mut cmd);
         let mut child = cmd
             .spawn()
@@ -510,6 +563,32 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
+            // temp 守卫（plan.md 终拍⑤）：conf 建窗先于 setup，命中即藏窗 + 原生对话框讲清
+            // 「实际动作 + 出路」+ 指路 Releases，再退出；sidecar 不 spawn（不产生便携态副作用）。
+            if temp_trap_hit() {
+                if let Some(win) = app.get_webview_window("main") {
+                    let _ = win.hide();
+                }
+                let handle = app.handle().clone();
+                let open_releases = handle
+                    .dialog()
+                    .message(
+                        "请先解压整个文件夹，勿在压缩包里直接运行。\n\n\
+                         检测到启动器正从临时目录运行——游戏数据会随临时目录清理而丢失。\
+                         请把 zip 里的整个文件夹解压到固定位置（如 D:\\Attic）后再双击启动。",
+                    )
+                    .title("Attic Launcher")
+                    .buttons(tauri_plugin_dialog::MessageDialogButtons::OkCancelCustom(
+                        "打开 Releases 页".to_string(),
+                        "退出".to_string(),
+                    ))
+                    .blocking_show();
+                if open_releases {
+                    let _ = handle.opener().open_url(RELEASES_URL, None::<&str>);
+                }
+                handle.exit(0);
+                return Ok(());
+            }
             let handle = app.handle().clone();
             let sidecar = Sidecar::spawn(&handle).map_err(|e| e)?;
             app.manage(Arc::new(sidecar));
@@ -540,8 +619,10 @@ pub fn run() {
         .expect("error while building tauri application")
         .run(|app_handle, event| {
             if let tauri::RunEvent::Exit = event {
-                let state = app_handle.state::<Arc<Sidecar>>();
-                tauri::async_runtime::block_on(state.shutdown());
+                // temp 守卫路径 sidecar 未 manage：try_state 缺席即跳过（state! 会 panic）
+                if let Some(state) = app_handle.try_state::<Arc<Sidecar>>() {
+                    tauri::async_runtime::block_on(state.shutdown());
+                }
             }
         });
 }

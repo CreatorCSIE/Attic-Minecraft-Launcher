@@ -2,12 +2,18 @@
 /**
  * 顶栏 —— 拖拽区（-webkit-app-region: drag）+ 右侧窗控制三键（no-drag）。
  * 窗控制走契约通道 WINDOW_CONTROL（attic:window:control），浏览器直开无桥时隐藏。
+ * B 期③：portable 只读回落 = 头区常驻徽标「数据未随盘」（tooltip = 生效根）——
+ * 一次性告知会被第二台只读机静默复用，必须常驻。
  */
+import { computed } from 'vue';
 import { useI18n } from '../i18n';
 import { useBridge } from '../composables/useBridge';
+import { useSysInfo } from '../composables/useSysInfo';
 
 const { t } = useI18n();
 const { bridge, hasBridge } = useBridge();
+const { info } = useSysInfo();
+const portableFallback = computed(() => info.value?.portable?.fallback === true);
 </script>
 
 <template>
@@ -17,6 +23,11 @@ const { bridge, hasBridge } = useBridge();
       <span class="mark" aria-hidden="true"></span>
       <span class="name">{{ t('app.title') }}</span>
     </div>
+    <span
+      v-if="portableFallback"
+      class="portable-badge"
+      :title="t('portable.fallbackTooltip', { path: info?.dataRoot ?? '' })"
+    >{{ t('portable.fallbackBadge') }}</span>
     <div class="right">
       <span class="dot" :class="hasBridge ? 'dot--ok' : 'dot--muted'" :title="hasBridge ? 'bridge' : 'no-bridge'"></span>
       <div v-if="hasBridge" class="wctls">
@@ -92,6 +103,15 @@ const { bridge, hasBridge } = useBridge();
   font-weight: 600;
   letter-spacing: var(--tracking-label);
   color: var(--text-secondary);
+}
+/* —— 只读回落徽标：警示色描边胶囊，纯展示不参与拖拽判定 —— */
+.portable-badge {
+  padding: 2px var(--space-2);
+  border: 1px solid var(--warn);
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-xs);
+  color: var(--warn);
+  white-space: nowrap;
 }
 .right {
   display: flex;

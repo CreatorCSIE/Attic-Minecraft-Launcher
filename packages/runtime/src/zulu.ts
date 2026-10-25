@@ -57,10 +57,16 @@ export async function queryZuluPackages(
   });
   const res = await fetchImpl(`${endpoints.zuluMetadata}?${params.toString()}`);
   if (!res.ok) throw new Error(`Zulu 元数据 API HTTP ${res.status}`);
-  const data = (await res.json()) as { name?: string; url?: string; sha256?: string }[];
-  return data
-    .filter((entry): entry is { name: string; url: string; sha256?: string } => Boolean(entry.name && entry.url))
-    .map(({ name, url, sha256 }) => ({ name, url, ...(sha256 ? { sha256 } : {}) }));
+  // 真实 API 字段是 download_url（2026-10-25 WSL 实机取证：只认 url 会全数筛掉、
+  // 自动供给静默失效）；url 保留为回退。
+  const data = (await res.json()) as { name?: string; url?: string; download_url?: string; sha256?: string }[];
+  const out: ZuluPackage[] = [];
+  for (const entry of data) {
+    const dl = entry.download_url ?? entry.url;
+    if (!entry.name || !dl) continue;
+    out.push({ name: entry.name, url: dl, ...(entry.sha256 ? { sha256: entry.sha256 } : {}) });
+  }
+  return out;
 }
 
 /** 解压 zip：win 走 powershell Expand-Archive，其余走 unzip。 */
@@ -84,17 +90,39 @@ async function extractZip(zipPath: string, destDir: string, platform: string): P
   }
 }
 
-function findJavaExecutable(dir: string, platform: string): string | null {
+/**
+ * 在解压根向下至多两层找 bin/java；也用于供给缓存命中检查（已装则免重下）。
+ * 两层是必须的：Zulu zip 顶层目录与包同名，解压后真实形态为 destRoot/<name>/<name>/bin/java
+ * （2026-10-25 WSL 实机取证：只查一层 = 缓存永不命中、每次启动重下 111MB）。
+ */
+export function findJavaExecutable(dir: string, platform: string): string | null {
   const binary = platform === 'win32' ? 'java.exe' : 'java';
-  const direct = path.join(dir, 'bin', binary);
-  if (fs.existsSync(direct)) return direct;
+  const check = (d: string): string | null => {
+    const p = path.join(d, 'bin', binary);
+    return fs.existsSync(p) ? p : null;
+  };
+  const direct = check(dir);
+  if (direct) return direct;
+  let level1: string[];
   try {
-    for (const entry of fs.readdirSync(dir)) {
-      const found = path.join(dir, entry, 'bin', binary);
-      if (fs.existsSync(found)) return found;
-    }
+    level1 = fs.readdirSync(dir);
   } catch {
-    /* 目录不可读 = 未找到 */
+    return null;
+  }
+  for (const entry of level1) {
+    const d1 = path.join(dir, entry);
+    const found = check(d1);
+    if (found) return found;
+    let level2: string[];
+    try {
+      level2 = fs.readdirSync(d1);
+    } catch {
+      continue; // 普通文件（如残留 zip）ENOTDIR = 跳过
+    }
+    for (const sub of level2) {
+      const found2 = check(path.join(d1, sub));
+      if (found2) return found2;
+    }
   }
   return null;
 }

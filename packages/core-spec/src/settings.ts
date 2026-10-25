@@ -77,6 +77,24 @@ export interface AppSettings {
    */
   wizardDone?: boolean;
   /**
+   * 首启向导完成标记的形态戳（portable B 期，plan.md 2026-10-25 终拍④）：
+   * portable 只读回落与安装版共享默认根 `%APPDATA%\.attic`，无 flavor 戳则先完成者
+   * 压掉后者弹窗、数据在错误形态下静默共用。三重门之三 = 「无**本 flavor** 完成标记」；
+   * 存量 `wizardDone=true` 无戳 = 视为 installed。向导完成/跳过时随 `wizardDone` 一并写。
+   */
+  wizardFlavor?: 'installed' | 'portable';
+  /**
+   * 便携面包屑（portable B 期②）：portable 激活时把生效根登记进**平台默认根** settings
+   * （默认根永远可达，天然是登记簿）。启动发现生效根≠面包屑 ∧ 面包屑根有数据 → UI 找回提示
+   * （ini `rootDir` 自定义后指针丢失的兜底出路）。portable 激活时 `getSettings` 回读恒取默认根位。
+   */
+  lastPortableRoot?: string;
+  /**
+   * 只读回落标记（portable B 期③）：exeDir 实写探针不可写 → 生效根回落默认根 + 本键置真，
+   * UI 头区常驻徽标「数据未随盘」（一次性告知会被第二台只读机静默复用）。runtime 回落时自动写。
+   */
+  portableFallback?: boolean;
+  /**
    * LegacyFix 关卡存档模式（JVM 属性 `lf.proxy.levelServer` 直通）：
    * `local`=强制本地单人存档；URL=在线关卡代理；缺省=LegacyFix 一次性对话框。
    * 有值时对话框永不弹，且覆盖游戏目录里陈旧的 `legacyfix/level-server.txt`（属性优先于文件）。

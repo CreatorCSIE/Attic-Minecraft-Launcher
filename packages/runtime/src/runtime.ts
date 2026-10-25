@@ -54,6 +54,13 @@ import {
 } from './mods';
 import { GameProcessManager } from './process';
 import { parseProperties } from './properties';
+import {
+  detectPortable,
+  syncPortableRegistry,
+  writePortableAnchor,
+  writePortablePointer,
+  type PortableResolution,
+} from './portable';
 import { DEFAULT_AGENT_MOUNTS } from './quirks';
 import {
   assetIndexFile,
@@ -91,7 +98,7 @@ import {
 } from './storage';
 import { canonicalLaunchMethod, detectLaunchMethod, probeIndevEntry, probePreclassicEntry } from './wrapperDetector';
 import { extractZipTo, listZipEntryNames } from './zip';
-import { installZuluPackage, queryZuluPackages } from './zulu';
+import { findJavaExecutable, installZuluPackage, queryZuluPackages } from './zulu';
 
 export interface AtticRuntimeOptions {
   /** rootDir 覆盖（共存/迁移逃生舱）。 */
@@ -109,6 +116,13 @@ export interface AtticRuntimeOptions {
    * 天然成立）。setSettings 护栏消费：rootOverride 落在安装目录之内 = 卸载器 {app} 整删射程 → 拒绝。
    */
   installDir?: string;
+  /**
+   * portable B 期：程序目录（exe 所在目录）。宿主显式传——sidecar 的 process.execPath = node.exe
+   * 不可信（硬纪律），exeDir 判定面不得依赖它。在场 = runtime 做双指纹便携判定。
+   */
+  exeDir?: string;
+  /** portable marker ini 候选（相对 exeDir；tauri=['sidecar/portable.ini']、electron/legacy=['resources/portable.ini']）。 */
+  portableMarkers?: string[];
 }
 
 function messageOf(error: unknown): string {
@@ -171,6 +185,8 @@ export class AtticRuntime {
   readonly defaultRoot: string;
   /** 宿主安装目录（护栏参照；缺省 = 无护栏，测试/程序化场景）。 */
   readonly installDir: string | undefined;
+  /** portable B 期双指纹判定结果（exeDir 缺席或非便携 = null）。pointerRoot 随 setSettings 指针写回同步。 */
+  readonly portable: PortableResolution | null;
   readonly endpoints: Endpoints;
   /** 启动器版本（宿主注入，SYS_INFO/关于页消费）。 */
   readonly version: string;
@@ -185,19 +201,35 @@ export class AtticRuntime {
   private readonly infoWatchTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   constructor(options: AtticRuntimeOptions = {}) {
+    // 平台默认根（rootOverride 指针落位/向导三重门判定基线/只读回落目标）：同参数但不带 override/portable。
+    this.defaultRoot = resolveDataRoot({ platform: options.platform, env: options.env, execPath: options.execPath });
+    // portable B 期双指纹判定（exeDir 缺席 = 非便携：测试/程序化场景天然不命中）。
+    // 硬纪律：exeDir 宿主显式传（sidecar 的 process.execPath = node.exe 不可信），判定逻辑单点在 runtime。
+    this.portable = options.exeDir
+      ? detectPortable({
+          exeDir: options.exeDir,
+          markerCandidates: options.portableMarkers,
+          env: options.env,
+          platform: options.platform,
+          version: options.version,
+          defaultRoot: this.defaultRoot,
+        })
+      : null;
     this.root = resolveDataRoot({
       platform: options.platform,
       env: options.env,
       execPath: options.execPath,
       portable: options.portable,
-      rootDirOverride: options.rootDir,
+      // 优先级 rootDirOverride > portable > 默认（storage.ts 口径不动）：便携命中时随身根经 override 位注入，
+      // 显式 rootDir（宿主 peek / 共存逃生舱）仍压过便携。
+      rootDirOverride: options.rootDir ?? (this.portable?.active ? this.portable.root : undefined),
     });
-    // 平台默认根（rootOverride 指针落位/向导三重门判定基线）：同参数但不带 override/portable。
-    this.defaultRoot = resolveDataRoot({ platform: options.platform, env: options.env, execPath: options.execPath });
     this.installDir = options.installDir;
     ensureLayout(this.root);
     this.version = options.version ?? '0.0.0';
     this.platform = options.platform ?? process.platform;
+    // 便携态构造期副作用（幂等、值变才写）：面包屑登记 / 只读回落标记（默认根登记簿，plan.md 终拍②③）。
+    if (this.portable?.active) syncPortableRegistry(this.defaultRoot, this.portable);
     // 端点优先级：构造参数（测试/程序化）> launcher.settings 的 endpoint.* 覆盖 > 默认。
     this.endpoints = options.endpoints
       ? resolveEndpoints(options.endpoints)
@@ -934,16 +966,53 @@ export class AtticRuntime {
   }
 
   getSettings(): AppSettings {
-    return settingsFromProps(loadSettings(this.root));
+    const view = settingsFromProps(loadSettings(this.root));
+    if (this.portable?.active) {
+      // 便携形态视图映射（两形态各写各的指针面）：marker ini 的 rootDir 投映进 rootOverride 字段
+      // （UI 三重门①/设置页 pendingRoot 复用现成逻辑，ini 相对位按 exeDir 解析后回显绝对形）；
+      // 回落标记恒取本次判定现场、面包屑恒取默认根登记簿（生效根 settings 里的同名键不可信，覆盖之）。
+      if (this.portable.pointerRoot) view.rootOverride = this.portable.pointerRoot;
+      else delete view.rootOverride;
+      view.portableFallback = this.portable.fallback;
+      const crumb = loadSettings(this.defaultRoot)['lastPortableRoot'];
+      if (crumb) view.lastPortableRoot = crumb;
+      else delete view.lastPortableRoot;
+    }
+    return view;
   }
 
   /**
    * 合并落盘（未知键保留），返回保存后的视图。端点改动下次启动应用生效。
-   * 落盘前护栏：rootOverride 若落在宿主安装目录之内 = 卸载器 `{app}` 整删射程
+   * 安装版落盘前护栏：rootOverride 若落在宿主安装目录之内 = 卸载器 `{app}` 整删射程
    * （Inno `[UninstallDelete]` 无排除机制），数据必丢且不可逆 → 显式拒绝（微文案：实际动作 + 出路）。
    * 向导/设置页/手改 settings 三入口共用本道闸；宿主侧 bootstrap peek 另有同款兜底。
+   * 便携形态（B 期）：rootOverride 落点改道 marker ini 的 rootDir（随盘指针面，不落 settings）；
+   * 安装目录护栏跳过（无卸载器，{app} 风险面不存在）；向导 portable flavor 完成时幂等落锚。
    */
   setSettings(settings: AppSettings): AppSettings {
+    if (this.portable?.active) {
+      // 键在场才动指针面（部分 patch 不带 rootOverride = 指针不动；空串/undefined = 显式清除回落 exe 旁缺省）。
+      // 视图恒带当前指针回显（getSettings 映射），与 pointerRoot 比对判「真改动」，未动 = 零写。
+      // 相对 rootDir 按 exeDir 解析（换盘符纪律）后写原形入 ini。
+      if ('rootOverride' in settings) {
+        const raw = settings.rootOverride?.trim() ?? '';
+        const p = this.platform === 'win32' ? path.win32 : path.posix;
+        const resolved = raw ? (p.isAbsolute(raw) ? p.normalize(raw) : p.resolve(this.portable.exeDir, raw)) : '';
+        if (resolved !== (this.portable.pointerRoot ?? '')) {
+          writePortablePointer(this.portable.iniPath, raw);
+          this.portable.pointerRoot = resolved || undefined;
+        }
+      }
+      // 落锚副作用（plan.md 终拍②自愈指纹，幂等保留首锚）：只读回落态跳过（写不进盘，
+      // 待可写态下向导再落——flavor 戳本身照常落 settings，回落根可达）。
+      if (settings.wizardDone === true && settings.wizardFlavor === 'portable' && !this.portable.fallback) {
+        writePortableAnchor(this.portable.exeDir, this.version);
+      }
+      const rest: AppSettings = { ...settings };
+      delete rest.rootOverride;
+      saveSettings(this.root, applySettingsToProps(loadSettings(this.root), rest));
+      return this.getSettings();
+    }
     if (
       settings.rootOverride &&
       this.installDir &&
@@ -969,6 +1038,17 @@ export class AtticRuntime {
       logsDir: path.join(launcherDir(this.root), 'logs'),
       totalMemMb: Math.round(os.totalmem() / 0x100000),
       freeMemMb: Math.round(os.freemem() / 0x100000),
+      // portable 便携态（B 期）：安装版缺席本键；rebuilt/pathWarning 仅命中时带出（契约可选字段口径）。
+      ...(this.portable?.active
+        ? {
+            portable: {
+              active: true,
+              fallback: this.portable.fallback,
+              ...(this.portable.rebuilt ? { rebuilt: true } : {}),
+              ...(this.portable.pathWarning ? { pathWarning: this.portable.pathWarning } : {}),
+            },
+          }
+        : {}),
     };
   }
 
@@ -1243,6 +1323,11 @@ export class AtticRuntime {
   private async ensureJavaPath(settings: Record<string, string>): Promise<string> {
     const report = await detectJavaRuntime({ manualPaths: this.manualJavaPaths(settings) });
     if (report.selection.install) return report.selection.install.executable;
+
+    // 供给缓存命中：zuluJavaDir 已有上次解压好的 java 则直接复用。
+    // 缺这一步 = 无系统 Java 的机器每次启动重下 111MB zip（2026-10-25 WSL 实机取证）。
+    const cached = findJavaExecutable(zuluJavaDir(this.root), this.platform);
+    if (cached) return cached;
 
     try {
       const pkgs = await queryZuluPackages(8, this.endpoints, this.fetchImpl, process.platform, process.arch);

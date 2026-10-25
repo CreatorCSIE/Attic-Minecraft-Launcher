@@ -33,6 +33,15 @@ import {
  */
 const INSTALL_DIR = path.dirname(process.execPath);
 
+/**
+ * portable B 期（硬纪律：sidecar 的 process.execPath = node.exe，exeDir 判定面不得依赖它）：
+ * Rust 壳在 current_exe() 目录双指纹命中时注入 ATTIC_EXE_DIR（程序目录绝对路径），
+ * marker 在场再加注 ATTIC_PORTABLE_INI（sidecar/portable.ini 绝对路径）；两键缺席 = 非便携形态
+ * （安装版/开发态），判定与指针读写单点在 runtime（detectPortable）。
+ */
+const PORTABLE_EXE_DIR = process.env['ATTIC_EXE_DIR'];
+const PORTABLE_INI = process.env['ATTIC_PORTABLE_INI'];
+
 /** 数据根覆盖引导：与 Electron 壳同款（从默认根 peek rootOverride + 安装目录兜底护栏，手改 settings 拦存量）。 */
 function bootstrapRootDir(): string | undefined {
   try {
@@ -52,6 +61,9 @@ const runtime = new AtticRuntime({
   rootDir: bootstrapRootDir(),
   version: process.env['ATTIC_LAUNCHER_VERSION'] ?? '0.0.0',
   installDir: INSTALL_DIR,
+  ...(PORTABLE_EXE_DIR
+    ? { exeDir: PORTABLE_EXE_DIR, portableMarkers: [PORTABLE_INI ?? 'sidecar/portable.ini'] }
+    : {}),
 });
 
 // —— 输出帧（NDJSON：单行、无内嵌换行）——

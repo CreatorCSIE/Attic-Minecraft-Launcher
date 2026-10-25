@@ -60,6 +60,19 @@ export {
 } from './storage';
 export { infoToVersionJson, LAUNCH_METHOD_MAIN_CLASS } from './info';
 export {
+  PORTABLE_DIR_NAME,
+  PORTABLE_ANCHOR_REL,
+  classifyPathWarning,
+  detectPortable,
+  looksLikeTempExtraction,
+  syncPortableRegistry,
+  writePortableAnchor,
+  writePortablePointer,
+  type PortableProbeOptions,
+  type PortablePathWarning,
+  type PortableResolution,
+} from './portable';
+export {
   dependsOsFor,
   parseDependsVersion,
   hasLocalDepends,
@@ -86,6 +99,7 @@ export { parseJavaVersion, parseVersionBanner, normaliseArchitecture } from './j
 export {
   queryZuluPackages,
   installZuluPackage,
+  findJavaExecutable,
   zuluOs,
   zuluArch,
   type ZuluPackage,

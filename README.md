@@ -170,8 +170,8 @@ Attic-Minecraft-Launcher
 不在，也不会分发。客户端 jar 与资产在首次启动时从 Betacraft 公共端点下载到本地数据目录，仓库不含任何 Mojang 版权内容（见许可证一节）。
 
 ### Q4：需要自己装 Java 吗？
-
-游戏侧需要 Java 8（推荐 64 位），启动器不捆绑 JRE。会自动探测机器上已有的 Java（注册表 / 常见目录 / `JAVA_HOME` / `PATH` 逐个实测版本与架构），找不到或想指定别的，可在设置页手动选 Java 路径。
+，dan
+不一定。游戏侧需要 Java 8（推荐 64 位），启动器不捆绑 JRE，但会自动探测机器上已有的 Java（注册表 / 常见目录 / `JAVA_HOME` / `PATH` 逐个实测版本与架构）；**一台 Java 8 都没有时会自动从 Azul 官方接口下载 Zulu JDK 8 到数据目录**（带 sha256 校验，下载一次后缓存复用，不会每次启动重下）。想指定别的 Java，可在设置页手动选 Java 路径。
 
 ### Q5：老系统（Win7 / Win8）能装吗？
 
@@ -188,6 +188,10 @@ Windows 为 `%APPDATA%/.attic`，macOS / Linux 为 `~/.attic`（版本、资产�
 ### Q7：双击启动没窗口 / 秒退，怎么排查？
 
 先看独立控制台窗的逐行日志——启动器会自动分类退出原因（内存不足 / GL 初始化 / LWJGL 原生库 / 链接失败 / Java 缺失），按对应提示处理即可。改内存、JVM 参数、窗口尺寸都在实例编辑页（点击实例卡片进入），实例参数覆盖全局设置。
+
+### Q7.5：Linux 支持怎么样？WSL 里能跑吗？
+
+Linux x86_64（deb / AppImage）是正式分发平台，远古链路（c0.24-dev7、b1.7.3）已在 WSL Debian 实机全链路验证通过（2026-10-25）。两个**已知环境边界**：① **WSLg / Xwayland 跑不了 LWJGL 2 老版本**——Xwayland 不支持旧式 `XRRGetScreenInfo` 显示模式枚举，游戏侧会在显示初始化处崩溃；请用原生 X 会话，WSL 下可经 Xvfb 虚拟显示运行（WSLg 兼容性问题非启动器缺陷）。② **无声卡内核的环境（如 WSL）音频需 ALSA→PulseAudio 桥**：安装 `libasound2-plugins` 并在 `/etc/asound.conf` 写入 `pcm.!default { type pulse }`（`ctl.!default` 同理），否则 JavaSound 报 "No line matching"。原生 Linux 桌面（PulseAudio / PipeWire）通常两者都不存在；arm64 Linux 见 Q5.5。
 
 ### Q8：设置了窗口尺寸为什么没生效？
 

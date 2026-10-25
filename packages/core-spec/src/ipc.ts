@@ -116,6 +116,21 @@ export interface SystemInfo {
   totalMemMb: number;
   /** 系统当前可用内存 MB（取不到 = 0）。 */
   freeMemMb: number;
+  /**
+   * portable 便携态（B 期，plan.md 2026-10-25 终拍；安装版省略本键）：
+   * 宿主显式传程序目录（sidecar 的 process.execPath = node.exe 不可信，硬纪律），
+   * runtime 按双指纹判定 = 程序目录 marker 在场 ∨（exe 旁 `.attic` ∧ 其内 `launcher/portable.anchor`）。
+   */
+  portable?: {
+    /** 双指纹判定命中（含只读回落态——身份是便携，只是数据暂不随盘）。 */
+    active: boolean;
+    /** exeDir 实写探针不可写 → 生效根已回落默认根（数据未随盘，UI 常驻徽标）。 */
+    fallback: boolean;
+    /** marker ini 缺席、anchor 自愈命中（升级重解压重置/误删 ini 后的便携身份恢复）。 */
+    rebuilt?: boolean;
+    /** 生效根路径警示（警告不拦截，LWJGL2/Java8 非 ASCII 翻车面留给用户决策）：非 ASCII / 含空格 / 长度逼近 260（阈值 ≥240）。 */
+    pathWarning?: 'non_ascii' | 'space' | 'long';
+  };
 }
 
 /** 窗口控制动作：toggle-maximize 由宿主在最大化/还原间切换。 */

@@ -1,16 +1,19 @@
 <script setup lang="ts">
 /**
  * 首启欢迎向导（Phase 5 A 期定稿）：三步 stepper 模态「目录 → 账户 → Java」，安装版/portable 通用。
- * 三重门判定（任一不满足即不弹，误弹方向保守）：无 wizardDone ∧ 无 rootOverride ∧ 默认根无既有数据；
+ * 三重门判定（任一不满足即不弹，误弹方向保守）：无本 flavor 完成标记 ∧ 无 rootOverride ∧ 默认根无既有数据；
  * sysinfo 取不到（缺桥/读失败）= 永不弹。判定只发生一次（decided 闩），会话内不因数据回流复弹。
- * 目录步骤 = 消解式两选项（默认根 / 自定义）——安装版没有"exe 旁本地目录"分支；
+ * B 期④：门之三 = 「无 wizardFlavor 戳的本 flavor 完成」——portable 与安装版共享默认根时
+ * 先完成者不压掉后者；存量 wizardDone 无戳 = 视为 installed（老用户不打扰，plan.md L254 口径）。
+ * 目录步骤（B 期）：portable.active 加「exe 旁本地目录（随盘走）」且缺省选中——local = 不写指针；
+ * 安装版维持消解式两选项（默认根 / 自定义）；
  * 手选撞进安装目录由宿主 setSettings 护栏拒绝，拒绝原文（实际动作+出路）直陈错误行。
  * 账户/Java 步骤 = 既有通道纯编排（accounts:add / detectJava 全候选 / settings.javaPath），零新 IPC。
  * 完成与跳过皆写 wizardDone（"已见过向导"语义收敛于此键，与指针职责分离）。
  * 视觉纪律（ui-design §2/§6/§7）：每屏恰一 accent（下一步/开始游戏实心）、stepper 顶置、
  * 五态齐全、动效走 AppDialog 既有 200ms 律。
  */
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import AppDialog from './AppDialog.vue';
 import { useI18n } from '../i18n';
 import { useSettings } from '../composables/useSettings';
@@ -26,16 +29,26 @@ const { accounts, add: addAccount, error: accountsError } = useAccounts();
 const { report: javaReport, loading: javaLoading, detect: detectJava } = useJava();
 const { bridge } = useBridge();
 
+// —— 步骤 1 状态（声明先于三重门：门判定时要按 flavor 预置缺省选项）——
+// local = exe 旁随盘目录（不写指针）；default = 标准根（安装版零键 / 便携版写 ini 绝对指针）；custom = 自选
+const dirChoice = ref<'default' | 'custom' | 'local'>('default');
+const customPath = ref('');
+
 // —— 三重门：两个数据源（settings 视图 + sysinfo 快照）都就绪才判一次 ——
+// B 期④：门之三 = 无本 flavor 完成标记（wizardFlavor 戳）；flavor 在判定时锁定（sysinfo 是启动快照，会话内不翻转）
 const visible = ref(false);
 let decided = false;
+const flavor = ref<'installed' | 'portable'>('installed');
 watch(
   [loaded, () => info.value],
   ([l, i]) => {
     if (decided) return;
     if (!l || !i) return;
     decided = true;
-    visible.value = !settings.value.wizardDone && !settings.value.rootOverride && !i.defaultRootPopulated;
+    flavor.value = i.portable?.active ? 'portable' : 'installed';
+    const flavorDone = !!settings.value.wizardDone && (settings.value.wizardFlavor ?? 'installed') === flavor.value;
+    visible.value = !flavorDone && !settings.value.rootOverride && !i.defaultRootPopulated;
+    if (visible.value && flavor.value === 'portable') dirChoice.value = 'local';
   },
   { immediate: true },
 );
@@ -44,9 +57,31 @@ const step = ref(0);
 const err = ref<string | null>(null);
 const busy = ref(false);
 
-// —— 步骤 1：目录（消解式两选项；默认 = 不写 rootOverride，零键即默认根）——
-const dirChoice = ref<'default' | 'custom'>('default');
-const customPath = ref('');
+// —— 路径警示（B 期⑥，警告不拦截）：便携根走 sysinfo 快照，customPath 走 UI 本地小分类器 ——
+// sysinfo 是启动快照覆盖不到"正在选"的路径；分类口径与 runtime classifyPathWarning 一致（非 ASCII > 空格 > 长度 ≥240）
+const PATH_WARN_KEYS = {
+  non_ascii: 'portable.warnNonAscii',
+  space: 'portable.warnSpace',
+  long: 'portable.warnLong',
+} as const;
+function classifyPathLocal(s: string): keyof typeof PATH_WARN_KEYS | undefined {
+  if (/[^\x00-\x7f]/.test(s)) return 'non_ascii';
+  if (s.includes(' ')) return 'space';
+  if (s.length >= 240) return 'long';
+  return undefined;
+}
+/** 便携生效根警示（挂在 local 选项内，选中即见）。 */
+const portableWarnText = computed(() => {
+  const w = info.value?.portable?.pathWarning;
+  return w ? t(PATH_WARN_KEYS[w]) : '';
+});
+/** 自定义路径实时警示（黄条随选择出现，不拦确认）。 */
+const customWarnText = computed(() => {
+  if (dirChoice.value !== 'custom' || !customPath.value) return '';
+  const w = classifyPathLocal(customPath.value);
+  return w ? t(PATH_WARN_KEYS[w]) : '';
+});
+
 async function pickDir(): Promise<void> {
   err.value = null;
   const res = await bridge.pickDirectory();
@@ -93,7 +128,19 @@ async function next(): Promise<void> {
           err.value = r.error ?? null;
           return;
         }
+      } else if (dirChoice.value === 'default' && flavor.value === 'portable') {
+        // 便携选「标准位置」= ini 写默认根绝对指针（便携天然根在 exe 旁，不写 ≠ 选了这个）；
+        // 只读回落态生效根本就是默认根、指针也写不进盘 = 跳过，不制造假错误
+        const std = info.value?.defaultRoot ?? '';
+        if (std && !info.value?.portable?.fallback) {
+          const r = await patchDetailed({ rootOverride: std });
+          if (!r.ok) {
+            err.value = r.error ?? null;
+            return;
+          }
+        }
       }
+      // local = 不写任何指针：ini 出厂留空原样，数据落 exe 旁 .attic（随盘走）
     } else if (step.value === 1) {
       const name = newName.value.trim();
       if (name) {
@@ -104,8 +151,9 @@ async function next(): Promise<void> {
         }
       }
     } else {
-      // 完成：wizardDone 与 Java 手动覆盖一并落（undefined = 键不动/清除语义由合并映射处理）
-      const r = await patchDetailed({ wizardDone: true, javaPath: manualJava.value || undefined });
+      // 完成：wizardDone + flavor 戳（B 期④三重门之三判据）与 Java 手动覆盖一并落
+      // （undefined = 键不动/清除语义由合并映射处理；portable 落锚是 runtime setSettings 副作用）
+      const r = await patchDetailed({ wizardDone: true, wizardFlavor: flavor.value, javaPath: manualJava.value || undefined });
       if (!r.ok) {
         err.value = r.error ?? null;
         return;
@@ -119,12 +167,13 @@ async function next(): Promise<void> {
   }
 }
 
-/** 跳过 = 用默认，同样写 wizardDone（防"跳过不标记 → 反复弹"，定稿修正点）。 */
+/** 跳过 = 用默认，同样写 wizardDone + flavor 戳（防"跳过不标记 → 反复弹"，定稿修正点；
+ * portable 跳过 = 随盘根 + 落锚副作用照常，flavor 门不松）。 */
 async function skip(): Promise<void> {
   err.value = null;
   busy.value = true;
   try {
-    const r = await patchDetailed({ wizardDone: true });
+    const r = await patchDetailed({ wizardDone: true, wizardFlavor: flavor.value });
     if (!r.ok) {
       err.value = r.error ?? null;
       return;
@@ -163,22 +212,35 @@ const STEP_KEYS = ['wizard.stepDir', 'wizard.stepAccounts', 'wizard.stepJava'] a
       </ol>
     </header>
 
-    <!-- 步骤 1：数据目录 -->
+    <!-- 步骤 1：数据目录（portable = 三选项 local 缺省；安装版 = 两选项） -->
     <section v-if="step === 0" class="body">
+      <button
+        v-if="info?.portable?.active"
+        class="opt"
+        :class="{ 'opt--on': dirChoice === 'local' }"
+        type="button"
+        @click="dirChoice = 'local'"
+      >
+        <span class="opt-title">{{ t('wizard.dirLocalTitle') }}</span>
+        <span v-if="!info.portable.fallback" class="opt-path mono">{{ info.dataRoot }}</span>
+        <span class="opt-hint">{{ info.portable.fallback ? t('wizard.dirLocalFallback') : t('wizard.dirLocalHint') }}</span>
+        <span v-if="portableWarnText && dirChoice === 'local'" class="opt-hint warn-line">{{ portableWarnText }}</span>
+      </button>
       <button class="opt" :class="{ 'opt--on': dirChoice === 'default' }" type="button" @click="dirChoice = 'default'">
         <span class="opt-title">{{ t('wizard.dirDefaultTitle') }}</span>
         <span class="opt-path mono">{{ info?.defaultRoot }}</span>
-        <span class="opt-hint">{{ t('wizard.dirDefaultHint') }}</span>
+        <span class="opt-hint">{{ t(flavor === 'portable' ? 'wizard.dirDefaultHintPortable' : 'wizard.dirDefaultHint') }}</span>
       </button>
       <button class="opt" :class="{ 'opt--on': dirChoice === 'custom' }" type="button" @click="dirChoice = 'custom'">
         <span class="opt-title">{{ t('wizard.dirCustomTitle') }}</span>
         <span class="opt-path mono">{{ customPath || '—' }}</span>
-        <span class="opt-hint">{{ t('wizard.dirCustomHint') }}</span>
+        <span class="opt-hint">{{ t(flavor === 'portable' ? 'wizard.dirCustomHintPortable' : 'wizard.dirCustomHint') }}</span>
       </button>
       <div v-if="dirChoice === 'custom'" class="row">
         <button class="btn btn--ghost" type="button" @click="pickDir">{{ t('wizard.dirPick') }}</button>
         <p v-if="customPath" class="pending">{{ t('wizard.dirPending', { path: customPath }) }}</p>
       </div>
+      <p v-if="customWarnText" class="warn-line">{{ customWarnText }}</p>
     </section>
 
     <!-- 步骤 2：账户 -->

@@ -58,6 +58,12 @@ export function settingsFromProps(props: Record<string, string>): AppSettings {
   if (props['rootOverride']) out.rootOverride = props['rootOverride'];
   const wizardDone = boolFromProps(props['wizardDone']);
   if (wizardDone !== undefined) out.wizardDone = wizardDone;
+  if (props['wizardFlavor'] === 'installed' || props['wizardFlavor'] === 'portable') {
+    out.wizardFlavor = props['wizardFlavor'];
+  }
+  if (props['lastPortableRoot']) out.lastPortableRoot = props['lastPortableRoot'];
+  const portableFallback = boolFromProps(props['portableFallback']);
+  if (portableFallback !== undefined) out.portableFallback = portableFallback;
   if (props['levelServer']) out.levelServer = props['levelServer'];
 
   const endpoints: EndpointOverrides = {};
@@ -103,6 +109,9 @@ export function applySettingsToProps(
   put('consoleOnLaunch', settings.consoleOnLaunch === undefined ? undefined : String(settings.consoleOnLaunch));
   put('rootOverride', settings.rootOverride);
   put('wizardDone', settings.wizardDone === undefined ? undefined : String(settings.wizardDone));
+  put('wizardFlavor', settings.wizardFlavor);
+  put('lastPortableRoot', settings.lastPortableRoot);
+  put('portableFallback', settings.portableFallback === undefined ? undefined : String(settings.portableFallback));
   put('levelServer', settings.levelServer);
 
   for (const key of ENDPOINT_KEYS) {

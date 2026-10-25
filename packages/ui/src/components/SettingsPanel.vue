@@ -6,7 +6,7 @@
  * 语言热切换（setLocale 即时 + settings.language 单一真相）；主题仅模式可用，强调色/背景占位。
  * 宿主动作（打开目录/对话框/清理）无桥时禁用——demo 排版靠假 SystemInfo，动作不伪装可用。
  */
-import { computed, ref, type Ref } from 'vue';
+import { computed, ref, watch, type Ref } from 'vue';
 import type { EndpointOverrides } from '@attic/core-spec';
 import type { Locale } from '../i18n';
 import { AVAILABLE_LOCALES, useI18n } from '../i18n';
@@ -56,6 +56,38 @@ const pendingRoot = computed(() => {
   const o = settings.value.rootOverride;
   return o && o !== info.value?.dataRoot ? o : '';
 });
+
+// —— portable B 期⑥：路径警示常驻黄条 + 面包屑找回一次性提示 ——
+/** 警示文案键（分类口径 = runtime classifyPathWarning，向导/设置页共用）。 */
+const PATH_WARN_KEYS = {
+  non_ascii: 'portable.warnNonAscii',
+  space: 'portable.warnSpace',
+  long: 'portable.warnLong',
+} as const;
+const portableWarnText = computed(() => {
+  const w = info.value?.portable?.pathWarning;
+  return w ? t(PATH_WARN_KEYS[w]) : '';
+});
+/** 面包屑（默认根登记簿）≠ 生效根 ∧ 便携非回落态 = ini 自定义后指针丢失，给出旧根出路（警告不拦截）。 */
+const recoverHintPath = computed(() => {
+  const p = info.value?.portable;
+  const crumb = settings.value.lastPortableRoot;
+  if (!p?.active || p.fallback || !crumb || !info.value) return '';
+  return crumb !== info.value.dataRoot ? crumb : '';
+});
+// 每会话一次性（契约无 ack 键、不为此加通道 = 模块级 flag 兜住；关掉不再复现）
+let recoverShownThisSession = false;
+const recoverOpen = ref(false);
+watch(
+  recoverHintPath,
+  (v) => {
+    if (v && !recoverShownThisSession) {
+      recoverShownThisSession = true;
+      recoverOpen.value = true;
+    }
+  },
+  { immediate: true },
+);
 
 /** 语言下拉选项（AppSelect 形态；自名形态不随 locale 翻译，见 AVAILABLE_LOCALES 注释）。 */
 const localeOptions = AVAILABLE_LOCALES.map((l) => ({ value: l.code, label: l.name }));
@@ -236,6 +268,13 @@ function feedback(url: string): void {
             </div>
             <p v-if="pendingRoot" class="warn">{{ t('settings.general.rootPending', { path: pendingRoot }) }}</p>
             <p v-if="rootErr" class="warn root-err" role="alert">{{ rootErr }}</p>
+            <!-- B 期⑥：生效根路径警示常驻（警告不拦截，翻车面留给用户决策） -->
+            <p v-if="portableWarnText" class="warn">{{ portableWarnText }}</p>
+            <!-- B 期②：面包屑找回一次性提示（ini 自定义后指针丢失的兜底出路） -->
+            <p v-if="recoverOpen && recoverHintPath" class="warn root-err">
+              {{ t('portable.recoverHint', { path: recoverHintPath }) }}
+              <button class="mini" type="button" @click="recoverOpen = false">{{ t('portable.recoverDismiss') }}</button>
+            </p>
           </div>
 
           <div class="card">

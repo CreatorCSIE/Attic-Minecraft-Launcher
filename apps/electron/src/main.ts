@@ -18,15 +18,37 @@ import {
   type SpecialDir,
   type WindowAction,
 } from '@attic/core-spec';
-import { AtticRuntime, isPathWithin, launcherDir, loadSettings, resolveDataRoot } from '@attic/runtime';
+import {
+  AtticRuntime,
+  PORTABLE_DIR_NAME,
+  isPathWithin,
+  launcherDir,
+  loadSettings,
+  looksLikeTempExtraction,
+  resolveDataRoot,
+} from '@attic/runtime';
 
-/** 宿主安装目录（卸载器 {app} 射程 = 数据根禁入区）：产线 = exe 同目录。 */
+/** 宿主安装目录（卸载器 {app} 射程 = 数据根禁入区）：产线 = exe 同目录，也是 portable 判定的 exeDir。 */
 const INSTALL_DIR = path.dirname(process.execPath);
+
+/** portable B 期 marker 位（electron/legacy 两壳 zip 出厂同键；判定与指针读写单点在 runtime）。 */
+const PORTABLE_MARKER = 'resources/portable.ini';
+
+/** Releases 页（temp 守卫指路位；与关于页 REPO_URL 同源）。 */
+const RELEASES_URL = 'https://github.com/CreatorCSIE/Attic-Minecraft-Launcher/releases';
+
+/**
+ * temp 守卫（plan.md 终拍⑤）：小白在压缩包里直接双击必踩——只抽 exe 到 temp → marker 没跟出来
+ * 判成安装态写 %APPDATA%；整目录抽到 temp → 数据随 temp 蒸发。
+ * 特征 = exeDir 命中 %TEMP%/%TMP% 前缀或 Rar$/7z$/WinRar$ 段 ∧ exe 旁无既有 `.attic` → boot 拒建主窗。
+ */
+const tempTrap = looksLikeTempExtraction(INSTALL_DIR) && !fs.existsSync(path.join(INSTALL_DIR, PORTABLE_DIR_NAME));
 
 /**
  * 数据根覆盖引导：设置页「更换数据根」写的是平台默认根 launcher.settings 的 rootOverride
  * （root 属构造级配置，运行期不换根）——启动时从默认根 peek 一次，指过去即完成迁移式切换。
- * portable/env 覆盖在 resolveDataRoot 内部优先于此（本函数只读默认根的键，不与之争）。
+ * 优先级口径 = rootDirOverride > portable > 默认（storage.ts 现状）：portable 形态的随身指针不住这里
+ * （住 marker ini 的 rootDir，B 期两形态各写各的指针面），本 peek 只服务安装形态。
  * 兜底护栏（与 runtime.setSettings 道闸同款）：手改 settings 把根指进安装目录 = 卸载清存档
  * 的不可逆事故 → 忽略该指针回落默认根（setSettings 入口拦新写入，本处拦存量手改）。
  */
@@ -44,8 +66,14 @@ function bootstrapRootDir(): string | undefined {
   }
 }
 
-/** TS 启动器核心门面（Phase 2）：主进程唯一实例。 */
-const runtime = new AtticRuntime({ rootDir: bootstrapRootDir(), version: app.getVersion(), installDir: INSTALL_DIR });
+/** TS 启动器核心门面（Phase 2）：主进程唯一实例。exeDir 显式传（portable 双指纹判定面，硬纪律）。 */
+const runtime = new AtticRuntime({
+  rootDir: bootstrapRootDir(),
+  version: app.getVersion(),
+  installDir: INSTALL_DIR,
+  exeDir: INSTALL_DIR,
+  portableMarkers: [PORTABLE_MARKER],
+});
 
 /** 无边距主窗引用（WINDOW_CONTROL 通道操作目标）。 */
 let mainWindow: BrowserWindow | null = null;
@@ -228,6 +256,23 @@ function createConsoleWindow(): void {
 }
 
 app.whenReady().then(() => {
+  // temp 守卫命中（模块顶已判）：拒建主窗，原生对话框讲清「实际动作 + 出路」再退。
+  if (tempTrap) {
+    const choice = dialog.showMessageBoxSync({
+      type: 'warning',
+      title: 'Attic Launcher',
+      message: '请先解压整个文件夹，勿在压缩包里直接运行',
+      detail:
+        '检测到启动器正从临时目录运行——游戏数据会随临时目录清理而丢失。' +
+        '请关闭压缩软件窗口，把 zip 里的整个文件夹解压到固定位置（如 D:\\Attic）后再双击启动。' +
+        '免安装构件请从项目 Releases 页下载（amcl-*-portable.zip）。',
+      buttons: ['打开 Releases 页', '退出'],
+      noLink: true,
+    });
+    if (choice === 0) void shell.openExternal(RELEASES_URL);
+    app.quit();
+    return;
+  }
   // 九请求通道（ipc.ts 契约一一对应）。
   handle(IPC_CHANNELS.PING, () => runtime.ping());
   handle(IPC_CHANNELS.VERSIONS_LIST, () => runtime.listVersions());
