@@ -149,7 +149,7 @@ Type: filesandordirs; Name: "{app}"
 // 为权威；老系统回退 '6.1 SP1' 式 Version+CSDVersion 解析）。Inno 6 脚本 API 没有
 // GetWindowsVersion —— 别照抄 Inno 7 文档。
 const
-  LegacyDownloadUrl = 'https://github.com/REPLACE_OWNER/REPLACE_REPO/releases';
+  LegacyDownloadUrl = 'https://github.com/CreatorCSIE/Attic-Minecraft-Launcher/releases';
 
 function GetWinMajorSP(out Major, SP: Integer): Boolean;
 var

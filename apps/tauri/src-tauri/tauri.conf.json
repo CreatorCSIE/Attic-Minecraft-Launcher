@@ -53,7 +53,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDY3MTU5MEVDNjcyMTA2REEKUldUYUJpRm43SkFWWjBiTEtldVRwWFNDbFI1L0RyaGZzd2htWXRPc0g5MEkwMmFjTmhadERPVGoK",
       "endpoints": [
-        "https://github.com/REPLACE_OWNER/REPLACE_REPO/releases/latest/download/latest.json"
+        "https://github.com/CreatorCSIE/Attic-Minecraft-Launcher/releases/latest/download/latest.json"
       ]
     }
   }

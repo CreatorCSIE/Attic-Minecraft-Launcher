@@ -17,8 +17,16 @@ import type { UpdateCheckResult } from '@attic/core-spec';
 
 import type { FetchImpl } from './betacraft';
 
+/**
+ * 默认发布仓库（2026-10-25 拍板 = 同仓收口：开发仓即发布仓）。
+ * 依据：releases 构件 = 纯启动器二进制（与源码仓同一零版权面）；`releases/latest` API
+ * 天然排除 prerelease/draft（nightly/0.0.x/台账不污染通道）；同仓 = Actions GITHUB_TOKEN
+ * 零跨仓 PAT。env ATTIC_RELEASE_REPO / 构造选项 = 测试仓彩排逃生舱；显式空串 = 强制关通道（unconfigured）。
+ */
+export const DEFAULT_RELEASE_REPO = 'CreatorCSIE/Attic-Minecraft-Launcher';
+
 export interface UpdateCheckDeps {
-  /** 发布仓库 "owner/repo"（构造选项 releaseRepo，env ATTIC_RELEASE_REPO 兜底；缺省 = unconfigured）。 */
+  /** 发布仓库 "owner/repo"（构造选项 releaseRepo > env ATTIC_RELEASE_REPO > DEFAULT_RELEASE_REPO；显式空串 = unconfigured）。 */
   releaseRepo?: string;
   /** 当前版本（宿主注入的启动器版本）。 */
   currentVersion: string;

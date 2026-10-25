@@ -370,11 +370,30 @@ test('AtticRuntime.checkUpdate：env ATTIC_RELEASE_REPO 兜底（构造选项缺
   assert.equal((await runtime.checkUpdate()).status, 'update');
 });
 
-test('AtticRuntime.checkUpdate：两缺 = unconfigured 不炸', async (t) => {
+test('AtticRuntime.checkUpdate：两缺 = 回落默认同仓（开发仓即发布仓，2026-10-25 收口）', async (t) => {
+  let url = '';
   const runtime = new AtticRuntime({
     rootDir: tempRoot(t),
-    version: '0.0.0',
+    version: '0.1.0',
     env: {}, // 显式空 env：不吃真实进程的 ATTIC_RELEASE_REPO
+    fetchImpl: async (u) => {
+      url = String(u);
+      return new Response(JSON.stringify({ tag_name: 'v0.2.0', html_url: 'u', body: 'n', published_at: 'p' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    },
+  });
+  const res = await runtime.checkUpdate();
+  assert.equal(res.status, 'update');
+  assert.equal(url, REPO_URL, '默认发布仓库 = CreatorCSIE/Attic-Minecraft-Launcher');
+});
+
+test('AtticRuntime.checkUpdate：显式空串 = unconfigured 关通道逃生舱（不发网络）', async (t) => {
+  const runtime = new AtticRuntime({
+    rootDir: tempRoot(t),
+    version: '0.1.0',
+    releaseRepo: '',
     fetchImpl: async () => {
       throw new Error('不应发起网络');
     },

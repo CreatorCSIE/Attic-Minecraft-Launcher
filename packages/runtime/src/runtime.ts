@@ -97,7 +97,7 @@ import {
   writePropertiesFile,
   zuluJavaDir,
 } from './storage';
-import { checkLatestRelease } from './updateCheck';
+import { checkLatestRelease, DEFAULT_RELEASE_REPO } from './updateCheck';
 import { canonicalLaunchMethod, detectLaunchMethod, probeIndevEntry, probePreclassicEntry } from './wrapperDetector';
 import { extractZipTo, listZipEntryNames } from './zip';
 import { findJavaExecutable, installZuluPackage, queryZuluPackages } from './zulu';
@@ -125,7 +125,7 @@ export interface AtticRuntimeOptions {
   exeDir?: string;
   /** portable marker ini 候选（相对 exeDir；tauri=['sidecar/portable.ini']、electron/legacy=['resources/portable.ini']）。 */
   portableMarkers?: string[];
-  /** 检查更新发布仓库 "owner/repo"（缺省回落 env ATTIC_RELEASE_REPO；两缺 = unconfigured，检查不炸只明示）。 */
+  /** 检查更新发布仓库 "owner/repo"（缺省回落 env ATTIC_RELEASE_REPO > 默认同仓；显式空串 = unconfigured 关通道）。 */
   releaseRepo?: string;
   /** 壳形态（SYS_INFO shell 字段数据源；宿主构造注入，缺省 'electron' 保守）。 */
   shell?: 'tauri' | 'electron';
@@ -202,7 +202,7 @@ export class AtticRuntime {
   readonly endpoints: Endpoints;
   /** 启动器版本（宿主注入，SYS_INFO/关于页消费）。 */
   readonly version: string;
-  /** 检查更新发布仓库 "owner/repo"（构造选项 > env ATTIC_RELEASE_REPO；两缺 = unconfigured）。 */
+  /** 检查更新发布仓库 "owner/repo"（构造选项 > env > 默认同仓；显式空串 = unconfigured）。 */
   private readonly releaseRepo: string | undefined;
   /** 壳形态（SYS_INFO 透传；构造缺省 'electron' 保守）。 */
   private readonly shell: 'tauri' | 'electron';
@@ -245,8 +245,9 @@ export class AtticRuntime {
     this.portableRootPopulated = this.portable?.active ? hasUserData(this.root) : false;
     ensureLayout(this.root);
     this.version = options.version ?? '0.0.0';
-    // 检查更新仓库：构造参数 > env 兜底（发布产线注入占位；两缺 = unconfigured 数据分支，不炸）。
-    this.releaseRepo = options.releaseRepo ?? (options.env ?? process.env)['ATTIC_RELEASE_REPO'];
+    // 检查更新仓库：构造参数 > env ATTIC_RELEASE_REPO > 默认同仓（2026-10-25 收口：开发仓即发布仓）。
+    // 显式空串 = 强制关通道（unconfigured 数据分支，不炸）；env/选项非空 = 测试仓彩排逃生舱。
+    this.releaseRepo = options.releaseRepo ?? (options.env ?? process.env)['ATTIC_RELEASE_REPO'] ?? DEFAULT_RELEASE_REPO;
     this.shell = options.shell ?? 'electron';
     this.platform = options.platform ?? process.platform;
     // 便携态构造期副作用（幂等、值变才写）：面包屑登记 / 只读回落标记（默认根登记簿，plan.md 终拍②③）。
