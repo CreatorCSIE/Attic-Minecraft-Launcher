@@ -9,6 +9,7 @@
  * 检查更新（2026-10-25「更新 UI」定稿）：手动按钮走 checkManually（无视策略与忽略账恒显弹窗），
  * 结果弹窗全局挂 App 层（UpdateDialog），本页只留红点徽标与策略选择。
  */
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useI18n } from '../i18n';
 import type { UpdatePolicy } from '@attic/core-spec';
 import { useExternalLink } from '../composables/useExternalLink';
@@ -27,6 +28,41 @@ const { busy: checkingBusy, hasUpdate, checkManually } = useUpdateCheck();
 
 /** 更新策略枚举（与 core-spec UpdatePolicy 同序；即选即存，缺省 startup 由消费端 ?? 兜底）。 */
 const policies: readonly UpdatePolicy[] = ['startup', 'off'];
+
+// 分段选择器滑动滑块：一块独立高亮层随激活段滑移（非底色生硬硬切）。
+// 位置 = offsetLeft/offsetWidth 实测（两段宽度不等 + i18n 各语言文案长度不同，纯 CSS 算不出）；
+// ResizeObserver 兜字体加载/语言切换/容器变宽，activePolicy 变更（含 settings 异步到达）经 watch 归位。
+const activePolicy = computed<UpdatePolicy>(() => settings.value.updatePolicy ?? 'startup');
+const segBox = ref<HTMLElement | null>(null);
+const segEls = new Map<UpdatePolicy, HTMLElement>();
+const thumbStyle = ref<Record<string, string>>({ opacity: '0' });
+
+function setSegRef(p: UpdatePolicy, el: Element | null): void {
+  if (el) segEls.set(p, el as HTMLElement);
+  else segEls.delete(p);
+}
+
+function locateThumb(): void {
+  const el = segEls.get(activePolicy.value);
+  if (!el) return;
+  thumbStyle.value = {
+    transform: `translate(${el.offsetLeft}px, ${el.offsetTop}px)`,
+    width: `${el.offsetWidth}px`,
+    height: `${el.offsetHeight}px`,
+    opacity: '1',
+  };
+}
+
+let segResize: ResizeObserver | null = null;
+onMounted(() => {
+  void nextTick(locateThumb);
+  if (segBox.value) {
+    segResize = new ResizeObserver(() => locateThumb());
+    segResize.observe(segBox.value);
+  }
+});
+onBeforeUnmount(() => segResize?.disconnect());
+watch(activePolicy, () => void nextTick(locateThumb));
 
 const REPO_URL = 'https://github.com/CreatorCSIE/Attic-Minecraft-Launcher';
 const LICENSE_URL = `${REPO_URL}/blob/HEAD/LICENSE`;
@@ -93,12 +129,14 @@ function openUrl(url: string): void {
           <span class="row-name">{{ t('settings.about.updatePolicy.label') }}</span>
           <p class="row-desc">{{ t('settings.about.updatePolicy.desc') }}</p>
         </div>
-        <div class="segmented" role="group" :aria-label="t('settings.about.updatePolicy.label')">
+        <div ref="segBox" class="segmented" role="group" :aria-label="t('settings.about.updatePolicy.label')">
+          <span class="seg-thumb" :style="thumbStyle" aria-hidden="true"></span>
           <button
             v-for="p in policies"
             :key="p"
+            :ref="(el) => setSegRef(p, el as Element | null)"
             class="seg"
-            :class="{ 'seg--active': (settings.updatePolicy ?? 'startup') === p }"
+            :class="{ 'seg--active': activePolicy === p }"
             @click="void patch({ updatePolicy: p })"
           >
             {{ t(`settings.about.updatePolicy.${p}`) }}
@@ -291,6 +329,7 @@ function openUrl(url: string): void {
 }
 /* 更新策略分段单选器（SettingsPanel 主题模式选择器同款样式，弹窗已迁出本页） */
 .segmented {
+  position: relative;
   display: inline-flex;
   gap: var(--space-1);
   padding: var(--space-1);
@@ -301,6 +340,8 @@ function openUrl(url: string): void {
   width: fit-content;
 }
 .seg {
+  position: relative;
+  z-index: 1;
   padding: var(--space-2) var(--space-4);
   background: transparent;
   border: none;
@@ -312,9 +353,23 @@ function openUrl(url: string): void {
 .seg:hover {
   background: var(--surface-3);
 }
+/* 激活段底色让位给滑块（滑块滑过去即高亮，文字色仍随类切换） */
 .seg--active {
-  background: var(--surface-4);
+  background: transparent;
   color: var(--text-primary);
+}
+.seg-thumb {
+  position: absolute;
+  top: 0;
+  left: 0;
+  border-radius: var(--radius-sm);
+  background: var(--surface-4);
+  pointer-events: none;
+  transition:
+    transform var(--dur-base) var(--ease-out),
+    width var(--dur-base) var(--ease-out),
+    height var(--dur-base) var(--ease-out),
+    opacity var(--dur-fast) var(--ease-out);
 }
 .mini {
   flex: 0 0 auto;

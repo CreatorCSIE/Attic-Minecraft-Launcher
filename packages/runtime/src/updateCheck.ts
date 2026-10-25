@@ -126,9 +126,9 @@ async function pickNightlyRelease(res: Response, current: string): Promise<Updat
   try {
     list = await res.json();
   } catch (error) {
-    return { status: 'error', message: `检查更新失败：响应不是合法 JSON（${messageOf(error)}）` };
+    return { status: 'error', message: `响应不是合法 JSON（${messageOf(error)}）` };
   }
-  if (!Array.isArray(list)) return { status: 'error', message: '检查更新失败：Release 列表响应不是数组' };
+  if (!Array.isArray(list)) return { status: 'error', message: 'Release 列表响应不是数组' };
   let best: ReleaseRaw | null = null;
   let bestVersion = '';
   for (const item of list as unknown[]) {
@@ -178,17 +178,17 @@ export async function checkLatestRelease(deps: UpdateCheckDeps): Promise<UpdateC
   }
   if (!res.ok) {
     const hint = res.status === 404 ? '（仓库不存在或尚无 Release）' : res.status === 403 ? '（限流或 UA 被拒）' : '';
-    return { status: 'error', message: `检查更新失败：GitHub API HTTP ${res.status}${hint}` };
+    return { status: 'error', message: `GitHub API HTTP ${res.status}${hint}` };
   }
   if (nightlyTrack) return pickNightlyRelease(res, current);
   let raw: ReleaseRaw;
   try {
     raw = (await res.json()) as ReleaseRaw;
   } catch (error) {
-    return { status: 'error', message: `检查更新失败：响应不是合法 JSON（${messageOf(error)}）` };
+    return { status: 'error', message: `响应不是合法 JSON（${messageOf(error)}）` };
   }
   const tag = typeof raw.tag_name === 'string' ? raw.tag_name.trim() : '';
-  if (!tag) return { status: 'error', message: '检查更新失败：Release 响应缺少 tag_name' };
+  if (!tag) return { status: 'error', message: 'Release 响应缺少 tag_name' };
   // 预发布纪律（见文件头）：自身为其余预发布（不含 -nightly.，0.0.x 短命试装轨手动跟 Releases 页）
   // 或 latest tag 含 `-`（防御双保险）→ 永不提示。
   if (current.includes('-') || tag.includes('-')) return { status: 'upToDate', current };
