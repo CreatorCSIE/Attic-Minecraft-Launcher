@@ -54,7 +54,9 @@ jobs:
       # 防「构件名 0.0.1、体内 0.0.0」的 updater 恒弹/宣告错版形态出厂。
       - name: Version guard（tag == 根版本 == 内嵌面）
         run: |
-          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+          # 豁免含预发布标识的 tag（-nightly/-rc 等）：它们不锚定单一源当前版本（nightly base 显式声明），
+          # 只钉 stable tag（v0.0.x/v0.1.0…）与根版本对账。
+          if [[ "${GITHUB_REF_TYPE}" == "tag" && "${GITHUB_REF_NAME}" != *-* ]]; then
             ver="${GITHUB_REF_NAME#v}"
             src="$(node -p "require('./package.json').version")"
             if [[ "${ver}" != "${src}" ]]; then
