@@ -29,7 +29,8 @@ const {
   setInstanceVersionField,
   instanceViewFromConfig,
   isPathWithin,
-  hasAnyEntries,
+  hasUserData,
+  settingsFile,
   settingsFromProps,
   loadSettings,
   AtticRuntime,
@@ -564,13 +565,35 @@ test('isPathWithin：win32 大小写不敏感、包含自身、兄弟前缀不�
   assert.equal(isPathWithin('/opt/Attic', '/opt/attic/data', 'linux'), false, 'POSIX 大小写敏感');
 });
 
-test('hasAnyEntries：缺目录 = false（首启）；空目录 = false；有任意条目 = true（老用户保守判）', (t) => {
+test('hasUserData：骨架不误判（ensureLayout 后仍 false）；文件标记 = 有数据（B 期修复口径）', (t) => {
   const base = tempRoot(t);
-  assert.equal(hasAnyEntries(path.join(base, 'nope')), false);
-  fs.mkdirSync(path.join(base, 'empty'), { recursive: true });
-  assert.equal(hasAnyEntries(path.join(base, 'empty')), false);
-  fs.writeFileSync(path.join(base, 'empty', 'launcher.settings'), 'x=1');
-  assert.equal(hasAnyEntries(path.join(base, 'empty')), true);
+  assert.equal(hasUserData(path.join(base, 'nope')), false, '缺目录 = 未初始化');
+  const empty = path.join(base, 'empty');
+  fs.mkdirSync(empty, { recursive: true });
+  assert.equal(hasUserData(empty), false, '空目录 = 未初始化');
+  ensureLayout(empty);
+  assert.equal(hasUserData(empty), false, 'ensureLayout 骨架 = 纯目录零文件，不得冒充老用户');
+  fs.writeFileSync(settingsFile(empty), 'x=1');
+  assert.equal(hasUserData(empty), true, 'launcher.settings = 真实数据');
+  const inst = path.join(base, 'inst');
+  fs.mkdirSync(instancesDir(inst), { recursive: true });
+  fs.writeFileSync(path.join(instancesDir(inst), 'default instance.txt'), 'version=b1.7.3');
+  assert.equal(hasUserData(inst), true, '任一实例档案 = 真实数据');
+  const jar = path.join(base, 'jarred');
+  ensureLayout(jar);
+  fs.writeFileSync(path.join(versionsDir(jar), 'b1.7.3.jar'), 'x');
+  assert.equal(hasUserData(jar), true, 'versions 顶层游戏 jar = 真实数据');
+  const pool = path.join(base, 'pooled');
+  ensureLayout(pool);
+  fs.writeFileSync(path.join(binDir(pool), 'lwjgl.jar'), 'x');
+  assert.equal(hasUserData(pool), true, 'bin 顶层库池 jar = 真实数据');
+  assert.equal(hasUserData(path.join(base, 'nope2')), false, '读失败 = false 保守方向');
+  const crumbs = path.join(base, 'crumbs');
+  fs.mkdirSync(path.dirname(settingsFile(crumbs)), { recursive: true });
+  fs.writeFileSync(settingsFile(crumbs), 'lastPortableRoot=D\\:\\\\p\nportableFallback=true');
+  assert.equal(hasUserData(crumbs), false, '纯便携登记簿 = 机器生成面包屑，非用户数据（安装版向导不被压）');
+  fs.writeFileSync(settingsFile(crumbs), 'lastPortableRoot=D\\:\\\\p\nwizardDone=true');
+  assert.equal(hasUserData(crumbs), true, '任一登记簿外键 = 有数据');
 });
 
 test('setSettings 护栏：rootOverride 落在安装目录内 = 显式报错（文案含实际动作+出路）；目录外正常写入', (t) => {
@@ -615,6 +638,8 @@ test('getSystemInfo：defaultRoot 恒为平台默认根（不随 rootOverride/po
   assert.notEqual(info.defaultRoot, info.dataRoot, '指针生效不得改写默认根参照位');
   assert.equal(info.defaultRootPopulated, false, '默认根未建 = 未初始化（三重门之二成立）');
   fs.mkdirSync(info.defaultRoot, { recursive: true });
-  fs.writeFileSync(path.join(info.defaultRoot, 'x.txt'), 'seed');
+  ensureLayout(info.defaultRoot);
+  assert.equal(rt.getSystemInfo().defaultRootPopulated, false, '骨架目录不算既有数据（B 期修复口径：新机首启必弹的成立面）');
+  fs.writeFileSync(settingsFile(info.defaultRoot), 'x=1');
   assert.equal(rt.getSystemInfo().defaultRootPopulated, true, '既有数据 = 老用户，保守不弹');
 });

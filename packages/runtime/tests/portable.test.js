@@ -16,6 +16,7 @@ const {
   settingsFromProps,
   parseProperties,
   serializeProperties,
+  settingsFile,
   PORTABLE_ANCHOR_REL,
   classifyPathWarning,
   detectPortable,
@@ -45,6 +46,13 @@ function writeMarker(exeDir, entries, rel = 'portable.ini') {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, serializeProperties(entries), 'utf8');
   return file;
+}
+
+/** 直写某根的 launcher.settings（绕开 runtime——测试要的是「启动前根里就有数据」的形态）。 */
+function seedSettings(root, props) {
+  const file = settingsFile(root);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, props, 'utf8');
 }
 
 function dropAnchor(exeDir) {
@@ -229,6 +237,57 @@ test('AtticRuntime portable：根/指针路由/落锚/flavor 门/登记簿', (t)
   runtime.setSettings({ wizardDone: true, wizardFlavor: 'portable' });
   assert.ok(fs.existsSync(anchor));
   assert.equal(runtime.getSettings().wizardFlavor, 'portable');
+});
+
+// ---------- rootPopulated（门之三 flavor 感知数据源，2026-10-25 用户实机 bug 修复） ----------
+
+test('rootPopulated：空便携根 = false——默认根有安装历史也不压便携首启（bug 主案）', (t) => {
+  const { exeDir, env, defaultRoot } = portableFixture(t);
+  // 预置「老用户机」形态：默认根有真实数据（安装版/dev 历史）
+  seedSettings(defaultRoot, 'gameWidth=854');
+  writeMarker(exeDir, {}, 'resources/portable.ini');
+  const runtime = new AtticRuntime({ exeDir, portableMarkers: ['resources/portable.ini'], env, version: '9.9.9' });
+  const sys = runtime.getSystemInfo();
+  assert.equal(sys.defaultRootPopulated, true, '默认根确有历史数据');
+  assert.equal(sys.portable.rootPopulated, false, '门之三 portable 数据源 = 生效根快照，非默认根');
+});
+
+test('rootPopulated：构造期快照时序——中断残留骨架不误判；真实数据 = true', (t) => {
+  const { exeDir, env } = portableFixture(t);
+  writeMarker(exeDir, {});
+  const first = new AtticRuntime({ exeDir, portableMarkers: ['portable.ini'], env });
+  assert.equal(first.getSystemInfo().portable.rootPopulated, false, '首启空根 = false');
+  // 模拟向导中断退出：first 构造期 ensureLayout 已落骨架，次启不得被骨架压制
+  const second = new AtticRuntime({ exeDir, portableMarkers: ['portable.ini'], env });
+  assert.ok(fs.existsSync(path.join(exeDir, '.attic', 'launcher', 'instances')), '骨架确已残留（前提成立）');
+  assert.equal(second.getSystemInfo().portable.rootPopulated, false, '骨架 ≠ 数据');
+  // 真实数据（向导完成写 settings）→ 次启 true（门① flavorDone 同会拦，此处锁快照口径）
+  second.setSettings({ wizardDone: true, wizardFlavor: 'portable' });
+  const third = new AtticRuntime({ exeDir, portableMarkers: ['portable.ini'], env });
+  assert.equal(third.getSystemInfo().portable.rootPopulated, true, 'launcher.settings = 真实数据');
+});
+
+test('rootPopulated：只读回落态 = 默认根快照（自然回落老语义，无特判）', (t) => {
+  const { exeDir, env, defaultRoot } = portableFixture(t);
+  writeMarker(exeDir, {});
+  fs.writeFileSync(path.join(exeDir, '.attic'), 'occupied'); // 文件占死目录位 → 探针炸 → fallback
+  seedSettings(defaultRoot, 'gameWidth=854');
+  const runtime = new AtticRuntime({ exeDir, portableMarkers: ['portable.ini'], env });
+  const sys = runtime.getSystemInfo();
+  assert.equal(sys.portable.fallback, true);
+  assert.equal(sys.portable.rootPopulated, true, '回落态生效根 = 默认根，老用户数据如实命中');
+});
+
+test('便携面包屑不压安装版向导：默认根仅登记簿键 = defaultRootPopulated false（2026-10-25 拍板口径）', (t) => {
+  const { exeDir, env, defaultRoot } = portableFixture(t);
+  writeMarker(exeDir, {});
+  const portable = new AtticRuntime({ exeDir, portableMarkers: ['portable.ini'], env });
+  assert.equal(loadSettings(defaultRoot)['lastPortableRoot'], portable.root, '前提：面包屑确已落默认根');
+  // 同机安装版视角（无 marker/anchor）：纯登记簿 settings 不得冒充老用户
+  const installed = new AtticRuntime({ env });
+  const sys = installed.getSystemInfo();
+  assert.equal(sys.portable, undefined);
+  assert.equal(sys.defaultRootPopulated, false, '面包屑 = 机器生成登记簿，非用户数据');
 });
 
 test('AtticRuntime portable 只读回落：徽标口径 + portableFallback 落默认根', (t) => {

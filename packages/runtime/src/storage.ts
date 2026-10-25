@@ -53,15 +53,6 @@ export function isPathWithin(parent: string, child: string, platform = process.p
   return b.startsWith(a + (win ? '\\' : '/'));
 }
 
-/** 默认根是否已有既有数据：目录存在且有任意条目（保守判定，读失败 = false 之外的值不给）。 */
-export function hasAnyEntries(dir: string): boolean {
-  try {
-    return fs.readdirSync(dir).length > 0;
-  } catch {
-    return false;
-  }
-}
-
 export function resolveDataRoot(options: ResolveDataRootOptions = {}): string {
   const platform = options.platform ?? process.platform;
   if (options.rootDirOverride) return path.resolve(expandHome(options.rootDirOverride));
@@ -123,6 +114,33 @@ export function ensureLayout(root: string): void {
   ]) {
     fs.mkdirSync(dir, { recursive: true });
   }
+}
+
+/**
+ * 根是否已有真实用户数据（首启向导门之三「有数据 = 老用户」的统一口径，B 期修复 2026-10-25）。
+ * 前史 = hasAnyEntries 裸条目计数：ensureLayout 骨架 = 纯目录零文件，骨架一旦落位判定恒真
+ * ——安装版新机永不弹（构造期 ensureLayout 先于 sysinfo）、便携中断残留次启被压。
+ * 改按文件标记判定：launcher.settings / accounts.json / mods.json / instances 任一文件 /
+ * versions 顶层任一文件（游戏 jar）/ bin 顶层任一文件（库池 jar）——骨架目录零文件，天然不误判。
+ * settings 须含**便携登记簿之外的键**才算数：`lastPortableRoot`/`portableFallback` 是 portable
+ * 激活时写进默认根的机器生成面包屑（syncPortableRegistry），非用户数据——先用过便携版的机器
+ * 再装安装版，不得被它压掉向导（2026-10-25 用户拍板口径）。
+ * 读失败 = false（未初始化方向；向导其余两门仍把误弹）。
+ */
+export function hasUserData(root: string): boolean {
+  const settingsProps = readPropertiesFile(settingsFile(root));
+  if (Object.keys(settingsProps).some((k) => k !== 'lastPortableRoot' && k !== 'portableFallback')) return true;
+  for (const file of [accountsFile(root), modRegistryFile(root)]) {
+    if (fs.existsSync(file)) return true;
+  }
+  for (const dir of [instancesDir(root), versionsDir(root), binDir(root)]) {
+    try {
+      if (fs.readdirSync(dir, { withFileTypes: true }).some((e) => e.isFile())) return true;
+    } catch {
+      /* 目录缺席 = 无数据 */
+    }
+  }
+  return false;
 }
 
 // ---------- properties 文件 ----------

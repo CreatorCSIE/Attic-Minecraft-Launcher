@@ -108,7 +108,7 @@ export interface SystemInfo {
   dataRoot: string;
   /** 平台默认根绝对路径（rootOverride 指针的落位，与宿主 bootstrap peek 同语义；portable 下也是它——指针位不随模式变）。 */
   defaultRoot: string;
-  /** 默认根是否已有既有数据（目录存在且有任意条目；首启向导三重门之二：true = 老用户，不弹，保守判定）。 */
+  /** 默认根是否已有既有数据（文件标记口径：settings——须含便携登记簿 lastPortableRoot/portableFallback 之外的键，机器生成面包屑不算——/accounts/实例/版本 jar；ensureLayout 骨架不误判；首启向导门之三安装版数据源：true = 老用户，不弹）。 */
   defaultRootPopulated: boolean;
   /** 启动器日志目录（`<dataRoot>/launcher/logs`）。 */
   logsDir: string;
@@ -126,6 +126,13 @@ export interface SystemInfo {
     active: boolean;
     /** exeDir 实写探针不可写 → 生效根已回落默认根（数据未随盘，UI 常驻徽标）。 */
     fallback: boolean;
+    /**
+     * 便携生效根是否已有真实用户数据（B 期修复 2026-10-25：构造期 ensureLayout 前快照，
+     * hasUserData 文件标记口径——骨架不误判）。向导门之三 portable 数据源 = 本键而非
+     * defaultRootPopulated：安装版/dev 历史在默认根，不得压掉便携首启弹窗；
+     * 只读回落态生效根 = 默认根，本键自然回落「默认根老用户」老语义。
+     */
+    rootPopulated: boolean;
     /** marker ini 缺席、anchor 自愈命中（升级重解压重置/误删 ini 后的便携身份恢复）。 */
     rebuilt?: boolean;
     /** 生效根路径警示（警告不拦截，LWJGL2/Java8 非 ASCII 翻车面留给用户决策）：非 ASCII / 含空格 / 长度逼近 260（阈值 ≥240）。 */

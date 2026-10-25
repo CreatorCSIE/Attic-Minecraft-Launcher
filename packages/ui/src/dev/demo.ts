@@ -126,6 +126,25 @@ export const demoSysInfo: SystemInfo = {
   freeMemMb: 8192,
 };
 
+/** 便携演练开关：?demo=1 之上再带 portable=1 → sysinfo 进便携态（门之三 flavor 感知演练面）。 */
+export function isDemoPortable(): boolean {
+  if (!isDemo()) return false;
+  return new URLSearchParams(window.location.search).get('portable') === '1';
+}
+
+/**
+ * 假便携快照（演练场景 = 2026-10-25 用户实机 bug 形态）：默认根有安装/dev 历史
+ * （defaultRootPopulated=true）∧ 便携根空（rootPopulated=false）→ 门之三按 rootPopulated
+ * 判 → 向导应弹且缺省选中「exe 旁本地目录」。对照旧 bug：复用 defaultRootPopulated 则永不弹。
+ */
+export const demoSysInfoPortable: SystemInfo = {
+  ...demoSysInfo,
+  dataRoot: 'D:\\Games\\amcl-electron-windows-x64-0.0.0\\.attic',
+  logsDir: 'D:\\Games\\amcl-electron-windows-x64-0.0.0\\.attic\\launcher\\logs',
+  defaultRootPopulated: true,
+  portable: { active: true, fallback: false, rootPopulated: false },
+};
+
 /** 假 Mods 仓库（形状对齐 ModCategoryView；getmods.jsp 生态的示意排布：分类→条目、installed 两态）。 */
 export const demoModCategories: ModCategoryView[] = [
   {

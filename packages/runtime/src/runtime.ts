@@ -71,7 +71,7 @@ import {
   ensureLayout,
   infoFile,
   jsonsDir,
-  hasAnyEntries,
+  hasUserData,
   isPathWithin,
   listInstances,
   loadAccounts,
@@ -187,6 +187,12 @@ export class AtticRuntime {
   readonly installDir: string | undefined;
   /** portable B 期双指纹判定结果（exeDir 缺席或非便携 = null）。pointerRoot 随 setSettings 指针写回同步。 */
   readonly portable: PortableResolution | null;
+  /**
+   * 便携生效根「已有真实数据」构造期快照（B 期修复 2026-10-25，sysinfo portable.rootPopulated 数据源）：
+   * ensureLayout 之前取（读的是启动前状态）；hasUserData 文件标记口径 = 中断残留骨架不误判。
+   * 只读回落态 root = defaultRoot，快照自然回落「默认根老用户」老语义，无需特判。
+   */
+  private readonly portableRootPopulated: boolean;
   readonly endpoints: Endpoints;
   /** 启动器版本（宿主注入，SYS_INFO/关于页消费）。 */
   readonly version: string;
@@ -225,6 +231,8 @@ export class AtticRuntime {
       rootDirOverride: options.rootDir ?? (this.portable?.active ? this.portable.root : undefined),
     });
     this.installDir = options.installDir;
+    // 门之三 flavor 感知数据源（B 期修复）：便携态在 ensureLayout 落骨架前快照生效根数据态。
+    this.portableRootPopulated = this.portable?.active ? hasUserData(this.root) : false;
     ensureLayout(this.root);
     this.version = options.version ?? '0.0.0';
     this.platform = options.platform ?? process.platform;
@@ -1034,7 +1042,7 @@ export class AtticRuntime {
       platform: this.platform,
       dataRoot: this.root,
       defaultRoot: this.defaultRoot,
-      defaultRootPopulated: hasAnyEntries(this.defaultRoot),
+      defaultRootPopulated: hasUserData(this.defaultRoot),
       logsDir: path.join(launcherDir(this.root), 'logs'),
       totalMemMb: Math.round(os.totalmem() / 0x100000),
       freeMemMb: Math.round(os.freemem() / 0x100000),
@@ -1044,6 +1052,7 @@ export class AtticRuntime {
             portable: {
               active: true,
               fallback: this.portable.fallback,
+              rootPopulated: this.portableRootPopulated,
               ...(this.portable.rebuilt ? { rebuilt: true } : {}),
               ...(this.portable.pathWarning ? { pathWarning: this.portable.pathWarning } : {}),
             },

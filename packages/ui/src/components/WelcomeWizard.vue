@@ -1,10 +1,11 @@
 <script setup lang="ts">
 /**
  * 首启欢迎向导（Phase 5 A 期定稿）：三步 stepper 模态「目录 → 账户 → Java」，安装版/portable 通用。
- * 三重门判定（任一不满足即不弹，误弹方向保守）：无本 flavor 完成标记 ∧ 无 rootOverride ∧ 默认根无既有数据；
+ * 三重门判定（任一不满足即不弹，误弹方向保守）：无本 flavor 完成标记 ∧ 无 rootOverride ∧ 生效根无既有数据；
  * sysinfo 取不到（缺桥/读失败）= 永不弹。判定只发生一次（decided 闩），会话内不因数据回流复弹。
- * B 期④：门之三 = 「无 wizardFlavor 戳的本 flavor 完成」——portable 与安装版共享默认根时
- * 先完成者不压掉后者；存量 wizardDone 无戳 = 视为 installed（老用户不打扰，plan.md L254 口径）。
+ * B 期④ + 修复（2026-10-25）：门之三 = 「无 wizardFlavor 戳的本 flavor 完成」∧「本 flavor 生效根无数据」
+ * ——portable 判 portable.rootPopulated（生效根构造期快照），安装版判 defaultRootPopulated；
+ * 共享默认根时先完成者/安装版历史都不压掉便携弹窗；存量 wizardDone 无戳 = 视为 installed（plan.md L254 口径）。
  * 目录步骤（B 期）：portable.active 加「exe 旁本地目录（随盘走）」且缺省选中——local = 不写指针；
  * 安装版维持消解式两选项（默认根 / 自定义）；
  * 手选撞进安装目录由宿主 setSettings 护栏拒绝，拒绝原文（实际动作+出路）直陈错误行。
@@ -47,7 +48,11 @@ watch(
     decided = true;
     flavor.value = i.portable?.active ? 'portable' : 'installed';
     const flavorDone = !!settings.value.wizardDone && (settings.value.wizardFlavor ?? 'installed') === flavor.value;
-    visible.value = !flavorDone && !settings.value.rootOverride && !i.defaultRootPopulated;
+    // B 期修复（2026-10-25 用户实机取证）：门之三数据源 flavor 感知——portable 判生效根快照
+    // （portable.rootPopulated），不得复用 defaultRootPopulated：安装版/dev 历史都在默认根，
+    // 复用则便携首启永不弹。portable 块缺席 = 保守 true（不弹，与「sysinfo 读失败永不弹」同方向）。
+    const populated = flavor.value === 'portable' ? (i.portable?.rootPopulated ?? true) : i.defaultRootPopulated;
+    visible.value = !flavorDone && !settings.value.rootOverride && !populated;
     if (visible.value && flavor.value === 'portable') dirChoice.value = 'local';
   },
   { immediate: true },

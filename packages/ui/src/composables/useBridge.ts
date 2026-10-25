@@ -27,7 +27,7 @@ import type {
   SystemInfo,
   VersionJson,
 } from '@attic/core-spec';
-import { demoInstances, demoJavaInstall, demoJavaReport, demoModCategories, demoSettings, demoSysInfo, demoVersions, isDemo } from '../dev/demo';
+import { demoInstances, demoJavaInstall, demoJavaReport, demoModCategories, demoSettings, demoSysInfo, demoSysInfoPortable, demoVersions, isDemo, isDemoPortable } from '../dev/demo';
 import { buildTauriBridge } from '../bridge/tauri';
 
 const NO_BRIDGE = 'no-bridge';
@@ -136,7 +136,7 @@ function demoBridge(): RendererBridge {
     getSettings: async () => ok<AppSettings>(demoSettings),
     detectJava: async () => ok<JavaDetectionReport>(demoJavaReport),
     // 假宿主快照：让设置页通用/内存/关于栏在浏览器里排出真稿（动作类仍走 mock err）。
-    getSystemInfo: async () => ok<SystemInfo>(demoSysInfo),
+    getSystemInfo: async () => ok<SystemInfo>(isDemoPortable() ? demoSysInfoPortable : demoSysInfo),
     // 首启向导演练面：建号/目录选择器/Java 选择器给假值可走通三步。
     addAccount: async (name: string) => ok<AccountView>({ id: `demo-${name.toLowerCase()}`, name, type: 'offline' }),
     // demo 假安装目录：演练护栏口径——rootOverride 落进它内即拒绝（文案与 runtime 护栏一致；

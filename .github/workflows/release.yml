@@ -16,11 +16,23 @@ name: Release（全平台矩阵）
 #  · workflow_dispatch（或直推分支）= 编译+打包测试形态：版本一律钉 0.0.0、
 #    无 Secrets 时自动跳过 Windows signer 签名步骤、mac/linux 构建带
 #    createUpdaterArtifacts=false 覆盖（updater 产物需私钥，无钥即构建炸）。
+# 文档/媒体免触发（2026-10-25）：纯 .md / 图片改动只走 ci.yml，不起全平台矩阵——
+# paths-ignore 对 tag push 同样生效（tag 与上一 tag 的 diff 若纯文档也不出构件），
+# 真要发版被误拦时 workflow_dispatch 手动兜底。
 on:
   workflow_dispatch: {}
   push:
     branches: ['**']
     tags: ['v*']
+    paths-ignore:
+      - '**.md'
+      - '**.png'
+      - '**.jpg'
+      - '**.jpeg'
+      - '**.gif'
+      - '**.svg'
+      - '**.ico'
+      - '**.webp'
 
 jobs:
   gates:

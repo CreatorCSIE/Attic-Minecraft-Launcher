@@ -15,7 +15,7 @@ export {
 export {
   resolveDataRoot,
   isPathWithin,
-  hasAnyEntries,
+  hasUserData,
   ensureLayout,
   launcherDir,
   instancesDir,
