@@ -1003,10 +1003,13 @@ export class AtticRuntime {
     return out;
   }
 
-  /** v1 Instance Settings 可编辑集全量落盘；gameDir 缺省派生 root/<实例名>，已存在实例保留其落位。 */
+  /** v1 Instance Settings 可编辑集全量落盘；gameDir 缺省派生 root/<实例名>，已存在实例保留其落位。
+   * 以既有档案为底稿：视图不携带的 v1 遗留键（proxy/keepopen/RPC/console/isJavaPathNew）原样
+   * 带走不丢（实例页保存静默丢键缺陷的修复位）；视图字段显式 undefined = 清空删键语义不变。 */
   saveInstance(view: InstanceView): InstanceView {
     const existing = loadInstance(this.root, view.name);
     saveInstance(this.root, {
+      ...(existing ?? {}),
       name: view.name,
       version: view.version,
       gameDir: view.gameDir ?? existing?.gameDir ?? path.join(this.root, view.name),

@@ -286,24 +286,34 @@ export function setInstanceVersionField(root: string, name: string, version: str
   return true;
 }
 
+/** 整档案保存 = properties 级合并写回（setSettings 同款纪律，setInstanceVersionField 同构）：
+ * 托管键集内 defined → 原位写入、undefined → 删键（视图字段"清空"语义）；托管集之外的键
+ * （未来发现的 v1 遗留键、用户手加的未知键）原样保留、键序不动。
+ * 曾经的整档案盲写覆盖会静默丢 `proxy/keepopen/RPC/console/isJavaPathNew`——视图不携带的键
+ * 由 facade 层以既有档案为底稿带走（runtime.saveInstance），storage 层只认 config 形状。 */
 export function saveInstance(root: string, config: InstanceConfig): void {
   assertInstanceName(config.name);
-  const props: Record<string, string> = {
+  const file = INSTANCE_FILE(root, config.name);
+  const props = readPropertiesFile(file);
+  const managed: Record<string, string | undefined> = {
     name: config.name,
     version: config.version,
     gameDir: config.gameDir,
+    launchArgs: config.launchArgs,
+    javaPath: config.javaPath,
+    addons: config.addons,
+    width: config.width === undefined ? undefined : String(config.width),
+    height: config.height === undefined ? undefined : String(config.height),
   };
-  for (const key of ['launchArgs', 'javaPath', 'addons'] as const) {
-    const v = config[key];
-    if (v !== undefined) props[key] = v;
-  }
-  if (config.width !== undefined) props['width'] = String(config.width);
-  if (config.height !== undefined) props['height'] = String(config.height);
   for (const key of ['proxy', 'keepopen', 'RPC', 'intelFix', 'console', 'isJavaPathNew', 'forceUpdate'] as const) {
-    const b = config[key];
-    if (b !== undefined) props[key] = String(b);
+    const v = config[key];
+    managed[key] = v === undefined ? undefined : String(v);
   }
-  writePropertiesFile(INSTANCE_FILE(root, config.name), props);
+  for (const [key, value] of Object.entries(managed)) {
+    if (value === undefined) delete props[key];
+    else props[key] = value;
+  }
+  writePropertiesFile(file, props);
 }
 
 // ---------- 本地扫描 ----------

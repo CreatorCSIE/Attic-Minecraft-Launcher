@@ -211,6 +211,54 @@ test('setInstanceVersionField：单字段读-改-写保留其余全部键（v1 �
   assert.throws(() => setInstanceVersionField(root, 'a/b', 'c0.30'), /不合法/);
 });
 
+test('saveInstance：properties 级合并写回（未知键保留、undefined 删键、既有键原位不重排）', (t) => {
+  const root = tempRoot(t);
+  ensureLayout(root);
+  const file = path.join(instancesDir(root), 'mg.txt');
+  fs.writeFileSync(file, 'name=mg\nversion=b1.7.3\ngameDir=g\nlaunchArgs=-Xmx9G\nproxy=true\nfutureKey=42\n', 'utf8');
+  // 托管键给值 = 原位覆盖；proxy 随 config 带走；托管集之外的未知键零触碰
+  saveInstance(root, { name: 'mg', version: 'c2.0', gameDir: 'g', launchArgs: '-Xmx2G', proxy: true });
+  const props = readPropertiesFile(file);
+  assert.equal(props.version, 'c2.0');
+  assert.equal(props.launchArgs, '-Xmx2G');
+  assert.equal(props.proxy, 'true');
+  assert.equal(props.futureKey, '42', '未知键不得被整档案保存丢失');
+  // config 未带（undefined）的托管键 = 删键（视图字段清空语义）；未知键仍不动
+  saveInstance(root, { name: 'mg', version: 'c2.0', gameDir: 'g', launchArgs: '-Xmx2G' });
+  const props2 = readPropertiesFile(file);
+  assert.equal(props2.proxy, undefined);
+  assert.equal(props2.futureKey, '42');
+  // 读-改-写不重排：name 仍是首行
+  assert.ok(fs.readFileSync(file, 'utf8').startsWith('name=mg'));
+});
+
+test('runtime.saveInstance：视图不携带的 v1 遗留键经档案底稿带走（实例页保存不丢 proxy）', (t) => {
+  const root = tempRoot(t);
+  ensureLayout(root);
+  const rt = new AtticRuntime({ rootDir: root, fetchImpl: () => Promise.reject(new Error('offline')) });
+  const file = path.join(instancesDir(root), 'sv.txt');
+  fs.writeFileSync(
+    file,
+    'name=sv\nversion=b1.7.3\ngameDir=g\nproxy=true\nkeepopen=false\nRPC=true\nconsole=true\nisJavaPathNew=true\nfutureKey=42\n',
+    'utf8',
+  );
+  rt.saveInstance({ name: 'sv', version: 'c2.0', width: 1024 });
+  const raw = readPropertiesFile(file);
+  assert.equal(raw.version, 'c2.0');
+  assert.equal(raw.width, '1024');
+  assert.equal(raw.gameDir, 'g', 'view 不带 gameDir → 既有落位保留');
+  for (const [k, v] of [
+    ['proxy', 'true'],
+    ['keepopen', 'false'],
+    ['RPC', 'true'],
+    ['console', 'true'],
+    ['isJavaPathNew', 'true'],
+  ]) {
+    assert.equal(raw[k], v, `${k} 不得被实例页保存静默丢失`);
+  }
+  assert.equal(raw.futureKey, '42');
+});
+
 test('runtime.setInstanceVersion：选中即落盘，name 空回落默认实例建档，只动 version', (t) => {
   const root = tempRoot(t);
   ensureLayout(root);
