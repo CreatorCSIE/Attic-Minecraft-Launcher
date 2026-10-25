@@ -24,7 +24,7 @@ const emit = defineEmits<{ (e: 'open-instances'): void }>();
 
 const { t } = useI18n();
 const { selected } = useSelection();
-const { status, busy, lastError, launch, kill } = useGame();
+const { status, busy, lastError, launch, cancel, kill } = useGame();
 const { settings } = useSettings();
 const { current } = useAccounts();
 const { bridge, hasBridge } = useBridge();
@@ -35,10 +35,13 @@ const running = computed(() => status.value.running);
 /* 聚合进度区可见性（BlockHelm 配方）：启动中展示；下载失败则常驻红态直到下次启动。 */
 const showProgress = computed(() => active.value && (busy.value || failed.value !== null));
 const canPlay = computed(() => hasBridge.value && !!selected.value && !!current.value && !running.value && !busy.value);
-/* 启动/停止合为一体（用户指定）：同一按钮按状态切换动作——空闲=启动，运行=停止。
+/* 启动/停止/取消三态一体（用户指定）：同一按钮按状态切换动作——
+ * 空闲=启动，运行=停止，busy 未运行=取消（0.0.2 feat①：补全资产/下载期间不再纯禁用）。
  * 空闲态真正可用的前置 = 有效账户 + 已选版本（用户指定：UI 侧硬门禁，不靠宿主兜底报错）。 */
 const canToggle = computed(
-  () => hasBridge.value && !busy.value && (running.value || (!!selected.value && !!current.value)),
+  () =>
+    hasBridge.value &&
+    (running.value || (busy.value ? !running.value : !!selected.value && !!current.value)),
 );
 /* 禁用原因提示（hover 标题）：缺哪个说哪个。 */
 const playHint = computed(() => {
@@ -114,6 +117,7 @@ async function doLaunch(test: boolean, visualizer = false): Promise<void> {
 
 function onToggle(): void {
   if (running.value) kill();
+  else if (busy.value) void cancel();
   else void doLaunch(false);
 }
 
@@ -165,14 +169,14 @@ function mb(bytes: number): string {
       <InstanceDock class="dock-instance" />
       <button
         class="play"
-        :class="{ 'play--stop': running }"
+        :class="{ 'play--stop': running, 'play--cancel': busy && !running }"
         :disabled="!canToggle"
         :title="playHint || undefined"
         @click="onToggle"
       >
-        <span v-if="running" class="sq" aria-hidden="true"></span>
+        <span v-if="running || busy" class="sq" aria-hidden="true"></span>
         <span v-else class="tri" aria-hidden="true"></span>
-        {{ running ? t('launch.kill') : t('launch.play') }}
+        {{ running ? t('launch.kill') : busy ? t('launch.cancel') : t('launch.play') }}
       </button>
       <div ref="menuEl" class="menu-wrap">
         <span class="divider" aria-hidden="true"></span>
@@ -309,11 +313,14 @@ function mb(bytes: number): string {
   border-top: 5px solid transparent;
   border-bottom: 5px solid transparent;
 }
-/* 运行态：同一按钮切为停止（danger 底 + 方块图标），保持同一质感配方 */
-.play--stop {
+/* 运行态：同一按钮切为停止（danger 底 + 方块图标），保持同一质感配方；
+   busy 未运行态切为取消（feat①，同款 danger 视觉语言 = 「中断当前动作」） */
+.play--stop,
+.play--cancel {
   background: var(--danger);
 }
-.play--stop:hover:not(:disabled) {
+.play--stop:hover:not(:disabled),
+.play--cancel:hover:not(:disabled) {
   background: var(--danger);
 }
 .sq {

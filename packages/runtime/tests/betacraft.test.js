@@ -7,7 +7,8 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const { BetacraftClient, parseVersionList, eraForDate } = require('../dist/index.js');
+const { BetacraftClient, parseVersionList, eraForDate, sweepPartFiles } = require('../dist/index.js');
+const { buildZip } = require('./zipFixture');
 
 function sha1(text) {
   return crypto.createHash('sha1').update(text).digest('hex');
@@ -242,4 +243,135 @@ test('ensureLegacyfix：GitHub Release 构件匹配 + 下载落位', async (t) =
   const dest = await client.ensureLegacyfix(root, 'legacyfix/legacyfix.jar');
   assert.equal(dest, path.join(root, 'legacyfix', 'legacyfix.jar'));
   assert.equal(fs.readFileSync(dest, 'utf8'), jar);
+});
+
+/* ---------------- 0.0.2 feat②：原子写 + legacyfix SHA 校验自愈 ---------------- */
+
+test('download：原子写——成功后 dest 侧无 .part 残留', async (t) => {
+  const root = tempRoot(t);
+  const client = new BetacraftClient({ fetchImpl: fakeFetch({ 'http://x/a.jar': 'ATOM' }) });
+  const dest = path.join(root, 'a.jar');
+  await client.download('http://x/a.jar', dest, 'client-jar', 'a');
+  assert.equal(fs.readFileSync(dest, 'utf8'), 'ATOM');
+  assert.equal(fs.existsSync(`${dest}.part`), false);
+});
+
+test('download：流中途 error → 清 .part、dest 不出现、failed 事件', async (t) => {
+  const root = tempRoot(t);
+  const events = [];
+  const stream = new ReadableStream({
+    start(c) {
+      c.enqueue(new Uint8Array([1, 2, 3]));
+      c.error(new Error('stream broken'));
+    },
+  });
+  const client = new BetacraftClient({
+    fetchImpl: async () => new Response(stream),
+    onProgress: (e) => events.push(e),
+  });
+  const dest = path.join(root, 'broken.jar');
+  await assert.rejects(() => client.download('http://x/broken.jar', dest, 'client-jar', 'broken'), /stream broken/);
+  assert.equal(fs.existsSync(dest), false, '半截流绝不落 dest');
+  assert.equal(fs.existsSync(`${dest}.part`), false);
+  const failed = events.find((e) => e.phase === 'failed');
+  assert.ok(failed && /stream broken/.test(failed.error));
+});
+
+test('download：signal 流中途中止 → cancelled 事件（非 failed）+ 清 .part', async (t) => {
+  const root = tempRoot(t);
+  const ac = new AbortController();
+  const events = [];
+  let n = 0;
+  const stream = new ReadableStream({ pull(c) { c.enqueue(new Uint8Array([n++])); } });
+  const client = new BetacraftClient({
+    fetchImpl: async () => new Response(stream),
+    onProgress: (e) => {
+      events.push(e);
+      if (e.phase === 'transferring') ac.abort(new Error('user cancel'));
+    },
+  });
+  const dest = path.join(root, 'cancel.jar');
+  await assert.rejects(
+    () => client.download('http://x/cancel.jar', dest, 'client-jar', 'cancel', undefined, ac.signal),
+    /user cancel/,
+  );
+  assert.equal(fs.existsSync(dest), false);
+  assert.equal(fs.existsSync(`${dest}.part`), false);
+  assert.ok(events.some((e) => e.phase === 'cancelled'), '取消落中性态事件');
+  assert.equal(events.some((e) => e.phase === 'failed'), false);
+});
+
+test('sweepPartFiles：递归清扫 .part（depth 控制、正常文件不动、缺目录静默）', (t) => {
+  const root = tempRoot(t);
+  fs.mkdirSync(path.join(root, 'sub', 'deep'), { recursive: true });
+  for (const rel of ['a.part', path.join('sub', 'b.part'), path.join('sub', 'deep', 'c.part')]) {
+    fs.writeFileSync(path.join(root, rel), 'x');
+  }
+  fs.writeFileSync(path.join(root, 'keep.jar'), 'y');
+  sweepPartFiles(root, 2);
+  assert.equal(fs.existsSync(path.join(root, 'a.part')), false);
+  assert.equal(fs.existsSync(path.join(root, 'sub', 'b.part')), false);
+  assert.equal(fs.existsSync(path.join(root, 'sub', 'deep', 'c.part')), true, '超出 depth 不清');
+  assert.equal(fs.existsSync(path.join(root, 'keep.jar')), true);
+  sweepPartFiles(path.join(root, 'nonexistent'), 3); // 缺目录 = 静默无残留可清
+});
+
+/** legacyfix 自愈测试台：合法 EOCD jar + jar 下载计数（GitHub API 走 fakeFetch 表）。 */
+function legacyfixHarness(t, jar) {
+  const root = tempRoot(t);
+  const dest = path.join(root, 'legacyfix', 'legacyfix.jar');
+  let jarFetches = 0;
+  const api = {
+    'https://api.github.com/repos/betacraftuk/legacyfix/releases/latest': {
+      assets: [{ name: 'legacyfix.jar', browser_download_url: 'http://x/legacyfix.jar' }],
+    },
+  };
+  const client = new BetacraftClient({
+    fetchImpl: async (url, init) => {
+      if (url === 'http://x/legacyfix.jar') {
+        jarFetches++;
+        return new Response(jar, { status: 200, headers: { 'content-length': String(jar.length) } });
+      }
+      return fakeFetch(api)(url, init);
+    },
+  });
+  return { root, dest, client, fetches: () => jarFetches };
+}
+
+test('ensureLegacyfix：完好文件复核通过不重下；截断（无 EOCD）→ 自愈重下', async (t) => {
+  const jar = buildZip(['uk/betacraft/legacyfix/A.class']);
+  const h = legacyfixHarness(t, jar);
+  await h.client.ensureLegacyfix(h.root, 'legacyfix/legacyfix.jar');
+  assert.equal(h.fetches(), 1);
+  assert.ok(fs.existsSync(`${h.dest}.meta`), '下载后立本地锚点');
+  await h.client.ensureLegacyfix(h.root, 'legacyfix/legacyfix.jar');
+  assert.equal(h.fetches(), 1, '三级校验全过 = 不重下');
+  fs.writeFileSync(h.dest, jar.subarray(0, Math.floor(jar.length / 2))); // 网络中断半截形态
+  await h.client.ensureLegacyfix(h.root, 'legacyfix/legacyfix.jar');
+  assert.equal(h.fetches(), 2, 'EOCD 不过 → 删残件重下');
+  assert.deepEqual(fs.readFileSync(h.dest), jar);
+});
+
+test('ensureLegacyfix：同长度篡改（size 过、sha256 不符）→ 自愈重下', async (t) => {
+  const jar = buildZip(['uk/betacraft/legacyfix/B.class']);
+  const h = legacyfixHarness(t, jar);
+  await h.client.ensureLegacyfix(h.root, 'legacyfix/legacyfix.jar');
+  const bad = Buffer.from(jar);
+  bad[Math.floor(bad.length / 2)] ^= 0xff; // 中段翻一字节：size 不变、EOCD 仍在、sha256 变
+  fs.writeFileSync(h.dest, bad);
+  await h.client.ensureLegacyfix(h.root, 'legacyfix/legacyfix.jar');
+  assert.equal(h.fetches(), 2);
+  assert.deepEqual(fs.readFileSync(h.dest), jar);
+});
+
+test('ensureLegacyfix：无 meta 的历史存量 → TOFU 立锚不重下', async (t) => {
+  const jar = buildZip(['uk/betacraft/legacyfix/C.class']);
+  const h = legacyfixHarness(t, jar);
+  fs.mkdirSync(path.dirname(h.dest), { recursive: true });
+  fs.writeFileSync(h.dest, jar); // 0.0.1 存量：无 .meta
+  await h.client.ensureLegacyfix(h.root, 'legacyfix/legacyfix.jar');
+  assert.equal(h.fetches(), 0, '首见信任不触网重下');
+  const meta = JSON.parse(fs.readFileSync(`${h.dest}.meta`, 'utf8'));
+  assert.equal(meta.size, jar.length);
+  assert.equal(meta.sha256, crypto.createHash('sha256').update(jar).digest('hex'));
 });

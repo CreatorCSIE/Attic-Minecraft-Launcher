@@ -20,6 +20,7 @@ const bridge: RendererBridge = {
   probeVersionClass: (versionId, className) => invoke(IPC_CHANNELS.VERSION_PROBE_CLASS, versionId, className),
   dryRunLaunch: (request: LaunchRequest) => invoke(IPC_CHANNELS.LAUNCH_DRY_RUN, request),
   launch: (request: LaunchRequest) => invoke(IPC_CHANNELS.LAUNCH, request),
+  cancelLaunch: () => invoke(IPC_CHANNELS.LAUNCH_CANCEL),
   kill: () => invoke(IPC_CHANNELS.KILL),
   status: () => invoke(IPC_CHANNELS.STATUS),
   detectJava: () => invoke(IPC_CHANNELS.JAVA_DETECT),

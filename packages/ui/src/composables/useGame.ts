@@ -4,7 +4,13 @@
  */
 
 import { ref } from 'vue';
-import { IPC_EVENTS, type GameStatus, type LaunchConfig, type LaunchRequest } from '@attic/core-spec';
+import {
+  IPC_EVENTS,
+  LAUNCH_CANCELLED_MESSAGE,
+  type GameStatus,
+  type LaunchConfig,
+  type LaunchRequest,
+} from '@attic/core-spec';
 import { useBridge } from './useBridge';
 import { useInstances } from './useInstances';
 
@@ -41,11 +47,21 @@ async function launch(req: LaunchRequest): Promise<boolean> {
   // 不再等下载/游戏进程起来才出现。fire-and-forget：结果由 launch resolve 后的刷新兜底。
   void useInstances().load();
   const res = await resPromise;
-  if (!res.ok) lastError.value = res.error;
+  // 取消（feat①）= 中性态：用户主动中止不记 lastError、不显红态。
+  if (!res.ok && res.error !== LAUNCH_CANCELLED_MESSAGE) lastError.value = res.error;
   await refresh();
   void useInstances().load();
   busy.value = false;
   return res.ok;
+}
+
+/**
+ * 取消进行中的启动（feat①）：中止启动前下载/补全链。
+ * 返回是否真正发出中止；无在途启动/已 spawn（cancelled:false）静默无操作。
+ */
+async function cancel(): Promise<boolean> {
+  const res = await bridge.cancelLaunch();
+  return res.ok && res.value.cancelled;
 }
 
 async function kill(): Promise<boolean> {
@@ -67,5 +83,5 @@ async function doDryRun(req: LaunchRequest): Promise<boolean> {
 export function useGame() {
   subscribeExit();
   void refresh();
-  return { status, busy, lastError, dryRun, refresh, launch, kill, doDryRun };
+  return { status, busy, lastError, dryRun, refresh, launch, cancel, kill, doDryRun };
 }

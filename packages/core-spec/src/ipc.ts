@@ -28,6 +28,8 @@ export const IPC_CHANNELS = {
   LAUNCH_DRY_RUN: 'attic:launch:dry-run',
   /** 启动游戏进程。 */
   LAUNCH: 'attic:launch',
+  /** 取消进行中的启动（0.0.2 feat①）：中止启动前的下载/补全链；游戏已 spawn = 无效（走 KILL）。 */
+  LAUNCH_CANCEL: 'attic:launch:cancel',
   /** 请求终止当前游戏进程。 */
   KILL: 'attic:kill',
   /** 游戏进程状态（也可轮询）。 */
@@ -96,6 +98,20 @@ export const IPC_CHANNELS = {
 
 /** 可打开的特殊目录目标（SHELL_OPEN_DIR 白名单；路径解析在宿主，渲染侧只给意图）。 */
 export type SpecialDir = 'data-root' | 'logs-dir';
+
+/**
+ * 启动取消结果（LAUNCH_CANCEL）：cancelled=false = 没有在途启动可取消（或游戏已 spawn，
+ * 取消窗口已过，应走 KILL）；true = 中止信号已发出，launch() 将以 LAUNCH_CANCELLED_MESSAGE 失败。
+ */
+export interface LaunchCancelResult {
+  cancelled: boolean;
+}
+
+/**
+ * 取消启动的归一失败文案（feat①）：宿主 launch() 因取消中止时以此文案抛/回，
+ * UI 据此识别「用户主动取消」落中性态——不记 lastError、不显红态。
+ */
+export const LAUNCH_CANCELLED_MESSAGE = '启动已取消';
 
 /** 对话框选择目标（DIALOG_PICK）：java 可执行文件 / 任意目录。 */
 export type PickTarget = 'java-executable' | 'directory';
@@ -234,8 +250,8 @@ export interface DownloadProgressEvent {
   item: DownloadItem;
   /** 被下载对象的标识（版本 id / 资产 hash / 文件名）。 */
   id: string;
-  /** 阶段：排队、传输、校验（sha1）、完成。 */
-  phase: 'queued' | 'transferring' | 'verifying' | 'done' | 'failed';
+  /** 阶段：排队、传输、校验（sha1）、完成、失败、取消（feat①中止——UI 落中性态不报红）。 */
+  phase: 'queued' | 'transferring' | 'verifying' | 'done' | 'failed' | 'cancelled';
   bytesDone: number;
   /** 未知大小（chunked）时缺省。 */
   bytesTotal?: number;
@@ -287,6 +303,8 @@ export interface RendererBridge {
   probeVersionClass(versionId: string, className: string): Promise<IpcResult<boolean>>;
   dryRunLaunch(request: LaunchRequest): Promise<IpcResult<LaunchConfig>>;
   launch(request: LaunchRequest): Promise<IpcResult<GameSession>>;
+  /** 取消进行中的启动前下载/补全链（LAUNCH_CANCEL）；无在途启动/已 spawn = cancelled:false。 */
+  cancelLaunch(): Promise<IpcResult<LaunchCancelResult>>;
   kill(): Promise<IpcResult<GameExit>>;
   status(): Promise<IpcResult<GameStatus>>;
   detectJava(): Promise<IpcResult<JavaDetectionReport>>;

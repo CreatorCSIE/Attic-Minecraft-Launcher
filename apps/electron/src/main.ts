@@ -287,6 +287,7 @@ app.whenReady().then(() => {
     if (runtime.getSettings().minimizeOnLaunch) mainWindow?.minimize();
     return session;
   });
+  handle(IPC_CHANNELS.LAUNCH_CANCEL, () => runtime.cancelLaunch());
   handle(IPC_CHANNELS.KILL, () => runtime.kill());
   handle(IPC_CHANNELS.STATUS, () => runtime.status());
   handle(IPC_CHANNELS.JAVA_DETECT, () => runtime.detectJava());

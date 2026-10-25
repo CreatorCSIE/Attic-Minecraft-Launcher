@@ -88,6 +88,7 @@ export {
   parseVersionList,
   eraForDate,
   hashFile,
+  sweepPartFiles,
   type BetacraftClientOptions,
   type FetchImpl,
 } from './betacraft';

@@ -6,7 +6,7 @@
 export type { Account, AccountType, AccountView, MicrosoftAccount, OfflineAccount } from './account';
 export type { CustomInfoView, CustomVersionView } from './custom';
 export type { ModCategoryRaw, ModCategoryView, ModEntryRaw, ModEntryView, ModInstallRequest } from './mods';
-export { IPC_CHANNELS, IPC_EVENTS, NOT_IMPLEMENTED } from './ipc';
+export { IPC_CHANNELS, IPC_EVENTS, NOT_IMPLEMENTED, LAUNCH_CANCELLED_MESSAGE } from './ipc';
 export type {
   AtticEventPayloads,
   DownloadItem,
@@ -17,6 +17,7 @@ export type {
   IpcChannel,
   IpcEventName,
   IpcResult,
+  LaunchCancelResult,
   LaunchRequest,
   PickTarget,
   RendererBridge,

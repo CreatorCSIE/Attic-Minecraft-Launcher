@@ -23,6 +23,7 @@ import type {
   LaunchConfig,
   ModCategoryView,
   ModInstallRequest,
+  LaunchCancelResult,
   RendererBridge,
   SystemInfo,
   UpdateCheckResult,
@@ -55,6 +56,7 @@ const mockBridge: RendererBridge = {
   probeVersionClass: async () => ok(false),
   dryRunLaunch: async () => err<LaunchConfig>(NO_BRIDGE),
   launch: async () => err<GameSession>(NO_BRIDGE),
+  cancelLaunch: async () => err<LaunchCancelResult>(NO_BRIDGE),
   kill: async () => err<GameExit>(NO_BRIDGE),
   status: async () =>
     ok<GameStatus>({ running: false, session: null, lastExit: null, lastError: null }),

@@ -135,6 +135,8 @@ export async function installZuluPackage(
     client: BetacraftClient;
     platform?: string;
     onProgress?: (event: DownloadProgressEvent) => void;
+    /** 取消信号（feat①）：中止 111MB 级 zip 下载。 */
+    signal?: AbortSignal;
   },
 ): Promise<ZuluInstallOutcome> {
   const platform = deps.platform ?? process.platform;
@@ -147,6 +149,7 @@ export async function installZuluPackage(
       'java-runtime',
       pkg.name,
       pkg.sha256 ? { algo: 'sha256', value: pkg.sha256 } : undefined,
+      deps.signal,
     );
     const extractDir = path.join(destRoot, pkg.name.replace(/\.zip$/i, ''));
     await extractZip(zipPath, extractDir, platform);

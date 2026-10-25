@@ -94,6 +94,66 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+/** 取消中止错误（feat①）：signal.reason 优先，缺省 DOMException AbortError 形态。 */
+function abortError(signal: AbortSignal): Error {
+  const reason = signal.reason as Error | undefined;
+  if (reason instanceof Error) return reason;
+  return new Error('aborted');
+}
+
+/**
+ * 启动期清扫下载残留 `.part`（feat②伴生）：进程被杀留下的半截文件。dest 侧「存在=复用」
+ * 判据已不被 .part 污染（原子写），清扫纯属回收磁盘；depth=目录递归层数。
+ */
+export function sweepPartFiles(dir: string, depth: number): void {
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return; // 目录不存在 = 无残留
+  }
+  for (const entry of entries) {
+    const p = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (depth > 1) sweepPartFiles(p, depth - 1);
+    } else if (entry.isFile() && entry.name.endsWith('.part')) {
+      fs.rmSync(p, { force: true });
+    }
+  }
+}
+
+/**
+ * zip/jar 尾部 EOCD 签名探测（`PK\x05\x06`，尾部 22..65557 字节窗口）：O(1) 截断判定——
+ * 网络中断留下的半截 jar 尾部是随机数据，几乎必然无 EOCD。
+ */
+function zipHasEocd(file: string): boolean {
+  let size: number;
+  try {
+    size = fs.statSync(file).size;
+  } catch {
+    return false;
+  }
+  if (size < 22) return false;
+  const windowSize = Math.min(size, 65557);
+  let fd: number | undefined;
+  try {
+    fd = fs.openSync(file, 'r');
+    const buf = Buffer.alloc(windowSize);
+    fs.readSync(fd, buf, 0, windowSize, size - windowSize);
+    return buf.indexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06])) >= 0;
+  } catch {
+    return false;
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+  }
+}
+
+/** legacyfix 本地完整性锚点（feat②）：GitHub release 构件无官方哈希，下载+打补丁后本地算。 */
+interface LegacyfixMeta {
+  sha256: string;
+  size: number;
+}
+
 /** 流式读文件算哈希（sha1 校验 jar 用）。 */
 export function hashFile(file: string, algo: 'sha1' | 'sha256'): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -132,24 +192,34 @@ export class BetacraftClient {
     return res;
   }
 
-  /** 通用下载：进度事件 + 可选 sha1/sha256 校验；失败发 failed 并抛错。 */
+  /**
+   * 通用下载：进度事件 + 可选 sha1/sha256 校验 + 可选取消信号。
+   * **原子落盘（0.0.2 feat②）**：流写 `<dest>.part`，校验通过后 rename 到 dest——进程被杀/断流
+   * 只留 `.part`（dest 侧「存在=复用」判据永不被半截文件污染）；失败/取消清 `.part`。
+   * 取消（feat①）：signal 贯穿 fetch 与读循环，中止清 `.part`、发 `cancelled` 阶段（UI 落中性态）、
+   * 原样重抛中止错误由 runtime 归一为取消语义。
+   */
   async download(
     url: string,
     destFile: string,
     item: DownloadItem,
     id: string,
     hash?: { algo: 'sha1' | 'sha256'; value: string },
+    signal?: AbortSignal,
   ): Promise<void> {
     this.emit({ item, id, phase: 'queued', bytesDone: 0 });
+    const partFile = `${destFile}.part`;
     let bytesDone = 0;
     let bytesTotal: number | undefined;
     try {
-      const res = await this.get(url);
+      if (signal?.aborted) throw abortError(signal);
+      const res = await this.fetchImpl(url, { signal });
+      if (!res.ok) throw new Error(`HTTP ${res.status} ${url}`);
       const totalHeader = res.headers.get('content-length');
       bytesTotal = totalHeader ? Number(totalHeader) : undefined;
       fs.mkdirSync(path.dirname(destFile), { recursive: true });
       const hasher = hash ? crypto.createHash(hash.algo) : null;
-      const handle = await fs.promises.open(destFile, 'w');
+      const handle = await fs.promises.open(partFile, 'w');
       try {
         const reader = res.body?.getReader();
         if (reader) {
@@ -161,6 +231,7 @@ export class BetacraftClient {
               bytesDone += value.byteLength;
               hasher?.update(value);
               this.emit({ item, id, phase: 'transferring', bytesDone, bytesTotal });
+              if (signal?.aborted) throw abortError(signal);
             }
           }
         } else {
@@ -176,13 +247,15 @@ export class BetacraftClient {
         this.emit({ item, id, phase: 'verifying', bytesDone, bytesTotal });
         const actual = hasher.digest('hex');
         if (actual !== hash.value.toLowerCase()) {
-          fs.rmSync(destFile, { force: true });
           throw new Error(`${hash.algo} 校验失败：期望 ${hash.value}，实际 ${actual}`);
         }
       }
+      fs.renameSync(partFile, destFile);
       this.emit({ item, id, phase: 'done', bytesDone, bytesTotal: bytesTotal ?? bytesDone });
     } catch (error) {
-      this.emit({ item, id, phase: 'failed', bytesDone, bytesTotal, error: messageOf(error) });
+      fs.rmSync(partFile, { force: true });
+      if (signal?.aborted) this.emit({ item, id, phase: 'cancelled', bytesDone, bytesTotal });
+      else this.emit({ item, id, phase: 'failed', bytesDone, bytesTotal, error: messageOf(error) });
       throw error;
     }
   }
@@ -216,7 +289,7 @@ export class BetacraftClient {
   async downloadClientJar(
     json: VersionJson,
     root: string,
-    opts: { verify?: boolean; repair?: boolean; force?: boolean } = {},
+    opts: { verify?: boolean; repair?: boolean; force?: boolean; signal?: AbortSignal } = {},
   ): Promise<void> {
     const url = json.jar?.url ?? json.downloads?.client?.url;
     if (!url) throw new Error(`版本 ${json.id} 无 jar 下载地址`);
@@ -232,7 +305,7 @@ export class BetacraftClient {
     } else if (!opts.force && opts.repair === false) {
       throw new Error(`版本 ${json.id} 的 jar 缺失，自动补全已禁用——请开启补全开关或手动放入 versions/${json.id}.jar`);
     }
-    await this.download(url, dest, 'client-jar', json.id, sha1 ? { algo: 'sha1', value: sha1 } : undefined);
+    await this.download(url, dest, 'client-jar', json.id, sha1 ? { algo: 'sha1', value: sha1 } : undefined, opts.signal);
   }
 
   /** Mods 仓库列表（Betacraft 单源，getmods.jsp）；解析防御见 mods.ts parseModCategories。 */
@@ -251,7 +324,7 @@ export class BetacraftClient {
   async ensureModJar(
     json: VersionJson,
     root: string,
-    opts: { verify?: boolean; force?: boolean } = {},
+    opts: { verify?: boolean; force?: boolean; signal?: AbortSignal } = {},
   ): Promise<string> {
     const baseId = json.betacraft?.baseVersion ?? '?';
     const url = json.jar?.url;
@@ -265,7 +338,7 @@ export class BetacraftClient {
       if (!sha1 || opts.verify === false) return dest;
       if ((await hashFile(dest, 'sha1')) === sha1.toLowerCase()) return dest;
     }
-    await this.download(url, dest, 'mod-jar', json.id, sha1 ? { algo: 'sha1', value: sha1 } : undefined);
+    await this.download(url, dest, 'mod-jar', json.id, sha1 ? { algo: 'sha1', value: sha1 } : undefined, opts.signal);
     return dest;
   }
 
@@ -276,7 +349,7 @@ export class BetacraftClient {
    * BC `.info` 全线无 assets 字段；Indev 年代标题探测与 ID 表不同源（0130 标题 "Minecraft 0.31"
    * → c0.31 → 20100124，ID 表 → 20100212），必须由 BC v2 权威表钉死，否则 objects 错配、部分声音缺失。
    */
-  async downloadAssetIndex(json: VersionJson, root: string, opts: { force?: boolean } = {}): Promise<string | null> {
+  async downloadAssetIndex(json: VersionJson, root: string, opts: { force?: boolean; signal?: AbortSignal } = {}): Promise<string | null> {
     const ai = json.assetIndex;
     const id = resolveLaunchAssetIndexId(json);
     if (!id) return null;
@@ -289,7 +362,7 @@ export class BetacraftClient {
       if (!sha1) return id;
       if ((await hashFile(dest, 'sha1')) === sha1.toLowerCase()) return id;
     }
-    await this.download(url, dest, 'asset-index', id, sha1 ? { algo: 'sha1', value: sha1 } : undefined);
+    await this.download(url, dest, 'asset-index', id, sha1 ? { algo: 'sha1', value: sha1 } : undefined, opts.signal);
     return id;
   }
 
@@ -298,25 +371,25 @@ export class BetacraftClient {
    * 存在且 size 相符即跳过；hash 即 sha1，下载时校验）。
    * legacyfix 只自动补索引 `custom` 段，`objects` 全体是启动器责任——缺失即游戏内声音 NPE（用户实测）。
    */
-  async downloadAssetObjects(root: string, indexId: string, opts: { force?: boolean } = {}): Promise<void> {
+  async downloadAssetObjects(root: string, indexId: string, opts: { force?: boolean; signal?: AbortSignal } = {}): Promise<void> {
     const indexFile = assetIndexFile(root, indexId);
     if (!fs.existsSync(indexFile)) return;
     const plan = planAssetObjects(JSON.parse(fs.readFileSync(indexFile, 'utf8')) as unknown);
     for (const obj of plan) {
       const dest = path.join(assetsDir(root), 'objects', obj.hash.slice(0, 2), obj.hash);
       if (!opts.force && fs.existsSync(dest) && fs.statSync(dest).size === obj.size) continue;
-      await this.download(obj.url, dest, 'asset', `${indexId}:${obj.key}`, { algo: 'sha1', value: obj.hash });
+      await this.download(obj.url, dest, 'asset', `${indexId}:${obj.key}`, { algo: 'sha1', value: obj.hash }, opts.signal);
     }
   }
 
   /** json.libraries → bin/<basename>（整目录上 classpath，缺失才下；force=true 覆盖已存在文件）。 */
-  async downloadLibrariesToBin(json: VersionJson, root: string, opts: { force?: boolean } = {}): Promise<void> {
+  async downloadLibrariesToBin(json: VersionJson, root: string, opts: { force?: boolean; signal?: AbortSignal } = {}): Promise<void> {
     for (const lib of json.libraries ?? []) {
       const url = lib.url ?? lib.client?.url;
       if (!url) continue;
       const dest = path.join(binDir(root), basenameFromUrl(url));
       if (!opts.force && fs.existsSync(dest)) continue;
-      await this.download(url, dest, 'library', lib.name, lib.client?.sha1 ? { algo: 'sha1', value: lib.client.sha1 } : undefined);
+      await this.download(url, dest, 'library', lib.name, lib.client?.sha1 ? { algo: 'sha1', value: lib.client.sha1 } : undefined, opts.signal);
     }
   }
 
@@ -367,13 +440,25 @@ export class BetacraftClient {
     return out;
   }
 
-  /** legacyfix Release 最新构件下载 → <root>/<relPath>（relPath 来自 agentMount.path）。 */
-  async ensureLegacyfix(root: string, relPath: string): Promise<string> {
+  /**
+   * legacyfix Release 最新构件下载 → <root>/<relPath>（relPath 来自 agentMount.path）。
+   * **SHA 校验自愈（0.0.2 feat②）**：GitHub release 构件无官方哈希可锚，改为本地锚点——
+   * 下载+DeAwtPatch 落定后算 sha256+size 写 sidecar `<dest>.meta`；下次启动三级校验
+   * （size → zip 尾部 EOCD → sha256），任一级不过 = 残缺/损坏 → 删本体+meta 重下，
+   * 修「网络中断留半截 jar、存在=跳过把残件喂 -javaagent 崩」的用户实案。
+   * meta 缺席的历史文件（0.0.1 存量）= 首见信任：EOCD 过了才立锚。
+   */
+  async ensureLegacyfix(root: string, relPath: string, signal?: AbortSignal): Promise<string> {
     const dest = path.join(root, relPath);
     if (fs.existsSync(dest)) {
-      // DeAwtPatch 窗口位置补丁幂等维持（钉版不匹配/锚点异常自动跳过，不阻断启动）。
-      reportLegacyfixDeawtPatch(dest, applyLegacyfixDeawtPatch(dest));
-      return dest;
+      if (await this.legacyfixIntact(dest)) {
+        // DeAwtPatch 窗口位置补丁幂等维持（钉版不匹配/锚点异常自动跳过，不阻断启动）。
+        reportLegacyfixDeawtPatch(dest, applyLegacyfixDeawtPatch(dest));
+        return dest;
+      }
+      // 自愈：残缺/校验不符 → 本体+锚点一并删除，走下方重下通道。
+      fs.rmSync(dest, { force: true });
+      fs.rmSync(`${dest}.meta`, { force: true });
     }
     const res = await this.get(this.endpoints.legacyfixRelease);
     const release = (await res.json()) as { assets?: { name?: string; browser_download_url?: string }[] };
@@ -382,8 +467,33 @@ export class BetacraftClient {
       release.assets?.find((a) => a.name?.toLowerCase() === wanted) ??
       release.assets?.find((a) => a.name?.toLowerCase().startsWith('legacyfix') && a.name.toLowerCase().endsWith('.jar'));
     if (!asset?.browser_download_url) throw new Error('legacyfix Release 中未找到可用 jar 构件');
-    await this.download(asset.browser_download_url, dest, 'legacyfix', asset.name ?? relPath);
+    await this.download(asset.browser_download_url, dest, 'legacyfix', asset.name ?? relPath, undefined, signal);
     reportLegacyfixDeawtPatch(dest, applyLegacyfixDeawtPatch(dest));
+    await this.writeLegacyfixMeta(dest);
     return dest;
+  }
+
+  /** 三级完整性校验：size 对锚 → EOCD 截断探测 → sha256 全量比对。 */
+  private async legacyfixIntact(dest: string): Promise<boolean> {
+    if (!zipHasEocd(dest)) return false;
+    let meta: LegacyfixMeta | null = null;
+    try {
+      meta = JSON.parse(fs.readFileSync(`${dest}.meta`, 'utf8')) as LegacyfixMeta;
+    } catch {
+      meta = null;
+    }
+    if (!meta || typeof meta.sha256 !== 'string' || typeof meta.size !== 'number') {
+      await this.writeLegacyfixMeta(dest); // 历史文件首见信任（EOCD 已过）：立锚
+      return true;
+    }
+    if (fs.statSync(dest).size !== meta.size) return false;
+    return (await hashFile(dest, 'sha256')) === meta.sha256.toLowerCase();
+  }
+
+  /** 下载/打补丁落定后写本地锚点（sha256+size）。 */
+  private async writeLegacyfixMeta(dest: string): Promise<void> {
+    const sha256 = await hashFile(dest, 'sha256');
+    const size = fs.statSync(dest).size;
+    fs.writeFileSync(`${dest}.meta`, JSON.stringify({ sha256, size } satisfies LegacyfixMeta), 'utf8');
   }
 }

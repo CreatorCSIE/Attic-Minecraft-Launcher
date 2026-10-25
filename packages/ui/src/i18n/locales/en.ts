@@ -260,6 +260,7 @@ export const en = {
   launch: {
     play: 'Play',
     kill: 'Stop',
+    cancel: 'Cancel',
     version: 'Version',
     memory: 'Memory',
     java: 'Java',

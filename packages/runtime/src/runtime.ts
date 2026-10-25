@@ -10,6 +10,7 @@ import path from 'node:path';
 
 import {
   IPC_EVENTS,
+  LAUNCH_CANCELLED_MESSAGE,
   type Account,
   type AccountView,
   type CustomInfoView,
@@ -24,6 +25,7 @@ import {
   type GameStatus,
   type InstanceView,
   type JavaDetectionReport,
+  type LaunchCancelResult,
   type LaunchConfig,
   type LaunchRequest,
   type ModCategoryView,
@@ -35,7 +37,7 @@ import {
 } from '@attic/core-spec';
 
 import { applySettingsToProps, estimateMaxMemoryMb, instanceViewFromConfig, settingsFromProps } from './appSettings';
-import { BetacraftClient, type FetchImpl } from './betacraft';
+import { BetacraftClient, sweepPartFiles, type FetchImpl } from './betacraft';
 import { endpointsFromOverrides, resolveEndpoints, type Endpoints } from './endpoints';
 import { infoToVersionJson, LAUNCH_METHOD_MAIN_CLASS } from './info';
 import { checkLwjgl2Arch, dependsOsFor, ensureDepends, type DependsIO } from './depends';
@@ -88,6 +90,7 @@ import {
   saveInstance,
   saveSettings,
   scanBinPool,
+  versionsDir,
   scanInstalledInfos,
   scanInstalledJars,
   scanInstalledVersions,
@@ -212,6 +215,8 @@ export class AtticRuntime {
   private readonly processes: GameProcessManager;
   private readonly listeners = new Map<string, Set<(payload: never) => void>>();
   private lastLaunchError: string | null = null;
+  /** 在途启动的取消控制器（feat①）：launch() 建、finally 清；cancelLaunch() 消费。 */
+  private launchAbort: AbortController | null = null;
   private infoWatcher: fs.FSWatcher | null = null;
   /** .info 监视去抖：id → 挂起定时器（编辑器保存常触发多事件）。 */
   private readonly infoWatchTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -580,9 +585,18 @@ export class AtticRuntime {
     });
   }
 
+  /**
+   * 启动（0.0.2 feat①）：全程挂一个 AbortController，cancelLaunch() 中止下载/补全链；
+   * 各阶段边界 + spawn 前最后一道 throwIfAborted 防竞态。取消中止以 LAUNCH_CANCELLED_MESSAGE
+   * 失败且不记 lastLaunchError（中性态，UI 不报崩）。feat②：进链先清扫上次进程被杀留下的 `.part`。
+   */
   async launch(request: LaunchRequest): Promise<GameSession> {
+    const controller = new AbortController();
     try {
       if (this.processes.running) throw new Error('游戏进程已在运行');
+      this.launchAbort = controller;
+      const signal = controller.signal;
+      this.sweepStaleParts();
       // v1 语义（InstanceSettings.java L556）：选中版本写回实例属性——同实例切版本 gameDir 不变、存档共享。
       // 时序前移（2026-10-21 修复「点启动后实例列表迟迟不出现」）：建档+回写必须落在 launch 的
       // **首个 await 之前的同步段**——UI 在发起 launch IPC 后立即重拉实例清单，Electron IPC 消息
@@ -612,11 +626,13 @@ export class AtticRuntime {
       }
       // 裸 jar custom 合成元数据无下载地址：jar 本体已在位，跳过下载（v1 downloadJson 豁免）。
       // mod 通道的 versions/<id>.jar 是合成产物，不走本下载（基座 jar 由 metaJson 走齐）。
+      signal.throwIfAborted();
       if (metaJson.jar?.url || metaJson.downloads?.client?.url) {
         await this.client.downloadClientJar(metaJson, this.root, {
           verify: settings['checkIntegrity'] !== 'false',
           repair: settings['fixMissing'] !== 'false',
           force: forceUpdate,
+          signal,
         });
       }
       if (baseId) {
@@ -626,6 +642,7 @@ export class AtticRuntime {
         const modJar = await this.client.ensureModJar(json, this.root, {
           verify: settings['checkIntegrity'] !== 'false',
           force: forceUpdate,
+          signal,
         });
         composeModJars(clientJarFile(this.root, baseId), modJar, clientJarFile(this.root, json.id));
         // 字段继承：mod 自带键胜出，缺失回落基座（mainClass/assets/betacraft.launchMethod 等；
@@ -639,15 +656,19 @@ export class AtticRuntime {
       }
       json = this.resolveIndevMainClass(json);
       // BC 基础库集先行（清池重解在 libraries 增量下载之前，避免误删刚下的库；v1 移植见 depends.ts）。
-      await this.updateDepends(settings, forceUpdate);
-      await this.client.downloadLibrariesToBin(json, this.root, { force: forceUpdate });
+      signal.throwIfAborted();
+      await this.updateDepends(settings, forceUpdate, signal);
+      signal.throwIfAborted();
+      await this.client.downloadLibrariesToBin(json, this.root, { force: forceUpdate, signal });
       this.extractNatives();
       // 资产补全（v2 语义）：索引 + objects 全体由启动器预置——legacyfix 只自动补 custom 段，
       // objects 缺失即游戏内 CodecJOrbis/OpenAL 声音 NPE（用户实测 c0.0.22a）。
-      const assetIndexId = await this.client.downloadAssetIndex(json, this.root, { force: forceUpdate });
-      if (assetIndexId) await this.client.downloadAssetObjects(this.root, assetIndexId, { force: forceUpdate });
+      signal.throwIfAborted();
+      const assetIndexId = await this.client.downloadAssetIndex(json, this.root, { force: forceUpdate, signal });
+      if (assetIndexId) await this.client.downloadAssetObjects(this.root, assetIndexId, { force: forceUpdate, signal });
 
-      const context = await this.buildContext(request);
+      signal.throwIfAborted();
+      const context = await this.buildContext(request, signal);
       context.appletClass = this.resolvePreclassicAppletClass(json);
       // 死链声音预置（gameDir 侧写数据，不动 JVM 参数；dryRun 不预置——纯检视不留副作用）。
       this.applyLegacyResources(json, context.gameDir, assetIndexId);
@@ -657,8 +678,9 @@ export class AtticRuntime {
       });
 
       // agentMount 落位：javaagent/Applet 容器需要 jar 本体在位；coremod/mod 复制进游戏目录。
+      signal.throwIfAborted();
       for (const mount of config.agentMount) {
-        const source = await this.client.ensureLegacyfix(this.root, mount.path);
+        const source = await this.client.ensureLegacyfix(this.root, mount.path, signal);
         if (mount.form === 'javaagent') continue;
         const targetDir = path.join(context.gameDir, mount.form === 'coremod' ? 'coremods' : 'mods');
         fs.mkdirSync(targetDir, { recursive: true });
@@ -666,6 +688,8 @@ export class AtticRuntime {
       }
 
       fs.mkdirSync(context.gameDir, { recursive: true });
+      // spawn 前最后一道闸门（防竞态）：取消落在 start 之前 = 中止；之后 = 游戏已在跑，走 KILL。
+      signal.throwIfAborted();
       const session = this.processes.start(config, request.versionId);
       // 日志落盘：testLaunch 恒写；普通启动受「诊断日志」开关（diagnosticLog=true 全量落盘）
       if (request.testLaunch || settings['diagnosticLog'] === 'true') {
@@ -680,9 +704,35 @@ export class AtticRuntime {
       this.lastLaunchError = null;
       return session;
     } catch (error) {
+      if (controller.signal.aborted) {
+        // 用户主动取消 = 中性态：不记 lastLaunchError（status 不显崩），归一文案回 UI。
+        this.lastLaunchError = null;
+        throw new Error(LAUNCH_CANCELLED_MESSAGE);
+      }
       this.lastLaunchError = messageOf(error);
       throw error;
+    } finally {
+      if (this.launchAbort === controller) this.launchAbort = null;
     }
+  }
+
+  /**
+   * 取消进行中的启动（feat①，LAUNCH_CANCEL 通道）：中止在途下载/补全链。
+   * 游戏已 spawn 或无在途启动 = cancelled:false（取消窗口已过，终止应走 KILL）。
+   */
+  cancelLaunch(): LaunchCancelResult {
+    if (!this.launchAbort || this.processes.running) return { cancelled: false };
+    this.launchAbort.abort(new Error(LAUNCH_CANCELLED_MESSAGE));
+    return { cancelled: true };
+  }
+
+  /** 清扫 feat② 原子写残留的 `.part`（进程被杀/断电留下的半截文件，回收磁盘）。 */
+  private sweepStaleParts(): void {
+    sweepPartFiles(versionsDir(this.root), 2);
+    sweepPartFiles(binDir(this.root), 2);
+    sweepPartFiles(path.join(assetsDir(this.root), 'objects'), 2);
+    sweepPartFiles(launcherDir(this.root), 1);
+    sweepPartFiles(zuluJavaDir(this.root), 1);
   }
 
   async kill(): Promise<GameExit> {
@@ -1256,13 +1306,13 @@ export class AtticRuntime {
     return [...refs].sort((a, b) => dateOf(a) - dateOf(b)).map((ref) => ref.id);
   }
 
-  private async buildContext(request: LaunchRequest): Promise<LaunchContext> {
+  private async buildContext(request: LaunchRequest, signal?: AbortSignal): Promise<LaunchContext> {
     const settings = loadSettings(this.root);
     const accounts = this.currentAccounts();
     const account = request.accountId ? accounts.find((a) => a.id === request.accountId) : accounts[0];
     if (!account) throw new Error('无可用账户，请先在账户页添加账户');
 
-    const javaPath = request.javaPath ?? settings['javaPath'] ?? (await this.ensureJavaPath(settings));
+    const javaPath = request.javaPath ?? settings['javaPath'] ?? (await this.ensureJavaPath(settings, signal));
     await this.gateLwjgl2Arch(javaPath);
     // 内存三级优先：请求覆盖 > memoryMode=auto 宿主估算（总内存 40% 夹 [512,2048]）> 定值 > 1024 兜底
     const memory = Number(settings['maxMemoryMb']);
@@ -1321,17 +1371,17 @@ export class AtticRuntime {
   }
 
   /** BC 基础库集（libs/natives zip）核对与重拉——v1 downloadDepends 移植，语义见 depends.ts。 */
-  private async updateDepends(settings: Record<string, string>, force: boolean): Promise<void> {
+  private async updateDepends(settings: Record<string, string>, force: boolean, signal?: AbortSignal): Promise<void> {
     const io: DependsIO = {
       root: this.root,
       os: dependsOsFor(this.platform),
       settings,
       fetchText: async (url: string) => {
-        const res = await this.fetchImpl(url);
+        const res = await this.fetchImpl(url, { signal });
         if (!res.ok) throw new Error(`HTTP ${res.status} ${url}`);
         return res.text();
       },
-      download: (url: string, destFile: string, id: string) => this.client.download(url, destFile, 'library', id),
+      download: (url: string, destFile: string, id: string) => this.client.download(url, destFile, 'library', id, undefined, signal),
       saveVersionKeys: (keys: Record<string, string>) => saveSettings(this.root, { ...loadSettings(this.root), ...keys }),
     };
     await ensureDepends(io, this.endpoints, { force });
@@ -1354,7 +1404,7 @@ export class AtticRuntime {
   }
 
   /** 探测 → 没有则 Zulu 自动供给（失败抛全因，手动导入兜底，风险 #7）。 */
-  private async ensureJavaPath(settings: Record<string, string>): Promise<string> {
+  private async ensureJavaPath(settings: Record<string, string>, signal?: AbortSignal): Promise<string> {
     const report = await detectJavaRuntime({ manualPaths: this.manualJavaPaths(settings) });
     if (report.selection.install) return report.selection.install.executable;
 
@@ -1367,7 +1417,7 @@ export class AtticRuntime {
       const pkgs = await queryZuluPackages(8, this.endpoints, this.fetchImpl, process.platform, process.arch);
       const pkg = pkgs[0];
       if (!pkg) throw new Error('Zulu 归档无匹配包');
-      const outcome = await installZuluPackage(pkg, zuluJavaDir(this.root), { client: this.client });
+      const outcome = await installZuluPackage(pkg, zuluJavaDir(this.root), { client: this.client, signal });
       if (!outcome.ok || !outcome.javaPath) throw new Error(outcome.reason ?? 'Zulu 安装失败');
       return outcome.javaPath;
     } catch (error) {

@@ -173,6 +173,8 @@ async function dispatch(method: string, params: Params): Promise<unknown> {
       return runtime.dryRunLaunch(s(0));
     case C.LAUNCH:
       return runtime.launch(s(0));
+    case C.LAUNCH_CANCEL:
+      return runtime.cancelLaunch();
     case C.KILL:
       return runtime.kill();
     case C.STATUS:

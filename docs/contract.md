@@ -104,6 +104,7 @@ c0.24 家族死链声音预置（`<gameDir>/resources/`，同样不动命令行�
 | `attic:version:probe-class` | `versionId: string, className: string` | `IpcResult<boolean>`（本地 client jar zip 条目探测（如 `net/minecraft/isom/IsomPreviewApplet.class`）：启动页「≡」菜单 launchmenu 项启用判定。jar 未下载/损坏/无条目=false；宿主按 jar 路径+mtime 缓存条目清单。Rust 侧镜像：`versions/<id>.jar` 中央目录读条目名，同一语义） |
 | `attic:launch:dry-run` | `LaunchRequest` | `IpcResult<LaunchConfig>` |
 | `attic:launch` | `LaunchRequest` | `IpcResult<GameSession>` |
+| `attic:launch:cancel` | — | `IpcResult<LaunchCancelResult>`（0.0.2 feat①：中止在途启动前下载/补全链；无在途/已 spawn=`cancelled:false`，取消后 launch 以「启动已取消」失败且不落 lastError。Rust 侧镜像：白名单转发通道，无专用 command） |
 | `attic:kill` | — | `IpcResult<GameExit>` |
 | `attic:status` | — | `IpcResult<GameStatus>` |
 | `attic:java:detect` | — | `IpcResult<JavaDetectionReport>` |
@@ -141,7 +142,7 @@ c0.24 家族死链声音预置（`<gameDir>/resources/`，同样不动命令行�
 | --- | --- | --- |
 | `attic:game:output` | `GameOutputEvent{stream,chunk,pid,seq?}` | stdout/stderr 流，UI 控制台面板消费；`seq` = electron 宿主广播时盖的会话内单调序号（backlog 补拉与实时事件去重用，见 `attic:game:backlog`；宿主不实现 backlog 时缺省） |
 | `attic:game:exit` | `GameExitEvent{code,signal,crash,stoppedByUser?,pid,versionId}` | 退出 + 崩溃分类摘要；`stoppedByUser:true` = 用户主动停止（点停止按钮/关游戏窗触发看门狗），`crash` 恒为 null，控制台以中性条显示最后一行日志；外部 taskkill/自身异常退出仍照常报崩溃条 |
-| `attic:download:progress` | `DownloadProgressEvent{item,id,phase,bytesDone,bytesTotal?,bytesPerSec?,error?}` | jar/资产/Java/legacyfix 统一形状；`phase`: `queued/transferring/verifying/done/failed` |
+| `attic:download:progress` | `DownloadProgressEvent{item,id,phase,bytesDone,bytesTotal?,bytesPerSec?,error?}` | jar/资产/Java/legacyfix 统一形状；`phase`: `queued/transferring/verifying/done/failed/cancelled`（cancelled=feat①取消中止，UI 落中性态） |
 | `attic:custom:info-changed` | `CustomInfoChangedEvent{id}` | 宿主监视 `versions/jsons/` 目录：外部编辑/新建/删除 `.info`，按 id 去抖 250ms 合并后发射；自定义版本配置页实时刷新（未编辑自动重载，有未保存编辑则提示不覆盖；本方保存/删除的回声由 UI selfWrite 窗口吸收） |
 
 ## 4. 契约测试夹具

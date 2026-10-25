@@ -250,6 +250,7 @@ export const zhCN: Record<string, unknown> = {
   launch: {
     play: '启动',
     kill: '停止',
+    cancel: '取消',
     version: '版本',
     memory: '内存',
     java: 'Java',
