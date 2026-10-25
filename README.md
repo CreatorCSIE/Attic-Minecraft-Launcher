@@ -161,7 +161,7 @@ https://nightly.link/CreatorCSIE/Attic-Minecraft-Launcher/workflows/release/main
 | Windows · Tauri 主壳 x64 | `amcl-tauri-windows-x64` |
 | Windows · Tauri 主壳 arm64 | `amcl-tauri-windows-arm64` |
 | Windows · Electron 壳 x64 | `amcl-electron-windows-x64` |
-| Windows · Win7/8 兜底壳（x64+ia32） | `amcl-legacy-windows` |
+| Windows · Electron 22 兜底壳（Win7/8，x64+ia32） | `amcl-electron-legacy-windows` |
 | macOS · arm64 DMG | `amcl-tauri-macos-arm64` |
 | Linux · x64 deb + AppImage | `amcl-tauri-linux-x64` |
 

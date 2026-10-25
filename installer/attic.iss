@@ -16,7 +16,9 @@
 ;        /DATTIC_VERSION="0.0.0" /DATTIC_ARCH="x64" attic.iss
 ;   → amcl-<shell>-windows-<arch>-<version>-setup.exe
 ;   构件命名统一范式（2026-10-24 用户拍板；amcl = Attic Minecraft Launcher 简称）：
-;   amcl-<shell>-<os>-<arch>-<ver>，shell = tauri | electron | legacy（即 FLAVOR 值）；
+;   amcl-<shell>-<os>-<arch>-<ver>，shell = tauri | electron | electron-legacy（分发名走
+;   ATTIC_NAME_SHELL：flavor 内部 ID 仍是 legacy，2026-10-25 用户反馈裸 legacy 看不出壳属，
+;   分发名补 electron- 前缀）；
 ;   安装器后缀 = -setup（本 iss 产出）；portable 目录构件后缀 = -portable（CI 压缩步骤产出）。
 ;   戒律（实测）：Inno 的文件类路径（OutputDir / [Files]Source / SetupIconFile）相对
 ;   解析基准 = **本 .iss 所在目录，不是 cwd**——从仓根传 "installer\dist"、"stage"、
@@ -69,16 +71,21 @@
   #define ATTIC_NAME   "Attic Minecraft Launcher Legacy"
   ; 与 electron-builder.yml productName 派生的 exe 名严格一致（改名两处同动）
   #define ATTIC_EXE    "Attic Minecraft Launcher Legacy.exe"
+  ; 分发名壳段（用户反馈 2026-10-25）：裸 "legacy" 看不出是 Electron 22 兜底壳，补 electron- 前缀；
+  ; flavor 内部 ID（AppId/注册表/portable marker）仍为 legacy 不动——只改用户可见的构件名。
+  #define ATTIC_NAME_SHELL "electron-legacy"
 #elif ATTIC_FLAVOR == "electron"
   ; 双壳并进（2026-10-24 用户拍板）：Tauri 主壳优先推荐，Electron 壳为可选发行形态。
   ; AppId/目录/快捷方式三者与主壳分离可同机共存；数据根两壳同走 .attic（壳只是窗层）
   #define ATTIC_APPID  "uk.attic.launcher.electron"
   #define ATTIC_NAME   "Attic Minecraft Launcher (Electron)"
   #define ATTIC_EXE    "Attic Minecraft Launcher (Electron).exe"
+  #define ATTIC_NAME_SHELL "electron"
 #elif ATTIC_FLAVOR == "tauri"
   #define ATTIC_APPID  "uk.attic.launcher"
   #define ATTIC_NAME   "Attic Minecraft Launcher"
   #define ATTIC_EXE    "attic-launcher.exe"
+  #define ATTIC_NAME_SHELL "tauri"
 #else
   #error ATTIC_FLAVOR 未知取值：tauri | electron | legacy
 #endif
@@ -108,7 +115,7 @@ DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 ArchitecturesInstallIn64BitMode={#ATTIC_64MODE}
 OutputDir={#ATTIC_OUTDIR}
-OutputBaseFilename=amcl-{#ATTIC_FLAVOR}-windows-{#ATTIC_ARCH}-{#ATTIC_VERSION}-setup
+OutputBaseFilename=amcl-{#ATTIC_NAME_SHELL}-windows-{#ATTIC_ARCH}-{#ATTIC_VERSION}-setup
 ; SetupIconFile 有意不设：安装器图标维持 Inno 缺省（两壳统一，终拍见头注）
 UninstallDisplayName={#ATTIC_NAME}
 UninstallDisplayIcon={app}\{#ATTIC_EXE}

@@ -548,7 +548,7 @@ jobs:
         shell: pwsh
         run: |
           $ver = $env:ATTIC_VERSION
-          $folder = "amcl-legacy-windows-x64-$ver"
+          $folder = "amcl-electron-legacy-windows-x64-$ver"
           $zip = "portable-dist\$folder-portable.zip"
           $payload = 'apps\electron-legacy\release\win-unpacked'
           # 守卫①：安装器载荷必须干净（portable.ini 只许在便携 staging 副本里）
@@ -585,10 +585,10 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: amcl-legacy-windows
+          name: amcl-electron-legacy-windows
           path: |
-            installer/dist/amcl-legacy-windows-*-setup.exe
-            portable-dist/amcl-legacy-windows-x64-*-portable.zip
+            installer/dist/amcl-electron-legacy-windows-*-setup.exe
+            portable-dist/amcl-electron-legacy-windows-x64-*-portable.zip
 
   # Release 创建 + latest.json 通道（plan「更新通道设计」版本轨语义条 + 「Nightly 分发轨道」条
   # changelog 分工条落实；原文件尾 TODO 收口）。触发条件 = meta.mode ≠ none：
