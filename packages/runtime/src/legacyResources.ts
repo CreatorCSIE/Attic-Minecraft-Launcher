@@ -200,7 +200,13 @@ export function materializeLegacyResources(options: {
         if (present === null) outcome.copied += 1;
         else outcome.replaced += 1;
       } catch (error) {
-        fs.rmSync(tmp, { force: true });
+        // temp 清理是尽力而为：祖先链本身不可操作时（gameDir 被文件占位）rmSync 在 POSIX 抛
+        // ENOTDIR（force 只吞 ENOENT）——若让它穿出，逐条 fail-open 就塌成整体 null（CI 实证）。
+        try {
+          fs.rmSync(tmp, { force: true });
+        } catch {
+          /* 清不掉也无妨：该键下次预置仍走同路径 temp+rename 覆盖 */
+        }
         say(`[attic-runtime] legacy resource 预置失败（${entry.key}）：${error instanceof Error ? error.message : String(error)}`);
       }
     }

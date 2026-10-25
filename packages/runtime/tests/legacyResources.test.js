@@ -217,6 +217,8 @@ test('物化：gameDir 不可写 → 逐条失败即跳过，整体返回计数�
   fs.writeFileSync(blocker, '占位文件挡在 gameDir 位置上');
   const notes = [];
   const out = materializeLegacyResources({ indexJson, assetsRoot, gameDir: blocker, onDiagnostic: (m) => notes.push(m) });
+  // 逐条 fail-open 的契约 = 返回计数对象；null 只留给前置条件缺失（POSIX 曾从 temp 清理穿出塌成 null，CI 实证）
+  assert.notEqual(out, null);
   assert.equal(out.ready, 19);
   assert.equal(out.copied, 0);
   assert.equal(out.skipped, 0);
