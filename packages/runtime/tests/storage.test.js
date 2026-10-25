@@ -25,6 +25,8 @@ const {
   nativesDir,
   instancesDir,
   versionListCacheFile,
+  readPropertiesFile,
+  setInstanceVersionField,
   instanceViewFromConfig,
   isPathWithin,
   hasAnyEntries,
@@ -173,6 +175,68 @@ test('renameInstance：v1 语义只迁档案，gameDir 原样带走（改名不�
   assert.throws(() => renameInstance(root, 'new', 'a/b'), /不合法/); // 路径分隔符
   assert.throws(() => renameInstance(root, '不存在', 'x'), /不存在/);
   assert.ok(loadInstance(root, 'new'));
+});
+
+test('setInstanceVersionField：单字段读-改-写保留其余全部键（v1 遗留键/未知键/键序不动）', (t) => {
+  const root = tempRoot(t);
+  ensureLayout(root);
+  const file = path.join(instancesDir(root), 'sv.txt');
+  fs.writeFileSync(
+    file,
+    'name=sv\nversion=b1.7.3\ngameDir=x\nproxy=true\nkeepopen=true\nconsole=false\nisJavaPathNew=true\nunknownKey=keepme\n',
+    'utf8',
+  );
+  assert.equal(setInstanceVersionField(root, 'sv', 'c0.30'), true);
+  const props = readPropertiesFile(file);
+  assert.equal(props.version, 'c0.30');
+  for (const [k, v] of [
+    ['proxy', 'true'],
+    ['keepopen', 'true'],
+    ['console', 'false'],
+    ['isJavaPathNew', 'true'],
+    ['unknownKey', 'keepme'],
+  ]) {
+    assert.equal(props[k], v, `${k} 不得被单字段写回丢失`);
+  }
+  // version 键原位重写（读-改-写语义：赋已存在键保位置）
+  assert.ok(fs.readFileSync(file, 'utf8').split('\n')[1].startsWith('version='));
+  // 幂等：同值 = false 且零重写
+  const before = fs.readFileSync(file, 'utf8');
+  assert.equal(setInstanceVersionField(root, 'sv', 'c0.30'), false);
+  assert.equal(fs.readFileSync(file, 'utf8'), before);
+  // 档案不存在 = false 且不建档
+  assert.equal(setInstanceVersionField(root, 'ghost', 'c0.30'), false);
+  assert.equal(fs.existsSync(path.join(instancesDir(root), 'ghost.txt')), false);
+  // 非法名走与 saveInstance 同闸（路径穿越拒绝）
+  assert.throws(() => setInstanceVersionField(root, 'a/b', 'c0.30'), /不合法/);
+});
+
+test('runtime.setInstanceVersion：选中即落盘，name 空回落默认实例建档，只动 version', (t) => {
+  const root = tempRoot(t);
+  ensureLayout(root);
+  const rt = new AtticRuntime({ rootDir: root, fetchImpl: () => Promise.reject(new Error('offline')) });
+  // 无档案场景（UI 无激活实例）：null → 默认实例按 v1 缺省建档后立即写入选中版本
+  const created = rt.setInstanceVersion(null, 'c2.0');
+  assert.equal(created.name, 'default instance');
+  assert.equal(created.version, 'c2.0');
+  const def = loadInstance(root, 'default instance');
+  assert.equal(def.version, 'c2.0');
+  assert.equal(def.gameDir, path.join(root, 'default instance'));
+  assert.equal(def.launchArgs, '-Xmx1G', '建档走 v1 缺省集');
+  // 既有实例：视图可表达字段不被抹掉；视图携带不了的 v1 遗留键（proxy 等）也不被写回丢失
+  rt.saveInstance({ name: 'keep', version: 'b1.7.3', width: 1234 });
+  const keepFile = path.join(instancesDir(root), 'keep.txt');
+  fs.appendFileSync(keepFile, 'proxy=true\nunknownKey=keepme\n', 'utf8');
+  const view = rt.setInstanceVersion('keep', 'c0.30_04');
+  assert.equal(view.version, 'c0.30_04');
+  assert.equal(view.width, 1234);
+  const raw = readPropertiesFile(keepFile);
+  assert.equal(raw.version, 'c0.30_04');
+  assert.equal(raw.width, '1234');
+  assert.equal(raw.proxy, 'true');
+  assert.equal(raw.unknownKey, 'keepme');
+  // 幂等：重选同版 = 视图不变、档案不重写
+  assert.deepEqual(rt.setInstanceVersion('keep', 'c0.30_04'), view);
 });
 
 test('实例解耦（v1 语义）：gameDir=root/<实例名>，首启自动建 default instance，切版本目录不变', async (t) => {

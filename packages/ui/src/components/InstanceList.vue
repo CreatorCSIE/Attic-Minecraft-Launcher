@@ -293,7 +293,9 @@ async function onConfirmRemove(): Promise<void> {
                 <span class="mi-text">{{ inst.name }}</span>
                 <span v-if="activeName === inst.name" class="mi-active">{{ t('instance.active') }}</span>
               </span>
-              <span class="mi-sub mono" :title="inst.version">{{ inst.version }}</span>
+              <span class="mi-sub mono" :title="inst.version || t('instance.versionNone')">
+                {{ inst.version || t('instance.versionNone') }}
+              </span>
             </span>
           </button>
           <button
@@ -425,7 +427,7 @@ async function onConfirmRemove(): Promise<void> {
         <p v-else-if="renaming && renameHostError" class="field-err">{{ renameHostError }}</p>
 
         <p v-if="!creating && selected" class="kind mono">
-          {{ selected.version }}
+          {{ selected.version || t('instance.versionNone') }}
           <template v-if="selected.width && selected.height"> · {{ selected.width }}×{{ selected.height }}</template>
         </p>
 

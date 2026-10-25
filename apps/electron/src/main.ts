@@ -255,6 +255,9 @@ app.whenReady().then(() => {
   handle(IPC_CHANNELS.INSTANCES_SAVE, (instance: InstanceView) => runtime.saveInstance(instance));
   handle(IPC_CHANNELS.INSTANCES_DELETE, (name: string, withFiles: boolean) => runtime.deleteInstance(name, withFiles));
   handle(IPC_CHANNELS.INSTANCES_RENAME, (name: string, newName: string) => runtime.renameInstance(name, newName));
+  handle(IPC_CHANNELS.INSTANCES_SET_VERSION, (name: string | null, versionId: string) =>
+    runtime.setInstanceVersion(name, versionId),
+  );
   // 打开实例目录：先 mkdir 保证可见（首启未落盘的场景不失败），再交系统文件管理器。
   // openPath 失败语义 = 返回非空错误字符串（成功 = ''），回抛给渲染侧可见。
   handle(IPC_CHANNELS.INSTANCES_OPEN_DIR, async (name: string) => {

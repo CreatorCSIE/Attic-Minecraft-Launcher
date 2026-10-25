@@ -1,8 +1,8 @@
 /**
  * useSelection —— 跨组件共享的"当前选中版本"（启动视图用）。
- * 实例联动：实例档案记录上次启动版本（宿主 persistInstanceVersion 回写），
- * 启动后清单加载 / 切换激活实例 → 版本选择跟随档案版本，启动页版本列表随之定位；
- * 用户手动选版本不被覆盖（只在激活实例变化时跟随）。
+ * 实例联动（v1 SelectVersion.saveVersion 语义）：用户选中即写回激活实例档案
+ * （窄通道 setInstanceVersion，单字段落盘不等启动）；切换激活实例 / 档案版本
+ * 变化（启动回写兜底、删除清指针）→ 版本选择跟随档案，用户手选不被同值回拽。
  */
 
 import { ref, computed, watch, type Ref, type ComputedRef } from 'vue';
@@ -13,7 +13,7 @@ import { useInstances } from './useInstances';
 const selectedId: Ref<string | null> = ref(null);
 
 const { versions } = useVersions();
-const { active } = useInstances();
+const { active, setVersion } = useInstances();
 
 const selected: ComputedRef<VersionRef | null> = computed(
   () => versions.value.find((v) => v.id === selectedId.value) ?? null,
@@ -21,6 +21,9 @@ const selected: ComputedRef<VersionRef | null> = computed(
 
 function select(id: string | null): void {
   selectedId.value = id;
+  // v1 语义：选中即写回实例档案（不等启动）。null 不写回——"取消选择"不清版本指针。
+  // 回包 upsert 触发的 active watch 因 inst.version === selectedId 不会回拽（无成环）。
+  if (id) void setVersion(active.value?.name ?? null, id);
 }
 
 // 激活实例 → 版本联动（immediate 覆盖"激活名已从 localStorage 恢复"的同步场景）。

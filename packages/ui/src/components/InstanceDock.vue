@@ -164,7 +164,7 @@ watch(expanded, async (open) => {
           <span class="lines">
             <span class="name">{{ active ? active.name : t('instance.pick') }}</span>
             <span class="subtitle subtitle--mono">
-              {{ active ? active.version : t('instance.pickHint') }}
+              {{ active ? active.version || t('instance.versionNone') : t('instance.pickHint') }}
             </span>
           </span>
           <span class="peek-chevron" aria-hidden="true">
@@ -234,7 +234,7 @@ watch(expanded, async (open) => {
           >
             <span class="lines">
               <span class="name">{{ inst.name }}</span>
-              <span class="subtitle subtitle--mono">{{ inst.version }}</span>
+              <span class="subtitle subtitle--mono">{{ inst.version || t('instance.versionNone') }}</span>
             </span>
           </button>
         </div>

@@ -40,6 +40,7 @@ import { infoToVersionJson, LAUNCH_METHOD_MAIN_CLASS } from './info';
 import { checkLwjgl2Arch, dependsOsFor, ensureDepends, type DependsIO } from './depends';
 import { detectJavaRuntime } from './java/detect';
 import { probeJavaExecutable } from './java/probe';
+import { hasLegacyResourceProbes, materializeLegacyResources } from './legacyResources';
 import { APPLET_LAUNCHER_CLASS, assembleLaunchConfig, type LaunchContext } from './launch';
 import {
   composeModJars,
@@ -55,6 +56,8 @@ import { GameProcessManager } from './process';
 import { parseProperties } from './properties';
 import { DEFAULT_AGENT_MOUNTS } from './quirks';
 import {
+  assetIndexFile,
+  assetsDir,
   binDir,
   clientJarFile,
   deleteInstance,
@@ -80,6 +83,7 @@ import {
   scanInstalledInfos,
   scanInstalledJars,
   scanInstalledVersions,
+  setInstanceVersionField,
   type InstanceConfig,
   versionListCacheFile,
   writePropertiesFile,
@@ -484,6 +488,28 @@ export class AtticRuntime {
     return probePreclassicEntry(clientJarFile(this.root, json.id)) ?? undefined;
   }
 
+  /**
+   * c0.24 家族死链声音预置（判定 → 计划 → 落位；任何一步失败 = 维持现状，绝不阻断启动）。
+   * 必须在 `downloadAssetObjects` 之后调用——本地对象缺席即跳过该键（补下是既有资产流程的职责，
+   * 机制与闸门见 legacyResources.ts 头注）。
+   */
+  private applyLegacyResources(json: VersionJson, gameDir: string, assetIndexId: string | null): void {
+    if (!assetIndexId) return;
+    if (!hasLegacyResourceProbes(clientJarFile(this.root, json.id))) return;
+    let indexJson: unknown;
+    try {
+      indexJson = JSON.parse(fs.readFileSync(assetIndexFile(this.root, assetIndexId), 'utf8')) as unknown;
+    } catch {
+      return; // 索引缺席 → 无从预置，游戏行为与今天一致
+    }
+    materializeLegacyResources({
+      indexJson,
+      assetsRoot: assetsDir(this.root),
+      gameDir,
+      onDiagnostic: (message) => console.log(message),
+    });
+  }
+
   /** 真实 betacraft .info 不含 agentMount——并入 Attic 自带决策表（数据，非代码）。 */
   private withAgentMounts(json: VersionJson): VersionJson {
     if (json.betacraft?.agentMount) return json;
@@ -569,6 +595,8 @@ export class AtticRuntime {
 
       const context = await this.buildContext(request);
       context.appletClass = this.resolvePreclassicAppletClass(json);
+      // 死链声音预置（gameDir 侧写数据，不动 JVM 参数；dryRun 不预置——纯检视不留副作用）。
+      this.applyLegacyResources(json, context.gameDir, assetIndexId);
       const config = assembleLaunchConfig(json, context, {
         extraJvmArgs: request.extraJvmArgs,
         gameParams: request.gameParams,
@@ -820,6 +848,13 @@ export class AtticRuntime {
    * mod 项联动清 launcher/mods.json 登记（防幽灵条目：登记在 = 启动期仍会按登记 URL 复活 .info）。
    * 门禁 = listCustomVersions 成员判定（与列表页同源）：官方版本（.info 无 custom=true/base-version）拒绝，
    * 从入口排除误删 BC 文件；不存在/非 custom 均显式报错。
+   *
+   * 实例指针联动清理（悬空指针缺陷修复）：`launch()` 每次启动都把选中版本写回实例档案
+   * （v1 `persistInstanceVersion` 语义），故刚启动过该版本的实例会留下指向已消失版本的 `version`；
+   * 删除是不可逆的（jar+.info+登记三清，无"日后重新导入同名"可恢复语义），悬空 id 既不能启动
+   * 也让实例页/dock 显示已不存在的版本 → 逐个档案把该字段写成空串（= 未选择版本，UI 出占位文案）。
+   * 只清 `version` 恰好等于被删 id 的档案，其余实例一字不动；写空串而非删键：`loadInstance` 的
+   * `?? 'b1.7.3'` 只在键缺席时兜底，删键会把实例静默改指向 v1 缺省版本。
    */
   removeCustomVersion(id: string): void {
     assertSafeVersionId(id);
@@ -829,6 +864,11 @@ export class AtticRuntime {
     fs.rmSync(clientJarFile(this.root, id), { force: true });
     fs.rmSync(infoFile(this.root, id), { force: true });
     removeModRegistry(this.root, id);
+    for (const name of listInstances(this.root)) {
+      const config = loadInstance(this.root, name);
+      if (!config || config.version !== id) continue;
+      saveInstance(this.root, { ...config, version: '' });
+    }
   }
 
   // ---------- Mods 页（MODS_* 两通道；Betacraft 单源，一期不引入多源） ----------
@@ -999,6 +1039,16 @@ export class AtticRuntime {
     return loadInstance(this.root, name)?.gameDir ?? path.join(this.root, name);
   }
 
+  /** 版本选中即写回实例（v1 SelectVersion.saveVersion 语义）：properties 级单字段读-改-写，
+   * 保留档案其余全部键（InstanceView 不携带的 v1 遗留键不丢）。name 空 → 回落默认实例
+   * （resolveInstance 建档兜底，与启动路径同款）。返回宿主权威视图供 UI upsert。 */
+  setInstanceVersion(name: string | null, versionId: string): InstanceView {
+    const target = name && name.trim() !== '' ? name : DEFAULT_INSTANCE_NAME;
+    const config = this.resolveInstance(target);
+    setInstanceVersionField(this.root, target, versionId);
+    return instanceViewFromConfig({ ...config, version: versionId });
+  }
+
   // ---------- 内部编排 ----------
 
   /** 实例解析（v1 Instance.newInstance 语义）：不存在则按缺省建档（gameDir=root/<实例名>）。 */
@@ -1018,11 +1068,9 @@ export class AtticRuntime {
     return fresh;
   }
 
-  /** 选中版本写回实例（幂等：同版本不重写文件）。 */
+  /** 选中版本写回实例：与 UI 选中即写回共用窄通道语义（幂等：同值不重写文件）。 */
   private persistInstanceVersion(request: LaunchRequest): void {
-    const config = this.resolveInstance(request.instanceId ?? DEFAULT_INSTANCE_NAME);
-    if (config.version === request.versionId) return;
-    saveInstance(this.root, { ...config, version: request.versionId });
+    this.setInstanceVersion(request.instanceId ?? DEFAULT_INSTANCE_NAME, request.versionId);
   }
 
   /**

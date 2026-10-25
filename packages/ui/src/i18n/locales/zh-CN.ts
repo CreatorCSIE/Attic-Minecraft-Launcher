@@ -111,6 +111,7 @@ export const zhCN: Record<string, unknown> = {
     removeDialog: {
       title: '删除自定义版本',
       message: '确定要删除「{id}」吗？其 jar 与配置文件（.info）都会被移除，此操作不可撤销。',
+      affected: '{n} 个实例正在使用它，删除后这些实例回到「未选择版本」，需重新选择才能启动。',
     },
     externalChanged: '检测到该 .info 已被外部编辑器修改；你尚未保存的编辑不会被覆盖。',
     reload: '重新载入',
@@ -176,6 +177,8 @@ export const zhCN: Record<string, unknown> = {
     count: '{n} 个实例',
     pick: '选择实例',
     pickHint: '点击展开实例列表。',
+    /** 实例档案 version 为空（新建未选 / 所指版本被删除后宿主清指针）时的占位副标题。 */
+    versionNone: '未选择版本',
     pin: '固定展开面板',
     unpin: '取消固定（选完自动收起）',
     collapse: '收起面板',

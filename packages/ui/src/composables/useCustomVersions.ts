@@ -6,6 +6,7 @@
 import { computed, ref, type ComputedRef } from 'vue';
 import { IPC_EVENTS, type CustomInfoView, type CustomVersionView } from '@attic/core-spec';
 import { useBridge } from './useBridge';
+import { useInstances } from './useInstances';
 import { useMods } from './useMods';
 import { useVersions } from './useVersions';
 
@@ -133,6 +134,8 @@ async function remove(id: string): Promise<boolean> {
   await load();
   // 启动页版本列表同步失去该项 → 联动刷新。
   await useVersions().load();
+  // 宿主删除时已把指向该版本的实例档案 version 清空（悬空指针联动清理）→ 实例清单/dock 须重拉才可见。
+  await useInstances().load();
   // mod 卸载 = Mods 页 installed 真相源（.info 实存）已在宿主侧翻转 → 联动重拉徽标。
   if (wasMod) await useMods().load();
   return true;

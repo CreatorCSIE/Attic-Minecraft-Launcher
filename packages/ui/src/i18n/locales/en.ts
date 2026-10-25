@@ -111,6 +111,7 @@ export const en = {
     removeDialog: {
       title: 'Delete custom version',
       message: 'Delete "{id}"? Its jar and .info configuration will be removed. This cannot be undone.',
+      affected: '{n} instance(s) use it; after deletion they fall back to “No version selected” and need a new pick before launching.',
     },
     externalChanged: 'This .info was modified by an external editor; your unsaved changes will not be overwritten.',
     reload: 'Reload',
@@ -186,6 +187,8 @@ export const en = {
     count: '{n} instances',
     pick: 'Pick an instance',
     pickHint: 'Click to expand the instance list.',
+    /** Placeholder subtitle when the profile has no version (new instance, or the version it pointed at was deleted). */
+    versionNone: 'No version selected',
     pin: 'Keep panel expanded',
     unpin: 'Unpin (collapse after picking)',
     collapse: 'Collapse panel',

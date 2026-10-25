@@ -80,6 +80,9 @@ const mockBridge: RendererBridge = {
   deleteInstance: async () => ok<void>(undefined),
   // 改名同族：UI 本地就地换名，返回值不参与渲染，回个合法形状即可。
   renameInstance: async (_name: string, newName: string) => ok<InstanceView>({ name: newName, version: '' }),
+  // 选中即写回：浏览器 mock 无 fs，就地回声入参形状（UI upsert 语义成立）。
+  setInstanceVersion: async (_name: string | null, versionId: string) =>
+    ok<InstanceView>({ name: _name || 'default instance', version: versionId }),
   openInstanceDir: async () => err<void>(NO_BRIDGE),
   windowControl: async () => ok<void>(undefined), // 浏览器无窗可控：no-op
   openConsoleWindow: async () => err<void>(NO_BRIDGE),

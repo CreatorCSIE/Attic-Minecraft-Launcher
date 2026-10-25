@@ -56,6 +56,9 @@ export const IPC_CHANNELS = {
   INSTANCES_RENAME: 'attic:instances:rename',
   /** 在系统文件管理器打开实例 gameDir（宿主 shell.openPath；目录不存在则先创建）。 */
   INSTANCES_OPEN_DIR: 'attic:instances:open-dir',
+  /** 版本选中即写回实例（v1 SelectVersion.saveVersion 语义）：宿主 properties 级单字段
+   * 读-改-写，保留档案其余全部键；name 空 → 回落默认实例（不存在则建档）。 */
+  INSTANCES_SET_VERSION: 'attic:instances:set-version',
   /** 无边距窗控制（顶栏三键；动作见 WindowAction）。 */
   WINDOW_CONTROL: 'attic:window:control',
   /** 打开/聚焦独立控制台窗口（v1 语义：MC 日志独立窗，与主页解耦）。 */
@@ -254,6 +257,8 @@ export interface RendererBridge {
   renameInstance(name: string, newName: string): Promise<IpcResult<InstanceView>>;
   /** 打开实例 gameDir（系统文件管理器；宿主保证目录存在后 openPath）。 */
   openInstanceDir(name: string): Promise<IpcResult<void>>;
+  /** 版本选中即写回实例：单字段读-改-写（其余键不动），name 空 → 默认实例；返回宿主权威视图。 */
+  setInstanceVersion(name: string | null, versionId: string): Promise<IpcResult<InstanceView>>;
   windowControl(action: WindowAction): Promise<IpcResult<void>>;
   openConsoleWindow(): Promise<IpcResult<void>>;
   /** 拉取指定会话的积压输出与退出事件（控制台窗订阅后补拉；宿主未实现时返回错误、UI 静默降级）。 */

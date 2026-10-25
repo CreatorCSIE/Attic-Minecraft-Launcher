@@ -83,6 +83,22 @@ async function rename(name: string, newName: string): Promise<string | null> {
   return null;
 }
 
+/** 版本选中即写回（v1 SelectVersion.saveVersion 语义，窄通道单字段落盘）：宿主返回的
+ * 权威视图就地 upsert。seq 守卫防快速连选的过期回包把清单拽回旧版本；失败静默
+ * （实例页 save 同口径）——下次 load 或启动回写收敛。 */
+let setVersionSeq = 0;
+async function setVersion(name: string | null, versionId: string): Promise<void> {
+  const seq = ++setVersionSeq;
+  const res = await bridge.setInstanceVersion(name, versionId);
+  if (!res.ok || seq !== setVersionSeq) return;
+  const saved = res.value;
+  const idx = instances.value.findIndex((i) => i.name === saved.name);
+  if (idx >= 0) instances.value[idx] = saved;
+  else instances.value.push(saved);
+  // 宿主建档兜底（无激活实例时回落默认实例）：清单原本为空/激活失效 → 跟随新档案。
+  if (!active.value) setActive(saved.name);
+}
+
 /** 打开实例目录：成功返回 null，失败返回错误文案（UI 内联可见）。 */
 async function openDir(name: string): Promise<string | null> {
   const res = await bridge.openInstanceDir(name);
@@ -97,5 +113,18 @@ function ensureLoaded(): void {
 
 export function useInstances() {
   ensureLoaded();
-  return { instances, loading, error, load, save, remove, rename, openDir, activeName, active, setActive };
+  return {
+    instances,
+    loading,
+    error,
+    load,
+    save,
+    remove,
+    rename,
+    setVersion,
+    openDir,
+    activeName,
+    active,
+    setActive,
+  };
 }

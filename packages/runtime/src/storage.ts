@@ -271,6 +271,21 @@ export function renameInstance(root: string, name: string, newName: string): Ins
   return renamed;
 }
 
+/** 单字段写回（properties 级读-改-写，保留其余全部键与键序）：版本选中即落盘走这条窄路——
+ * `saveInstance` 按 `InstanceConfig` 整档案覆盖，而 `InstanceView` 不携带 v1 遗留键
+ * （proxy/keepopen/RPC/console/isJavaPathNew…），用整档案回灌改版本会静默丢键。
+ * 档案不存在（或空档案）= false 不动盘；库中已是同值 = false 不重写（连点同版零 IO）。 */
+export function setInstanceVersionField(root: string, name: string, version: string): boolean {
+  assertInstanceName(name);
+  const file = INSTANCE_FILE(root, name);
+  const props = readPropertiesFile(file);
+  if (Object.keys(props).length === 0) return false;
+  if (props['version'] === version) return false;
+  props['version'] = version;
+  writePropertiesFile(file, props);
+  return true;
+}
+
 export function saveInstance(root: string, config: InstanceConfig): void {
   assertInstanceName(config.name);
   const props: Record<string, string> = {

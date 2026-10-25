@@ -9,6 +9,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useI18n } from '../i18n';
 import { useCustomVersions } from '../composables/useCustomVersions';
+import { useInstances } from '../composables/useInstances';
 import { useBridge } from '../composables/useBridge';
 import { isDemo } from '../dev/demo';
 import ConfirmDialog from './ConfirmDialog.vue';
@@ -31,6 +32,7 @@ const {
   setDirtyProbe,
 } = useCustomVersions();
 const { hasBridge } = useBridge();
+const { instances } = useInstances();
 // 删除钮在 demo 模式放行（Mods 页 canInstall 同配方，假桥 removeCustomVersion 已实现卸载链路）；
 // 「导入 jar」维持真桥门禁——宿主文件对话框无演示语义。
 const canRemove = computed(() => hasBridge.value || isDemo());
@@ -48,6 +50,15 @@ function askRemove(id: string): void {
   removeTarget.value = id;
   removeOpen.value = true;
 }
+
+/**
+ * 删除影响预告：当前实例清单里 `version` 正指向该版本的实例数。
+ * 宿主删除时会把这些档案的 version 清成空串（悬空指针联动清理，见 runtime.removeCustomVersion），
+ * 故弹窗先告知影响面。数据全走契约（instances 已在 useInstances 单例里），UI 零版本判断。
+ */
+const affectedInstances = computed(() =>
+  instances.value.filter((i) => i.version === removeTarget.value),
+);
 
 async function onConfirmRemove(): Promise<void> {
   removing.value = true;
@@ -281,14 +292,19 @@ async function onSave(): Promise<void> {
       </div>
     </div>
 
-    <!-- 删除确认（防误删）：文案含版本 id，确认即删 jar+.info -->
+    <!-- 删除确认（防误删）：文案含版本 id，确认即删 jar+.info；有实例正指向它时预告影响面 -->
     <ConfirmDialog
       v-model:open="removeOpen"
       :title="t('custom.removeDialog.title')"
       :message="t('custom.removeDialog.message', { id: removeTarget })"
       :busy="removing"
       @confirm="onConfirmRemove"
-    />
+    >
+      <p v-if="affectedInstances.length > 0" class="del-note">
+        {{ t('custom.removeDialog.affected', { n: affectedInstances.length }) }}
+        <span class="del-note-names">{{ affectedInstances.map((i) => i.name).join('、') }}</span>
+      </p>
+    </ConfirmDialog>
   </section>
 </template>
 
@@ -690,5 +706,18 @@ async function onSave(): Promise<void> {
   margin: 0;
   font-size: var(--fs-md);
   color: var(--text-secondary);
+}
+/* 删除确认弹窗的影响预告（有实例正指向该版本时出现） */
+.del-note {
+  margin: var(--space-2) 0 0;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+.del-note-names {
+  display: block;
+  margin-top: var(--space-1);
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  word-break: break-all;
 }
 </style>

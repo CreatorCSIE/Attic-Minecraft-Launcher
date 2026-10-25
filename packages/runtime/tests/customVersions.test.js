@@ -143,6 +143,36 @@ test('removeCustomVersion：jar+.info 一并移除；官方版本拒绝；不存
   assert.deepEqual(rt.listCustomVersions(), [], 'official 不落入 custom 列表；其余已删空');
 });
 
+// 悬空指针缺陷（用户实机发现）：launch() 每次把选中版本写回实例档案，删除该版本后
+// 实例仍显示已消失的 id（dock/实例页三处）且 Play 死锁 → 删除时宿主联动清 version。
+test('removeCustomVersion：指向被删版本的实例 version 清空，其余实例与其余字段不动', (t) => {
+  const { rt, dir } = tempRuntime(t);
+  putJar(dir, 'gone', ['net.minecraft.client.MinecraftApplet']);
+  putJar(dir, 'keep', ['net.minecraft.client.MinecraftApplet']);
+  putInfo(dir, 'gone', { custom: 'true', 'launch-method': 'indev' });
+  putInfo(dir, 'keep', { custom: 'true', 'launch-method': 'indev' });
+  rt.saveInstance({ name: 'default instance', version: 'gone', launchArgs: '-Xmx2G', width: 1280, height: 720 });
+  rt.saveInstance({ name: 'other', version: 'keep' });
+  rt.saveInstance({ name: 'third', version: 'b1.7.3' });
+
+  rt.removeCustomVersion('gone');
+
+  const byName = Object.fromEntries(rt.listInstances().map((i) => [i.name, i]));
+  assert.equal(byName['default instance'].version, '', '被删版本的指针清成"未选择"');
+  assert.equal(byName['default instance'].launchArgs, '-Xmx2G', '只动 version，其余字段一字不改');
+  assert.deepEqual([byName['default instance'].width, byName['default instance'].height], [1280, 720]);
+  assert.equal(byName.other.version, 'keep', '指向别的自定义版本的实例不受影响');
+  assert.equal(byName.third.version, 'b1.7.3', '指向官方版本的实例不受影响');
+
+  // 空串 = 键在值为空：不得被 loadInstance 的 `?? 'b1.7.3'` 缺省顶掉（删键会静默改指向，此即回归护栏）
+  const raw = parseProperties(fs.readFileSync(path.join(dir, 'launcher', 'instances', 'default instance.txt'), 'utf8'));
+  assert.equal(raw.version, '', '档案里 version 键仍在（空值），非缺席');
+
+  // 拒绝路径（非 custom / 不存在）不得碰任何档案
+  assert.throws(() => rt.removeCustomVersion('ghost'), /不是自定义版本/);
+  assert.equal(rt.listInstances().find((i) => i.name === 'other').version, 'keep');
+});
+
 test('saveCustomVersionInfo：launch-method 必填、强制 custom=true、留空落 `key=`、非法 launch-method 报错、回环读回', (t) => {
   const { rt, dir } = tempRuntime(t);
   putJar(dir, 'mine', ['net.minecraft.client.MinecraftApplet']);
