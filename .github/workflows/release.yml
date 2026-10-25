@@ -49,6 +49,20 @@ jobs:
         run: pnpm install --frozen-lockfile
         env:
           ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+      # 版本对账（单一源纪律，plan「版本单一源与 tag 守卫」）：tag 名必须等于根 package.json version，
+      # 且三个内嵌面（tauri conf / 两 electron 壳 package.json）已随 version:sync 同步——漂移 = 构建期炸，
+      # 防「构件名 0.0.1、体内 0.0.0」的 updater 恒弹/宣告错版形态出厂。
+      - name: Version guard（tag == 根版本 == 内嵌面）
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            ver="${GITHUB_REF_NAME#v}"
+            src="$(node -p "require('./package.json').version")"
+            if [[ "${ver}" != "${src}" ]]; then
+              echo "::error::tag v${ver} ≠ 根 package.json ${src}（发版流程：改根 version → pnpm version:sync → 提交 → 打 tag）"
+              exit 1
+            fi
+          fi
+          pnpm run version:check
       - run: pnpm -r typecheck
       - run: pnpm -r build
       - run: pnpm -r test

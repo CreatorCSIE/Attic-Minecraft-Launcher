@@ -1272,6 +1272,7 @@ export class AtticRuntime {
       username: account.name,
       uuid: account.id,
       accessToken: account.type === 'microsoft' ? account.accessToken : '0',
+      launcherVersion: this.version,
       maxMemoryMb,
       binPool: scanBinPool(this.root),
       versionOrder: this.cachedVersionOrder(),

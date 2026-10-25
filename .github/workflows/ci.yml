@@ -25,6 +25,11 @@ jobs:
         env:
           ELECTRON_SKIP_BINARY_DOWNLOAD: 1
 
+      # 版本单一源绊线（PR 面）：内嵌面（tauri conf / 两 electron 壳）必须等于根 version；
+      # tag==根 的对账在 release.yml gates（ci 无 tag 语境）。
+      - name: Version single-source check
+        run: pnpm run version:check
+
       - name: Typecheck
         run: pnpm -r typecheck
 

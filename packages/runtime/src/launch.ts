@@ -16,6 +16,8 @@ export interface LaunchContext {
   username: string;
   uuid: string;
   accessToken: string;
+  /** 启动器版本（宿主注入 runtime.version；进游戏侧 token `launcher_version`——2026-10-25 接线，此前硬编码 0.0.0 发版即错版）。 */
+  launcherVersion: string;
   maxMemoryMb: number;
   minMemoryMb?: number;
   /** `<root>/bin/*.jar` 库池绝对路径清单。 */
@@ -122,7 +124,7 @@ function placeholderValues(versionJson: VersionJson, context: LaunchContext): Re
     user_type: 'legacy',
     user_properties: '{}',
     launcher_name: 'attic-launcher',
-    launcher_version: '0.0.0',
+    launcher_version: context.launcherVersion,
     natives_directory: `${context.dataDir}/bin/natives`,
   };
 }

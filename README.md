@@ -146,6 +146,29 @@ Attic-Minecraft-Launcher
 
 运行时数据落在 `%APPDATA%/.attic`（Windows）/ `~/.attic` 等（`assets/ bin/ launcher/ legacyfix/ versions/` 骨架自动创建；`launcher/instances/` 存实例档案）。仓库根放置 portable 标记时优先使用本地目录。
 
+### 4. 免编译获取 CI 构件（nightly.link）
+
+不想搭构建环境的话，每次推送到 main 的提交都会由 release CI 产出全平台测试构件（版本号钉 `0.0.0`，非正式发版）。GitHub Actions 构件默认保留 90 天且下载需登录，**[nightly.link](https://nightly.link) 提供免登录的"永远指向最新成功构建"直链**，形态：
+
+```text
+https://nightly.link/CreatorCSIE/Attic-Minecraft-Launcher/workflows/release/main/<构件名>
+```
+
+构件名按平台取：
+
+| 发行形态 | 构件名 |
+|---|---|
+| Windows · Tauri 主壳 x64 | `amcl-tauri-windows-x64` |
+| Windows · Tauri 主壳 arm64 | `amcl-tauri-windows-arm64` |
+| Windows · Electron 壳 x64 | `amcl-electron-windows-x64` |
+| Windows · Win7/8 兜底壳（x64+ia32） | `amcl-legacy-windows` |
+| macOS · arm64 DMG | `amcl-tauri-macos-arm64` |
+| Linux · x64 deb + AppImage | `amcl-tauri-linux-x64` |
+
+下载得到的是 Actions 构件 zip，解压即得安装包/目录构件。
+
+> 注意：nightly.link 是第三方代理服务，链接内容随最新成功构建滚动、构件过了 Actions 保留期即失效；**正式分发以 GitHub Releases 的签名安装包为准**（Phase 5 发布通道就绪后，Releases 页会提供稳定下载链）。
+
 ---
 
 ## 🌐 Localization / 国际化与多语言支持
