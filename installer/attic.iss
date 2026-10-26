@@ -84,7 +84,9 @@
 #elif ATTIC_FLAVOR == "tauri"
   #define ATTIC_APPID  "uk.attic.launcher"
   #define ATTIC_NAME   "Attic Minecraft Launcher"
-  #define ATTIC_EXE    "attic-launcher.exe"
+  ; exe 名统一（2026-10-26 用户拍板）：crate 名孤例 attic-launcher.exe → productName 派生系
+  ; （与两 electron 壳同轨），改名点 = tauri.conf.json mainBinaryName；见 [InstallDelete] 残留清理
+  #define ATTIC_EXE    "Attic Minecraft Launcher.exe"
   #define ATTIC_NAME_SHELL "tauri"
 #else
   #error ATTIC_FLAVOR 未知取值：tauri | electron | legacy
@@ -131,6 +133,13 @@ Name: "en"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
+
+[InstallDelete]
+; exe 改名（2026-10-26）升级残留清理：0.0.1/0.0.2 装的旧 crate 名 exe 不在新 [Files]
+; 清单里，Inno 升级不会自动删 = {app} 僵尸 exe（双入口可误启旧版）；仅 tauri flavor 需要
+#if ATTIC_FLAVOR == "tauri"
+Type: files; Name: "{app}\attic-launcher.exe"
+#endif
 
 [Files]
 Source: "{#ATTIC_PAYLOAD}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs

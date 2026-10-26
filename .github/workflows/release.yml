@@ -171,10 +171,10 @@ jobs:
         include:
           - arch: x64
             build_args: ""
-            exe: apps/tauri/src-tauri/target/release/attic-launcher.exe
+            exe: apps/tauri/src-tauri/target/release/Attic Minecraft Launcher.exe
           - arch: arm64
             build_args: "--target aarch64-pc-windows-msvc"
-            exe: apps/tauri/src-tauri/target/aarch64-pc-windows-msvc/release/attic-launcher.exe
+            exe: apps/tauri/src-tauri/target/aarch64-pc-windows-msvc/release/Attic Minecraft Launcher.exe
     env:
       # updater minisign 私钥只在发版 CI 注入（公钥已入 tauri.conf.json，plan 发版 SOP）
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_UPDATER_PRIVATE_KEY }}
@@ -211,7 +211,8 @@ jobs:
       - name: Stage payload
         run: |
           mkdir stage
-          cp ${{ matrix.exe }} stage/
+          # 引号必须：exe 名含空格（mainBinaryName 改名 2026-10-26，与两 electron 壳 productName 系统一）
+          cp "${{ matrix.exe }}" stage/
           mkdir -p stage/sidecar
           cp apps/tauri/sidecar/dist/server.cjs stage/sidecar/
       # 拍板① sidecar 随行 node.exe（p4 首件）：x64 腿复制 runner node（x64 v22 ≥20 ✓）；
