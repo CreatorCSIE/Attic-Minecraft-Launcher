@@ -8,7 +8,10 @@ rust-version = "1.90"
 
 [lib]
 name = "attic_launcher_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
+# 桌面-only（Win/mac/Linux，无移动端）：staticlib/cdylib 是 Tauri 移动模板默认值，
+# 留着 = 整个 lib 在 opt-3 下多 codegen 两遍 + 多链 DLL/LIB 两个白干产物（编译慢的头号放大器），
+# 且 Defender 逐个啃上百 MB 中间 .lib/.dll 再拖链接尾。bin 只链 rlib，产物形态零变化。
+crate-type = ["lib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
