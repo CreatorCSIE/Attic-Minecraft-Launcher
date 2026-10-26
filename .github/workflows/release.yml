@@ -478,9 +478,13 @@ jobs:
           node-version: 22
           cache: pnpm
       - name: Install system deps (webkit2gtk 等，Tauri v2 Linux 官方清单)
+        # 瘦身（2026-10-26 用户观察 apt 占大头）：build-essential/curl/wget/file/
+        # libssl-dev 系 runner 镜像预装（Ubuntu2204 Readme 核对），只装缺的 4 个 dev 包；
+        # --no-install-recommends 砍掉 webkit 拖出的 gstreamer 媒体插件等 recommends 链
+        # （构建期用不到；deb 运行时依赖由 dpkg 按实际链接库生成，与 runner 装集无关）
         run: |
-          sudo apt update
-          sudo apt install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev libxdo-dev libayatana-appindicator3-dev librsvg2-dev
       - name: Install
         run: pnpm install --frozen-lockfile
         env:
