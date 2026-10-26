@@ -1,10 +1,13 @@
-name: Nightly（每日试装构件轨道）
+name: Nightly（push 触发的试装构件轨道）
 
-# 规格 = plan.md「Nightly 分发轨道与 changelog 分工」条（2026-10-25 拍板，逐子条落实）：
-#  · 形态 = 同仓 schedule 定时构建（main 有提交才跑）+ per-tag 不可变 release；
-#    tag `v<base>-nightly.<YYYYMMDD>`（同日多次追加 .1/.2，当日首个不带后缀）；prerelease:true。
+# 规格 = plan.md「Nightly 分发轨道与 changelog 分工」条（2026-10-26 B 案定稿，回归 SHVDN 原案）：
+#  · 形态 = 同仓 on:push branches:[main] 每推必构建 + per-tag 不可变 release；
+#    tag `v<base>-nightly.<YYYYMMDD>.<N>`（恒常序号 N≥1，当日首枚 = .1）；prerelease:true。
+#  · 无新提交门：push 即有料信号，无推 = 无 run = 物理零记录（不留 schedule 绿跳过/红叉残留）。
 #  · base = 根 package.json `attic.nightlyBase` 显式声明（0.0.x 期间 = 下一计划 stable 0.1.0，
 #    不可从单一源 version 推导——单一源是"当前发布版"非"下一版"）。
+#  · 转正 SOP = 即时流：push bump commit → 几分钟出 nightly 候选 → 验收 → 同 SHA tag stable
+#    （tag push 不匹配 branches 过滤、不触发本轨，无尾夜无需守卫）。
 #  · 定位纪律 = nightly 是手动下载试装构件分发面，不是 updater 通道：
 #    永不生成/上传 latest.json（plan「更新通道设计」通道单轨 latest 无 beta/nightly）。
 #  · notes = CI 自动极简模板四行封顶（自动构建声明 + short/full SHA + HEAD 标题 + run 链接），
@@ -12,21 +15,26 @@ name: Nightly（每日试装构件轨道）
 #  · 保留最近 14 个，清理 job 整删 release+tag；删除前 tag→主仓 full SHA→run URL 追加台账
 #    （落点 = 常驻 draft release `nightly-history`，body 即 jsonl；draft 是硬约束——
 #    published 非 prerelease 的 release 会抢占 releases/latest 通道位，污染 updater endpoint）。
+#  · 成本收敛（B 案⑥）：concurrency 组内 cancel-in-progress——连推时旧 run 中间态无保留价值。
 #
 # 机制事实（本文件走 workflow_call 复用构建的原因，钉死防回坑）：
 #   GITHUB_TOKEN 推的 tag 不会级联触发 push 事件（GitHub 递归保护：workflow 内
-#   actions/checkout 默认 token 的写操作不触发新 workflow run）——所以 nightly 不能靠
-#   "推 tag → release.yml 的 on.push.tags 触发"出构件，必须由本文件 `uses: release.yml`
-#   （workflow_call，release_mode=none 只要产物）+ 自己的 publish job 建 Release。
+#   actions/checkout 默认 token 的写操作不触发新 workflow run）——且 branch 过滤本就
+#   不匹配 tag push。所以 nightly 不能靠"推 tag → release.yml 的 on.push.tags 触发"
+#   出构件，必须由本文件 `uses: release.yml`（workflow_call，release_mode=none 只要产物）
+#   + 自己的 publish job 建 Release。
 #
-# schedule 每日必醒（UTC 18:00 = 北京 02:00 次日凌晨），"main 有提交才跑"由 plan job
-# 的新提交门实现（最近 nightly tag 指向 SHA == HEAD → 跳过）。workflow_dispatch 同走全链，
-# 用于手动补班（默认分支 main 上点 Run workflow）。
+# workflow_dispatch 同走全链，用于手动补班（默认分支 main 上点 Run workflow）。
+# 轨道解禁 = Actions 页 Enable workflow（纯 UI 开关）；disabled_manually 期间本文件零触发。
 
 on:
-  schedule:
-    - cron: '0 18 * * *' # UTC 18:00 = 北京时间次日 02:00
+  push:
+    branches: [main] # B 案①：每推必构建；tag push 不匹配 branch 过滤，天然不自触发
   workflow_dispatch: {}
+
+concurrency:
+  group: nightly
+  cancel-in-progress: true # B 案⑥：新推取消在跑旧 run（连推中间态无保留价值）
 
 permissions:
   contents: write # plan job 推 tag + publish/cleanup 建删 Release
@@ -34,19 +42,18 @@ permissions:
 
 jobs:
   plan:
-    name: 新提交门 + tag 计算 + 打 tag（不可变纪律）
+    name: tag 计算 + 打 tag（不可变纪律）
     runs-on: ubuntu-latest
     outputs:
-      proceed: ${{ steps.gate.outputs.proceed }}
-      tag: ${{ steps.gate.outputs.tag }}
-      version: ${{ steps.gate.outputs.version }}
-      sha: ${{ steps.gate.outputs.sha }}
-      short: ${{ steps.gate.outputs.short }}
-      title: ${{ steps.gate.outputs.title }}
+      tag: ${{ steps.tag.outputs.tag }}
+      version: ${{ steps.tag.outputs.version }}
+      sha: ${{ steps.tag.outputs.sha }}
+      short: ${{ steps.tag.outputs.short }}
+      title: ${{ steps.tag.outputs.title }}
     steps:
       - uses: actions/checkout@v4
-      - name: 判定与打 tag
-        id: gate
+      - name: 计算并打 tag
+        id: tag
         run: |
           set -euo pipefail
           head_sha="$(git rev-parse HEAD)"
@@ -55,17 +62,6 @@ jobs:
           # 一次拉全部 tag（轻量 tag 无 ^{} 剥皮行，保险起见仍过滤）
           raw="$(git ls-remote --tags origin | grep -v '\^{}' || true)"
           names="$(awk '{ sub("refs/tags/", "", $2); print $2 }' <<<"$raw")"
-          # 新提交门：最近（sort -V 最大）nightly tag 指向 SHA == 当前 HEAD → 今日无新料，跳过
-          latest_line="$(awk -F'\t' '{ sub("refs/tags/", "", $2); if ($2 ~ /^v[0-9]+\.[0-9]+\.[0-9]+-nightly\./) print $2 "\t" $1 }' <<<"$raw" | sort -V | tail -n1)"
-          if [[ -n "$latest_line" ]]; then
-            latest="${latest_line%%$'\t'*}"
-            latest_sha="${latest_line##*$'\t'}"
-            if [[ "$latest_sha" == "$head_sha" ]]; then
-              echo "main HEAD (${short}) 已有 nightly：${latest} —— 跳过（schedule 每日必醒，有提交才构建）"
-              echo "proceed=false" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-          fi
           # base 显式声明源（plan「Nightly 分发轨道」条①：不可从根 version 推导）
           base="$(node -p "require('./package.json').attic.nightlyBase")"
           if [[ ! "$base" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -73,14 +69,12 @@ jobs:
             exit 1
           fi
           day="$(date -u +%Y%m%d)"
-          tag="v${base}-nightly.${day}"
-          # 同日多次 = 追加 .N：ls-remote 探测当日最大 .N +1（不可变纪律下撞 tag 必须失败，
-          # 后缀探测即其合法出口；semver 数字标识符按数值比，单调性成立）
-          if grep -qxF "$tag" <<<"$names"; then
-            maxn="$(awk -v p="${tag}." 'index($0, p) == 1 { s = substr($0, length(p) + 1); if (s ~ /^[0-9]+$/) print s }' <<<"$names" | sort -n | tail -n1)"
-            tag="${tag}.$(( ${maxn:-0} + 1 ))"
-            echo "当日已有 nightly → 追加后缀：${tag}"
-          fi
+          # B 案③恒常 .N（N≥1，push 模式当日多枚成常态）：ls-remote 探测当日最大 N +1，
+          # 当日首枚 = .1（不可变纪律下撞 tag 必须失败，后缀探测即其合法出口；
+          # semver 数字标识符按数值比、逐段全序单调性成立）
+          prefix="v${base}-nightly.${day}."
+          maxn="$(awk -v p="$prefix" 'index($0, p) == 1 { s = substr($0, length(p) + 1); if (s ~ /^[0-9]+$/) print s }' <<<"$names" | sort -n | tail -n1)"
+          tag="${prefix}$(( ${maxn:-0} + 1 ))"
           # 不可变纪律：push 前再查一次；git push 非 force，并发撞 tag 必失败退出，禁覆盖/--clobber
           if grep -qxF "$tag" <<<"$names"; then
             echo "::error::tag ${tag} 已存在（并发撞车）——不可变纪律，本次失败退出，禁覆盖"
@@ -90,7 +84,6 @@ jobs:
           git push origin "$tag"
           echo "已推 nightly tag：${tag} → ${short}（${title}）"
           {
-            echo "proceed=true"
             echo "tag=${tag}"
             echo "version=${tag#v}"
             echo "sha=${head_sha}"
@@ -101,7 +94,6 @@ jobs:
   build:
     name: 全平台构建（workflow_call 复用 release.yml 构建腿）
     needs: plan
-    if: needs.plan.outputs.proceed == 'true'
     uses: ./.github/workflows/release.yml
     with:
       version: ${{ needs.plan.outputs.version }}
@@ -111,7 +103,6 @@ jobs:
   publish:
     name: 建 nightly Release（prerelease + 四行极简 notes）
     needs: [plan, build]
-    if: needs.plan.outputs.proceed == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -148,7 +139,7 @@ jobs:
   cleanup:
     name: 保留最近 14 个 nightly（整删 release+tag + 台账追加）
     needs: [plan, publish]
-    if: always() && needs.plan.outputs.proceed == 'true'
+    if: always() # 发布失败也保清理节律（不依赖 plan 输出，纯按现存 release 数收敛）
     runs-on: ubuntu-latest
     permissions:
       contents: write
