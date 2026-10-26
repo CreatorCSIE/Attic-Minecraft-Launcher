@@ -197,6 +197,12 @@ jobs:
       - name: Add rust target (arm64)
         if: matrix.arch == 'arm64'
         run: rustup target add aarch64-pc-windows-msvc
+      # nightly 转 push 触发（2026-10-26 B 案）后每推都吃这条腿，冷缓存不可持续；
+      # x64/arm64 两 matrix 腿共享同一 target 目录缓存，跨腿依赖互用
+      - name: Cargo cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/tauri/src-tauri
       # --no-bundle：nsis 已退场；bundler 的 resources 拷贝不随 --no-bundle 发生，
       # stage 目录显式组包（exe + sidecar/server.cjs = Tauri v2 Windows Resource 基目录
       # 即 exe 同目录的解析位，与 lib.rs resolve 对账过）
@@ -421,6 +427,10 @@ jobs:
         run: pnpm install --frozen-lockfile
         env:
           ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+      - name: Cargo cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/tauri/src-tauri
       # 游戏侧约束（depends.ts 闸门）：mac arm64 必须配 x86_64 JDK8 走 Rosetta——
       # 壳与 updater 原生 arm64，不影响分发。
       # Apple Developer 证书缺席时 tauri 跳过 codesign/notarize，用户需右键打开绕 Gatekeeper；
@@ -475,6 +485,10 @@ jobs:
         run: pnpm install --frozen-lockfile
         env:
           ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+      - name: Cargo cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/tauri/src-tauri
       # 拍板 2026-10-23：Linux 优先 Debian 系（deb）；arch/redhat 有需求再说。
       # AppImage 随发：Tauri v2 updater 在 Linux 仅支持 AppImage 通道（endpoint 钉好后即生效）。
       # linux arm64 不分发（LWJGL2 无 arm64 原生库且无系统级模拟，启动会被闸门拦）。

@@ -71,5 +71,12 @@ jobs:
       - name: Regenerate contract fixtures
         run: pnpm run fixtures
 
+      # 3m+ 大头 = 冷缓存（每次全量重下重编 ~400 依赖，2026-10-26 用户 CI 观察）；
+      # rust-cache 命中 registry+target 后，Rust/lockfile 零变化的 run 降到秒级
+      - name: Cargo cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/tauri/src-tauri
+
       - name: Cargo contract tests
         run: cargo test --manifest-path apps/tauri/src-tauri/Cargo.toml
