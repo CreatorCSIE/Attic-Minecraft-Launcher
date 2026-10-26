@@ -119,8 +119,17 @@ export { canonicalLaunchMethod, detectLaunchMethod, probeIndevEntry, probePrecla
 export { extractZipTo, listZipEntryNames, readZipEntries, writeZipEntries, type ZipEntry } from './zip';
 export {
   applyLegacyfixDeawtPatch,
-  patchDeawtClassBytes,
+  patchUtf8Entry,
   reportLegacyfixDeawtPatch,
+  ANCHOR,
+  PATCHED_V1,
+  PATCHED_V2,
+  DW_NEEDLE,
+  DW_REPL,
+  DH_NEEDLE,
+  DH_REPL,
+  PINNED_DEAWT_CLASS_SHA256,
+  PINNED_DEAWT4_CLASS_SHA256,
   type LfPatchOutcome,
 } from './legacyfixPatch';
 export {

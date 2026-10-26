@@ -256,6 +256,10 @@ export function assembleLaunchConfig(
   // 实例值以 v1 缺省 854x480 显式传入；非 Applet 版本窗口由 LWJGL/DeAwt 自管，不注入（避免污染主类参数解析）。
   if (isAppletContainer && context.width && context.height) {
     gameArgs.push('--width', String(context.width), '--height', String(context.height));
+    // DeAwtPatch V2 保底分辨率通道（legacyfixPatch.ts 注入体 Integer.getInteger("lf.minW/lf.minH") 读取）：
+    // applet 布局未定时 child 尺寸为 0 → DisplayMode(0,0) 坍缩 → EntityRenderer 整数除零崩溃。
+    // 钳制下限=启动尺寸；-D 通道两代 legacyfix jar 通吃（旧版 GameArgs 无 getValue，反射路线不可用）。
+    jvmArgs.push(`-Dlf.minW=${context.width}`, `-Dlf.minH=${context.height}`);
   }
   // Applet 子类型指定（4k-* → --appletClass M；pre-Classic → 宿主按 jar 探测注入 RubyDung）。
   // 注入值优先于方法表：rd 系 launch-method 同键（preclassic）但 jar 形态跨两代类名，表无法表达。

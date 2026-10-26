@@ -452,8 +452,11 @@ export class BetacraftClient {
     const dest = path.join(root, relPath);
     if (fs.existsSync(dest)) {
       if (await this.legacyfixIntact(dest)) {
-        // DeAwtPatch 窗口位置补丁幂等维持（钉版不匹配/锚点异常自动跳过，不阻断启动）。
-        reportLegacyfixDeawtPatch(dest, applyLegacyfixDeawtPatch(dest));
+        // DeAwtPatch V2 补丁幂等维持（钉版不匹配/锚点异常自动跳过，不阻断启动）。
+        const outcome = applyLegacyfixDeawtPatch(dest);
+        reportLegacyfixDeawtPatch(dest, outcome);
+        // 补丁改写了 jar 字节 → 重锚 meta，否则下次启动 sha 校验必失配 → 无谓重下 churn。
+        if (outcome.status === 'patched') await this.writeLegacyfixMeta(dest);
         return dest;
       }
       // 自愈：残缺/校验不符 → 本体+锚点一并删除，走下方重下通道。
