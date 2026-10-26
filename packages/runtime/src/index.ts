@@ -103,6 +103,7 @@ export {
   findJavaExecutable,
   zuluOs,
   zuluArch,
+  provisionArch,
   type ZuluPackage,
   type ZuluInstallOutcome,
 } from './zulu';

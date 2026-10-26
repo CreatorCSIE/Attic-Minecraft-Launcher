@@ -10,7 +10,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const { queryZuluPackages, zuluOs, zuluArch, findJavaExecutable } = require('../dist/index.js');
+const { queryZuluPackages, zuluOs, zuluArch, provisionArch, findJavaExecutable } = require('../dist/index.js');
 
 const endpoints = { zuluMetadata: 'https://api.example.test/zulu/packages/' };
 
@@ -27,6 +27,20 @@ test('zuluOs/zuluArch 平台映射', () => {
   assert.equal(zuluOs('linux'), 'linux');
   assert.equal(zuluArch('x64'), 'x64');
   assert.equal(zuluArch('arm64'), 'aarch64');
+  // IA32 Legacy 修复：ia32/x86 → Zulu 32 位构建（旧映射一律 x64，32 位 OS spawn 即挂）
+  assert.equal(zuluArch('ia32'), 'x86');
+  assert.equal(zuluArch('x86'), 'x86');
+});
+
+test('provisionArch：ia32 壳按 WOW64 逃逸变量分真 32 位 OS / 64 位宿主', () => {
+  // 真 32 位 OS（Vista/XP x86）：无 PROCESSOR_ARCHITEW6432 → x86
+  assert.equal(provisionArch('win32', 'ia32', {}), 'x86');
+  // WOW64（64 位 OS 跑 32 位壳）：逃逸变量在场 → x64（32 位壳 spawn 64 位 JVM 合法）
+  assert.equal(provisionArch('win32', 'ia32', { PROCESSOR_ARCHITEW6432: 'AMD64' }), 'x64');
+  // 其余原样透传
+  assert.equal(provisionArch('win32', 'x64', {}), 'x64');
+  assert.equal(provisionArch('linux', 'ia32', { PROCESSOR_ARCHITEW6432: 'AMD64' }), 'ia32');
+  assert.equal(provisionArch('darwin', 'arm64', {}), 'arm64');
 });
 
 test('queryZuluPackages 解析真实 API 的 download_url 字段', async () => {

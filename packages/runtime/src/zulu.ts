@@ -34,8 +34,26 @@ export function zuluOs(platform: string): 'win' | 'linux' | 'macos' {
   return 'linux';
 }
 
-export function zuluArch(arch: string): 'x64' | 'aarch64' {
-  return arch === 'arm64' ? 'aarch64' : 'x64';
+export function zuluArch(arch: string): 'x64' | 'aarch64' | 'x86' {
+  if (arch === 'arm64') return 'aarch64';
+  // ia32/x86 → Zulu 32 位构建（win_x86 / linux_i386，JDK 8 均有 GA）。
+  // IA32 Legacy 壳在无 WOW64 的 32 位 OS 上必须取 x86 包：x64 构建 spawn 即挂。
+  if (arch === 'ia32' || arch === 'x86') return 'x86';
+  return 'x64';
+}
+
+/**
+ * 自动供给的宿主位宽判定（与 zuluArch 分工：本函数答"宿主能给什么位宽的 JVM 跑"，
+ * zuluArch 答"API 参数怎么写"）。ia32 进程在 64 位 OS 上以 WOW64 逃逸变量
+ * PROCESSOR_ARCHITEW6432 为凭（真 32 位 OS 永不存在该变量）：逃逸在场 = 宿主 64 位，
+ * 取 x64（32 位壳 spawn 64 位 JVM 合法）；缺席 = 真 32 位 OS（Vista/XP x86，
+ * Legacy 构建的目标段），取 x86。
+ */
+export function provisionArch(platform: string, processArch: string, env: NodeJS.ProcessEnv): string {
+  if (platform === 'win32' && processArch === 'ia32') {
+    return env.PROCESSOR_ARCHITEW6432 ? 'x64' : 'x86';
+  }
+  return processArch;
 }
 
 /** 查询指定 JDK 大版本的最新 GA 包（按 os/arch 过滤，zip 归档）。 */

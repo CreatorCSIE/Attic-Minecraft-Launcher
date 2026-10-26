@@ -103,7 +103,7 @@ import {
 import { checkLatestRelease, DEFAULT_RELEASE_REPO } from './updateCheck';
 import { canonicalLaunchMethod, detectLaunchMethod, probeIndevEntry, probePreclassicEntry } from './wrapperDetector';
 import { extractZipTo, listZipEntryNames } from './zip';
-import { findJavaExecutable, installZuluPackage, queryZuluPackages } from './zulu';
+import { findJavaExecutable, installZuluPackage, provisionArch, queryZuluPackages } from './zulu';
 
 export interface AtticRuntimeOptions {
   /** rootDir 覆盖（共存/迁移逃生舱）。 */
@@ -1414,7 +1414,15 @@ export class AtticRuntime {
     if (cached) return cached;
 
     try {
-      const pkgs = await queryZuluPackages(8, this.endpoints, this.fetchImpl, process.platform, process.arch);
+      // 位宽走 provisionArch 而非裸 process.arch：IA32 Legacy 壳在真 32 位 OS 上
+      // process.arch='ia32'，裸值会被 zuluArch 旧映射成 x64 → 下的包 spawn 即挂。
+      const pkgs = await queryZuluPackages(
+        8,
+        this.endpoints,
+        this.fetchImpl,
+        process.platform,
+        provisionArch(process.platform, process.arch, process.env),
+      );
       const pkg = pkgs[0];
       if (!pkg) throw new Error('Zulu 归档无匹配包');
       const outcome = await installZuluPackage(pkg, zuluJavaDir(this.root), { client: this.client, signal });
