@@ -12,7 +12,11 @@ export interface Endpoints {
   versionJson(id: string): string;
   /** 资产索引 JSON。 */
   assetIndex(id: string): string;
-  /** legacyfix GitHub Release（API JSON，assets[].browser_download_url）。 */
+  /**
+   * legacyfix GitHub Release **直链 base**（拼 `<base>/<version>/<asset>`，version 取自
+   * agentMount 文件名 = 钉版唯一事实源；不走 api.github.com——未认证 60 req/h/IP 限流
+   * 会直接导致 legacyfix 下载失败，2026-10-28 发版前实测确认）。
+   */
   legacyfixRelease: string;
   /** Azul Zulu 元数据 API。 */
   zuluMetadata: string;
@@ -37,7 +41,7 @@ export const DEFAULT_ENDPOINTS: Endpoints = {
   versionList: `${FILES_BASE}/version_list.txt`,
   versionJson: (id: string) => `${FILES_BASE}/jsons/${encodeURIComponent(id)}.info`,
   assetIndex: (id: string) => `${FILES_BASE}/indexes/${encodeURIComponent(id)}.json`,
-  legacyfixRelease: 'https://api.github.com/repos/betacraftuk/legacyfix/releases/latest',
+  legacyfixRelease: 'https://github.com/betacraftuk/legacyfix/releases/download',
   zuluMetadata: 'https://api.azul.com/metadata/v1/zulu/packages/',
   mojangManifest: 'https://piston-meta.mojang.com/mc/game/version_manifest_v2.json',
   modsList: 'http://api.betacraft.uk/getmods.jsp',

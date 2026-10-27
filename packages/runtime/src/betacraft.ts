@@ -382,9 +382,20 @@ export class BetacraftClient {
     }
   }
 
-  /** json.libraries → bin/<basename>（整目录上 classpath，缺失才下；force=true 覆盖已存在文件）。 */
+  /**
+   * json.libraries → bin/<basename>（整目录上 classpath，缺失才下；force=true 覆盖已存在文件）。
+   * **库池污染闸门（2026-10-27 A/B 实锤）**：bin 是跨版本共享 classpath 池，
+   * scanBinPool 字母序把原生 `lwjgl-2.9.0.jar` 排在 BC 魔改 `lwjgl.jar` 之前（`-` < `.`），
+   * 一旦回填/Mojang 通道把同族原生库倒进池里即劫持 org.lwjgl/net.java.jinput 类加载——
+   * 原生 WindowsDisplay × Win11 × DeAWT 序列窗口坍缩 136x39（client 120x0，
+   * clean+RAW vs polluted+RAW 对照：870x519 正常 vs 136x39 坍缩）。
+   * LWJGL/JInput 族唯一供给方是 depends 通道（libs/natives zip 的 patched 库集），
+   * 其余通道同族库（含 natives classifier）一律跳过。
+   */
   async downloadLibrariesToBin(json: VersionJson, root: string, opts: { force?: boolean; signal?: AbortSignal } = {}): Promise<void> {
     for (const lib of json.libraries ?? []) {
+      const group = lib.name.split(':')[0] ?? '';
+      if (group === 'org.lwjgl' || group.startsWith('org.lwjgl.') || group === 'net.java.jinput') continue;
       const url = lib.url ?? lib.client?.url;
       if (!url) continue;
       const dest = path.join(binDir(root), basenameFromUrl(url));
@@ -441,7 +452,8 @@ export class BetacraftClient {
   }
 
   /**
-   * legacyfix Release 最新构件下载 → <root>/<relPath>（relPath 来自 agentMount.path）。
+   * legacyfix 钉版直链下载 → <root>/<relPath>（relPath 来自 agentMount.path，
+   * 文件名携带的版本号 = 唯一事实源；直链拼法见下方注释）。
    * **SHA 校验自愈（0.0.2 feat②）**：GitHub release 构件无官方哈希可锚，改为本地锚点——
    * 下载+DeAwtPatch 落定后算 sha256+size 写 sidecar `<dest>.meta`；下次启动三级校验
    * （size → zip 尾部 EOCD → sha256），任一级不过 = 残缺/损坏 → 删本体+meta 重下，
@@ -452,25 +464,22 @@ export class BetacraftClient {
     const dest = path.join(root, relPath);
     if (fs.existsSync(dest)) {
       if (await this.legacyfixIntact(dest)) {
-        // DeAwtPatch V2 补丁幂等维持（钉版不匹配/锚点异常自动跳过，不阻断启动）。
-        const outcome = applyLegacyfixDeawtPatch(dest);
-        reportLegacyfixDeawtPatch(dest, outcome);
-        // 补丁改写了 jar 字节 → 重锚 meta，否则下次启动 sha 校验必失配 → 无谓重下 churn。
-        if (outcome.status === 'patched') await this.writeLegacyfixMeta(dest);
+        // DeAwtPatch 窗口位置补丁幂等维持（钉版不匹配/锚点异常自动跳过，不阻断启动）。
+        reportLegacyfixDeawtPatch(dest, applyLegacyfixDeawtPatch(dest));
         return dest;
       }
       // 自愈：残缺/校验不符 → 本体+锚点一并删除，走下方重下通道。
       fs.rmSync(dest, { force: true });
       fs.rmSync(`${dest}.meta`, { force: true });
     }
-    const res = await this.get(this.endpoints.legacyfixRelease);
-    const release = (await res.json()) as { assets?: { name?: string; browser_download_url?: string }[] };
-    const wanted = path.basename(relPath).toLowerCase();
-    const asset =
-      release.assets?.find((a) => a.name?.toLowerCase() === wanted) ??
-      release.assets?.find((a) => a.name?.toLowerCase().startsWith('legacyfix') && a.name.toLowerCase().endsWith('.jar'));
-    if (!asset?.browser_download_url) throw new Error('legacyfix Release 中未找到可用 jar 构件');
-    await this.download(asset.browser_download_url, dest, 'legacyfix', asset.name ?? relPath, undefined, signal);
+    // 钉版直链（2026-10-28 换通道）：agentMount 文件名 `legacyfix-<version>.jar` 即版本
+    // 唯一事实源 → tag=<version> 直链下载。不走 api.github.com/releases/latest：
+    // 未认证 60 req/h/IP 限流会直接导致下载失败；且 latest 语义下突发新 release 会
+    // 经 fallback 匹配换掉 jar 版本、与补丁钉版表打架——直链天然把版本锁死在数据表。
+    const file = path.basename(relPath);
+    const version = /^legacyfix-(.+)\.jar$/i.exec(file)?.[1];
+    if (!version) throw new Error(`无法从 agentMount 文件名解析 legacyfix 版本（应为 legacyfix-<version>.jar）：${file}`);
+    await this.download(`${this.endpoints.legacyfixRelease}/${version}/${file}`, dest, 'legacyfix', file, undefined, signal);
     reportLegacyfixDeawtPatch(dest, applyLegacyfixDeawtPatch(dest));
     await this.writeLegacyfixMeta(dest);
     return dest;
