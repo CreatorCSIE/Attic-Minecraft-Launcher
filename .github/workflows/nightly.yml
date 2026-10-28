@@ -8,9 +8,9 @@ name: Nightly（push 触发的试装构件轨道）
 #    不可从单一源 version 推导——单一源是"当前发布版"非"下一版"）。
 #  · 转正 SOP = 即时流：push bump commit → 几分钟出 nightly 候选 → 验收 → 同 SHA tag stable
 #    （tag push 不匹配 branches 过滤、不触发本轨，无尾夜无需守卫）。
-#  · 定位纪律 = nightly 是手动下载试装构件分发面，不是 updater 通道：
-#    永不生成/上传 latest.json（plan「更新通道设计」通道单轨 latest 无 beta/nightly）。
-#  · notes = CI 自动极简模板四行封顶（自动构建声明 + short/full SHA + HEAD 标题 + run 链接），
+#  · 定位纪律 = nightly 是**测试版通道**：构件手动下载 + 轨中提示可达（检查链对 nightly 构件
+#    匹配轨内下一枚），但不进静默自动更新——永不生成/上传 latest.json（通道单轨 latest 无 beta/nightly）。
+#  · notes = CI 自动极简模板四行封顶（测试版通道定位行 + run 链接 + short/full SHA + HEAD 标题），
 #    零语义归纳（详细 changelog 只属 stable tag，见「发布说明供给设计」条）。
 #  · 保留最近 14 个，清理 job 整删 release+tag；删除前 tag→主仓 full SHA→run URL 追加台账
 #    （落点 = 常驻 draft release `nightly-history`，body 即 jsonl；draft 是硬约束——
@@ -124,12 +124,13 @@ jobs:
         run: |
           set -euo pipefail
           # notes 四行封顶（plan「changelog 分工」条：CI 自动极简模板、零语义归纳）——
-          # run 链接行同时是 cleanup 台账的 run URL 取数点（勿改格式）
+          # 定位表述 = 测试版通道（轨中提示可达，仅不进 latest.json 静默自动更新）；
+          # run 链接行同时是 cleanup 台账的 run URL 取数点（勿改 `run:` 前缀格式）
           {
-            echo '自动构建，非发布版（nightly 试装轨，不进 updater 通道）'
+            echo 'Nightly 测试版通道（自动构建 · 轨中提示可达 · 不进静默自动更新）'
+            echo "run: ${RUN_URL}"
             echo "commit: ${SHORT} (${SHA})"
             echo "HEAD: ${TITLE}"
-            echo "run: ${RUN_URL}"
           } > notes.md
           mapfile -t files < <(find dist -type f | sort)
           if [[ "${#files[@]}" -eq 0 ]]; then echo "::error::无 amcl-* 构件可挂"; exit 1; fi
