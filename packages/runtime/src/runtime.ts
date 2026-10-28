@@ -1243,6 +1243,9 @@ export class AtticRuntime {
    * 启动日志（testLaunch ≡ 菜单语义 + diagnosticLog 开关的普通启动共用）：启动器侧头行
    * （时间戳/版本/命令行——token 已脱敏）+ 游戏 stdout/stderr 全量 + 退出行，
    * 逐行落盘 `<root>/launcher/logs/<prefix>-<ISO>.log`。
+   * 同点双写固定文件 `logs/output-client.log`（Betacraft v1 Logger.output-client.log 语义：
+   * 恒等于**最近一次启动**的完整日志——本次启动开头截断旧文件，等价 v1 启动前
+   * clearClientLog；逐行 append 即时开关句柄，无占用锁，clearLogs 的 *.log 清扫自然覆盖）。
    * 控制台窗口唤起归 UI 侧（WINDOW_CONSOLE），runtime 不触窗；落盘失败静默（不阻断启动）。
    */
   private attachLaunchLog(
@@ -1256,11 +1259,22 @@ export class AtticRuntime {
     fs.mkdirSync(logsDir, { recursive: true });
     // Windows 文件名禁冒点：ISO 串统一替换。
     const file = path.join(logsDir, `${prefix}-${new Date().toISOString().replace(/[:.]/g, '-')}.log`);
+    const clientLog = path.join(logsDir, 'output-client.log');
+    try {
+      fs.writeFileSync(clientLog, '', 'utf8');
+    } catch {
+      /* 磁盘异常不影响游戏进程 */
+    }
     const write = (line: string): void => {
       try {
         fs.appendFileSync(file, `${line}\n`, 'utf8');
       } catch {
         /* 磁盘异常不影响游戏进程 */
+      }
+      try {
+        fs.appendFileSync(clientLog, `${line}\n`, 'utf8');
+      } catch {
+        /* 同上 */
       }
     };
     const at = (): string => new Date().toISOString().slice(11, 23);
