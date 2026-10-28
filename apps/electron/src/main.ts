@@ -1,11 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron';
 import {
   IPC_CHANNELS,
   IPC_EVENTS,
   type AppSettings,
   type AtticEventPayloads,
+  type CrashBundleResult,
+  type RendererErrorReport,
   type CustomVersionView,
   type GameBacklog,
   type GameExitEvent,
@@ -20,7 +22,9 @@ import {
 } from '@attic/core-spec';
 import {
   AtticRuntime,
+  CRASH_DIALOG_STACK_MAX,
   PORTABLE_DIR_NAME,
+  attachConsoleCapture,
   isPathWithin,
   launcherDir,
   loadSettings,
@@ -74,6 +78,91 @@ const runtime = new AtticRuntime({
   exeDir: INSTALL_DIR,
   portableMarkers: [PORTABLE_MARKER],
 });
+
+
+// —— 启动器层崩溃取证（P0/P1，用户拍板设计）——
+// 真崩溃 = win32 原生 dialog（渲染栈不可信场景唯一可靠出口）：先展示错误栈，再给三按钮
+// 【复制诊断信息 / 打开日志文件夹 / 去 GitHub 报告】；bundle 全量落 crash-<ISO>.txt。
+// 非致命/事后 = Vue CrashPanel（P2 通道）+ 下次启动横幅（脏退出标记经 SYS_INFO 投出）。
+
+/** 重入闸：级联异常只弹一次框（第二次直接退，防 dialog 风暴钉死进程）。 */
+let crashReported = false;
+
+function reportLauncherCrash(
+  category: string,
+  error: unknown,
+  opts: { /** true = 崩溃后必退（P0）；false = 现场报告后继续活（P1 渲染窗事故）。 */ exit: boolean; /** gone 恢复路径：弹框后重载该窗。 */ reloadWin?: BrowserWindow },
+): void {
+  if (crashReported) {
+    if (opts.exit) app.exit(1);
+    return;
+  }
+  crashReported = true;
+  const stack = error instanceof Error ? (error.stack ?? error.message) : String(error);
+  runtime.appendLauncherLog('err', `[${category}] ${stack}`);
+  const { text, issuesUrl } = runtime.crashBundleResult(category, stack);
+  const logsDir = path.join(launcherDir(runtime.root), 'logs');
+  try {
+    fs.mkdirSync(logsDir, { recursive: true });
+    fs.writeFileSync(path.join(logsDir, `crash-${new Date().toISOString().replace(/[:.]/g, '-')}.txt`), text, 'utf8');
+  } catch {
+    /* bundle 落盘失败不拦对话框主流程 */
+  }
+  // 脏退出标记只给「当场退」的崩溃写（下次启动横幅数据源）。
+  if (opts.exit) runtime.markCrashExit(category, stack);
+  let choice = 0;
+  try {
+    choice = dialog.showMessageBoxSync({
+      type: 'error',
+      title: 'Attic 启动器崩溃',
+      message: opts.exit ? '启动器遇到意外错误，即将退出' : '启动器窗口遇到意外错误',
+      // 栈先行（用户拍板）：detail 首段 = 崩溃栈截断，全量在 crash-*.txt。
+      detail: `${stack.slice(0, CRASH_DIALOG_STACK_MAX)}\n\n完整诊断包已写入 launcher/logs/crash-*.txt`,
+      buttons: ['复制诊断信息', '打开日志文件夹', '去 GitHub 报告'],
+      defaultId: 0,
+      cancelId: 0, // 关框 = 复制诊断（最中性动作，剪贴板不丢现场）
+      noLink: true,
+    });
+  } catch {
+    /* app 未 ready 等极端场景弹不出框：现场已落盘，直接走退出 */
+  }
+  if (choice === 1) void shell.openPath(logsDir);
+  else if (choice === 2 && issuesUrl) {
+    // 报告纪律（用户拍板）：先把 bundle 写剪贴板，再开预填 issue 链接——正文直接粘贴。
+    clipboard.writeText(text);
+    void shell.openExternal(issuesUrl);
+  } else clipboard.writeText(text);
+  if (opts.exit) {
+    // 给 openPath/openExternal 的 OS 级派发留一拍再硬退（clipboard 为同步写，不丢）。
+    setTimeout(() => app.exit(1), 500);
+  } else if (opts.reloadWin && !opts.reloadWin.isDestroyed()) {
+    crashReported = false; // 渲染窗事故恢复后允许下一次崩溃再报
+    opts.reloadWin.reload();
+  } else {
+    crashReported = false; // unresponsive 等可恢复场景：闸复位
+  }
+}
+
+/** P0：主进程未捕获异常/拒绝 = 取证 + 原生框 + 退（handle() 封装器不覆盖异步裸抛，本钩子是最后防线）。 */
+process.on('uncaughtException', (error) => reportLauncherCrash('uncaught-exception', error, { exit: true }));
+process.on('unhandledRejection', (reason) => reportLauncherCrash('unhandled-rejection', reason, { exit: true }));
+
+/** launcher.log 跨启动滚动源：主进程 stdout/stderr 全量镜像（Electron 壳专属——sidecar stdout 是协议面，绝不挂）。 */
+attachConsoleCapture((stream, text) => runtime.appendLauncherLog(stream, text));
+
+/** P1：渲染进程事故（gone = 弹框取证后重载恢复；unresponsive = 只报不退）。每个窗都挂（主窗 + 控制台窗）。 */
+function attachWindowCrashGuards(win: BrowserWindow): void {
+  win.webContents.on('render-process-gone', (_event, details) => {
+    reportLauncherCrash(
+      `render-process-gone(${details.reason})`,
+      new Error(`Renderer process gone: reason=${details.reason} code=${details.exitCode ?? 'n/a'}`),
+      { exit: false, reloadWin: win },
+    );
+  });
+  win.webContents.on('unresponsive', () => {
+    reportLauncherCrash('window-unresponsive', new Error('渲染窗无响应（主线程卡死或长时间阻塞）'), { exit: false });
+  });
+}
 
 /** 无边距主窗引用（WINDOW_CONTROL 通道操作目标）。 */
 let mainWindow: BrowserWindow | null = null;
@@ -192,6 +281,7 @@ function createWindow(): void {
   win.on('closed', () => {
     mainWindow = null;
   });
+  attachWindowCrashGuards(win);
 
   // 诊断期（基建调试）：直接 show，不等 ready-to-show——页面 JS 异常/加载失败时
   // ready-to-show 可能永不触发，导致"日志正常但窗口不出现"。视觉验收后此段可还原。
@@ -242,6 +332,7 @@ function createConsoleWindow(): void {
   win.on('closed', () => {
     consoleWindows.delete(win);
   });
+  attachWindowCrashGuards(win);
   win.show();
 
   const query: Record<string, string> = { window: 'console' };
@@ -377,6 +468,15 @@ app.whenReady().then(() => {
     }
     await shell.openExternal(parsed.toString());
   });
+  // —— 崩溃取证 P2 通道（渲染层 → 宿主）——
+  // 渲染层错误静默落 launcher.log（不弹框、不打扰；框归 CrashPanel 渲染层自理）。
+  handle<[RendererErrorReport], void>(IPC_CHANNELS.CRASH_REPORT, (report) => {
+    runtime.logRendererError(report);
+  });
+  // CrashPanel 三按钮数据源：诊断包文本（渲染侧写剪贴板）+ releaseRepo 派生预填链接。
+  handle<[string, string], CrashBundleResult>(IPC_CHANNELS.CRASH_BUNDLE, (category, stack) =>
+    runtime.crashBundleResult(category, stack),
+  );
   // 窗控制：动作合法性由契约类型保证；toggle-maximize 在最大化/还原间切换。
   // 按发送方窗口操作（非固定 mainWindow）——独立控制台窗的顶栏三键才能控自己的窗。
   ipcMain.handle(IPC_CHANNELS.WINDOW_CONTROL, async (event, action: WindowAction): Promise<IpcResult<void>> => {
@@ -405,6 +505,17 @@ app.whenReady().then(() => {
 
   wireEvents();
   createWindow();
+  // 崩溃演练钩子（dev-only 双闸：--dev-url 在场 ∧ env 在场；产线天然失效——
+  // 注：不能用 app.isPackaged，Electron 33 下 `electron .` 直跑该标志实测为 true）：
+  // ATTIC_CRASH_DEMO = exception | rejection | gone，8s 后触发，供 P0/P1 全链自动演练。
+  const crashDemo = process.env['ATTIC_CRASH_DEMO'];
+  if (crashDemo && resolveDevUrl()) {
+    setTimeout(() => {
+      if (crashDemo === 'gone') mainWindow?.webContents.forcefullyCrashRenderer();
+      else if (crashDemo === 'rejection') void Promise.reject(new Error('crash-drill: unhandledRejection'));
+      else throw new Error('crash-drill: uncaughtException');
+    }, 8000);
+  }
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });

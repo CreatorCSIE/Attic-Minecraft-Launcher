@@ -19,6 +19,7 @@ import AccountsPanel from './components/AccountsPanel.vue';
 import CustomVersionsPanel from './components/CustomVersionsPanel.vue';
 import ModsPanel from './components/ModsPanel.vue';
 import SettingsPanel from './components/SettingsPanel.vue';
+import CrashPanel from './components/CrashPanel.vue';
 import ExternalLinkErrorDialog from './components/ExternalLinkErrorDialog.vue';
 import UpdateDialog from './components/UpdateDialog.vue';
 import WelcomeWizard from './components/WelcomeWizard.vue';
@@ -332,6 +333,9 @@ onMounted(() => {
         </Transition>
       </main>
     </div>
+
+    <!-- 崩溃呈现模态弹窗（P2 现场 + P0 上次崩溃；栈先行 + 三按钮，win32 原生框同构，AppDialog 同款形态） -->
+    <CrashPanel />
 
     <!-- 外链打开失败全局弹窗（useExternalLink 单例状态；Mods 页与关于页共用） -->
     <ExternalLinkErrorDialog />

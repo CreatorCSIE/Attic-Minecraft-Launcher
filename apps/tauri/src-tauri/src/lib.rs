@@ -61,6 +61,8 @@ pub mod channels {
         "attic:logs:clear",
         "attic:dialog:pick",
         "attic:shell:open-url",
+        "attic:crash:report",
+        "attic:crash:bundle",
     ];
     /// 宿主面（Rust 直处理，sidecar 拒收）：镜像 sidecar HOST_ONLY_CHANNELS。
     pub const HOST_CHANNELS: &[&str] = &[
@@ -105,6 +107,8 @@ pub mod channels {
         "attic:sys:info",
         "attic:update:check",
         "attic:logs:clear",
+        "attic:crash:report",
+        "attic:crash:bundle",
     ];
     /// Rust↔sidecar 私有延伸方法（非契约通道）。
     pub const INTERNAL_METHODS: &[&str] = &[

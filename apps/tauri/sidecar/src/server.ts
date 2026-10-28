@@ -223,6 +223,10 @@ async function dispatch(method: string, params: Params): Promise<unknown> {
       return runtime.checkUpdate();
     case C.LOGS_CLEAR:
       return runtime.clearLogs();
+    case C.CRASH_REPORT:
+      return runtime.logRendererError(s(0));
+    case C.CRASH_BUNDLE:
+      return runtime.crashBundleResult(s(0), s(1));
     // —— attic:internal:*（非契约通道：Rust 宿主动作的路径/入参拆分面）——
     case 'attic:internal:instance-game-dir':
       return runtime.instanceGameDir(s(0));

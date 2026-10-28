@@ -90,6 +90,8 @@ export function buildTauriBridge(t: TauriGlobal): RendererBridge {
     pickJavaExecutable: () => host<string | null>('pick_path', { kind: 'java-executable' }),
     pickDirectory: () => host<string | null>('pick_path', { kind: 'directory' }),
     openExternalUrl: (url) => host<void>('open_external_url', { url }),
+    reportRendererError: (report) => forward<void>(C.CRASH_REPORT, [report]),
+    getCrashBundle: (category, stack) => forward(C.CRASH_BUNDLE, [category, stack]),
     // 事件：__TAURI__.event.listen 的退订是 Promise 形的，桥面要求同步返回 —— 先挂门闩，
     // 订阅就绪前卸载则立即回收（与 Electron preload on() 的同步退订语义对齐）。
     on: (event, cb) => {

@@ -13,6 +13,9 @@ import {
   LAUNCH_CANCELLED_MESSAGE,
   type Account,
   type AccountView,
+  type CrashBrief,
+  type CrashBundleResult,
+  type RendererErrorReport,
   type CustomInfoView,
   type CustomVersionView,
   type OfflineAccount,
@@ -38,6 +41,17 @@ import {
 
 import { applySettingsToProps, estimateMaxMemoryMb, instanceViewFromConfig, settingsFromProps } from './appSettings';
 import { BetacraftClient, sweepPartFiles, type FetchImpl } from './betacraft';
+import {
+  buildCrashBundle,
+  consumeCrashMarker,
+  crashIssuesUrl,
+  crashSummary,
+  launcherLogLine,
+  LAUNCHER_LOG_MAX_BYTES,
+  writeCrashMarker,
+  CRASH_LOG_TAIL_LINES,
+  tailLines,
+} from './crash';
 import { endpointsFromOverrides, resolveEndpoints, type Endpoints } from './endpoints';
 import { infoToVersionJson, LAUNCH_METHOD_MAIN_CLASS } from './info';
 import { checkLwjgl2Arch, dependsOsFor, ensureDepends, type DependsIO } from './depends';
@@ -205,6 +219,11 @@ export class AtticRuntime {
   readonly endpoints: Endpoints;
   /** 启动器版本（宿主注入，SYS_INFO/关于页消费）。 */
   readonly version: string;
+  /**
+   * 上次异常退出简报（构造期消费脏退出标记 = 读后即删，横幅只弹一次；
+   * SYS_INFO.lastCrash 投给 UI。崩溃当场由宿主 markCrashExit 写标记）。
+   */
+  readonly lastCrash: CrashBrief | null;
   /** 检查更新发布仓库 "owner/repo"（构造选项 > env > 默认同仓；显式空串 = unconfigured）。 */
   private readonly releaseRepo: string | undefined;
   /** 壳形态（SYS_INFO 透传；构造缺省 'electron' 保守）。 */
@@ -249,6 +268,7 @@ export class AtticRuntime {
     // 门之三 flavor 感知数据源（B 期修复）：便携态在 ensureLayout 落骨架前快照生效根数据态。
     this.portableRootPopulated = this.portable?.active ? hasUserData(this.root) : false;
     ensureLayout(this.root);
+    this.lastCrash = consumeCrashMarker(this.root);
     this.version = options.version ?? '0.0.0';
     // 检查更新仓库：构造参数 > env ATTIC_RELEASE_REPO > 默认同仓（2026-10-25 收口：开发仓即发布仓）。
     // 显式空串 = 强制关通道（unconfigured 数据分支，不炸）；env/选项非空 = 测试仓彩排逃生舱。
@@ -1111,6 +1131,8 @@ export class AtticRuntime {
       totalMemMb: Math.round(os.totalmem() / 0x100000),
       freeMemMb: Math.round(os.freemem() / 0x100000),
       shell: this.shell,
+      // 上次异常退出简报（构造期消费脏标记；缺席 = 上次正常退出，UI 不弹横幅）。
+      ...(this.lastCrash ? { lastCrash: this.lastCrash } : {}),
       // portable 便携态（B 期）：安装版缺席本键；rebuilt/pathWarning 仅命中时带出（契约可选字段口径）。
       ...(this.portable?.active
         ? {
@@ -1155,6 +1177,75 @@ export class AtticRuntime {
       }
     }
     return removed;
+  }
+
+  // ---------- 启动器层崩溃取证（P0~P2 数据面；纯逻辑在 crash.ts，本区只接 fs/环境） ----------
+
+  /** launcher.log 路径（启动器自身 append 滚动历史，跨启动；与 output-client.log 互补）。 */
+  launcherLogPath(): string {
+    return path.join(launcherDir(this.root), 'logs', 'launcher.log');
+  }
+
+  /** 追加一条 launcher.log（`(时间戳) [OUT/ERR]` 前缀；封顶截半滚动；磁盘失败静默不反噬调用方）。 */
+  appendLauncherLog(stream: 'out' | 'err', text: string): void {
+    try {
+      const file = this.launcherLogPath();
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      try {
+        if (fs.statSync(file).size > LAUNCHER_LOG_MAX_BYTES) {
+          const all = fs.readFileSync(file, 'utf8');
+          fs.writeFileSync(file, all.slice(Math.floor(all.length / 2)), 'utf8');
+        }
+      } catch {
+        /* 首写无文件 */
+      }
+      fs.appendFileSync(file, `${launcherLogLine(stream, text)}\n`, 'utf8');
+    } catch {
+      /* 取证面写失败不影响主流程 */
+    }
+  }
+
+  /** 渲染层错误静默落盘（CRASH_REPORT）：只进 launcher.log，不弹任何框。 */
+  logRendererError(report: RendererErrorReport): void {
+    this.appendLauncherLog('err', `[renderer:${report.source}] ${report.message}${report.stack ? `\n${report.stack}` : ''}`);
+  }
+
+  /** 崩溃当场写脏退出标记（下次启动构造期消费 → SYS_INFO.lastCrash → UI 横幅）。 */
+  markCrashExit(category: string, stack: string): void {
+    writeCrashMarker(this.root, { at: new Date().toISOString(), category, summary: crashSummary(stack), stack });
+  }
+
+  /** 诊断包文本：环境快照 + 崩溃栈 + 两日志尾各 200 行。 */
+  crashBundle(category: string, stack: string): string {
+    const logsDir = path.join(launcherDir(this.root), 'logs');
+    const tail = (file: string): string => {
+      try {
+        return tailLines(fs.readFileSync(path.join(logsDir, file), 'utf8'), CRASH_LOG_TAIL_LINES);
+      } catch {
+        return '';
+      }
+    };
+    const v = process.versions as Record<string, string | undefined>;
+    return buildCrashBundle({
+      launcherVersion: this.version,
+      shell: this.shell,
+      versions: { electron: v['electron'], chrome: v['chrome'], node: v['node'] },
+      platform: this.platform,
+      osRelease: os.release(),
+      arch: process.arch,
+      category,
+      stack,
+      launcherLog: tail('launcher.log'),
+      clientLog: tail('output-client.log'),
+    });
+  }
+
+  /** CRASH_BUNDLE 响应：bundle 文本 + releaseRepo 派生的预填 issue 链接（数据驱动，禁硬编码 repo）。 */
+  crashBundleResult(category: string, stack: string): CrashBundleResult {
+    return {
+      text: this.crashBundle(category, stack),
+      issuesUrl: crashIssuesUrl(this.releaseRepo, this.version, crashSummary(stack)),
+    };
   }
 
   listInstances(): InstanceView[] {

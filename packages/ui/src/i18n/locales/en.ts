@@ -303,6 +303,16 @@ export const en = {
     'unsatisfied-link': 'Unsatisfied link',
     unknown: 'Unknown error',
   },
+  launcherCrash: {
+    liveTitle: 'Renderer error (logged to launcher log)',
+    lastTitle: 'Launcher exited abnormally last run',
+    copy: 'Copy diagnostics',
+    copied: 'Copied',
+    openLogs: 'Open log folder',
+    report: 'Report on GitHub',
+    reportNoRepo: 'No repository configured — diagnostics copied to clipboard',
+    dismiss: 'Dismiss',
+  },
   settings: {
     title: 'Settings',
     soon: 'Coming soon',

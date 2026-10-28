@@ -9,8 +9,11 @@ export type { ModCategoryRaw, ModCategoryView, ModEntryRaw, ModEntryView, ModIns
 export { IPC_CHANNELS, IPC_EVENTS, NOT_IMPLEMENTED, LAUNCH_CANCELLED_MESSAGE } from './ipc';
 export type {
   AtticEventPayloads,
+  CrashBrief,
+  CrashBundleResult,
   DownloadItem,
   DownloadProgressEvent,
+  RendererErrorReport,
   GameBacklog,
   GameExitEvent,
   GameOutputEvent,

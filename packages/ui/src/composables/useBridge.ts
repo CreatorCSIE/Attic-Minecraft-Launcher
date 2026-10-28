@@ -11,6 +11,7 @@ import { computed, type ComputedRef } from 'vue';
 import type {
   AccountView,
   AppSettings,
+  CrashBundleResult,
   CustomInfoView,
   CustomVersionView,
   GameBacklog,
@@ -118,6 +119,9 @@ const mockBridge: RendererBridge = {
       return err<void>(error instanceof Error ? error.message : String(error));
     }
   },
+  // 崩溃取证属宿主 fs/环境语义：浏览器 mock 无真值（CrashPanel 三按钮走可见失败）。
+  reportRendererError: async () => err<void>(NO_BRIDGE),
+  getCrashBundle: async () => err<CrashBundleResult>(NO_BRIDGE),
   on: () => () => {},
 };
 

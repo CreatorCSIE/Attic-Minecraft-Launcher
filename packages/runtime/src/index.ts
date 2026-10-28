@@ -82,6 +82,22 @@ export {
   type DependsVersion,
   type DependsIO,
 } from './depends';
+export {
+  attachConsoleCapture,
+  buildCrashBundle,
+  consumeCrashMarker,
+  crashIssuesUrl,
+  crashSummary,
+  crashMarkerFile,
+  launcherLogLine,
+  tailLines,
+  writeCrashMarker,
+  LAUNCHER_LOG_MAX_BYTES,
+  CRASH_LOG_TAIL_LINES,
+  CRASH_MARKER_STACK_MAX,
+  CRASH_DIALOG_STACK_MAX,
+  type CrashBundleInput,
+} from './crash';
 export { DEFAULT_AGENT_MOUNTS } from './quirks';
 export {
   BetacraftClient,

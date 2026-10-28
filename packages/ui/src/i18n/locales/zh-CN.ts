@@ -293,6 +293,16 @@ export const zhCN: Record<string, unknown> = {
     'unsatisfied-link': '本地方法未链接',
     unknown: '未知错误',
   },
+  launcherCrash: {
+    liveTitle: '渲染层错误（已记入启动器日志）',
+    lastTitle: '上次启动异常退出',
+    copy: '复制诊断信息',
+    copied: '已复制',
+    openLogs: '打开日志文件夹',
+    report: '去 GitHub 报告',
+    reportNoRepo: '未配置仓库，诊断信息已复制到剪贴板',
+    dismiss: '忽略',
+  },
   settings: {
     title: '设置',
     soon: '即将推出',

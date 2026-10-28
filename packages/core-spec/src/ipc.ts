@@ -94,6 +94,10 @@ export const IPC_CHANNELS = {
   DIALOG_PICK: 'attic:dialog:pick',
   /** 系统浏览器打开外链（宿主校验 http/https 协议，拒绝其余 scheme）。 */
   SHELL_OPEN_URL: 'attic:shell:open-url',
+  /** 渲染层错误静默上报（P2）：宿主落 launcher.log，不弹任何框（window error/unhandledrejection/Vue errorHandler）。 */
+  CRASH_REPORT: 'attic:crash:report',
+  /** 拉取崩溃诊断包（栈 + 环境 + 两日志尾部 + 预填 issue 链接）：CrashPanel 三按钮数据源。 */
+  CRASH_BUNDLE: 'attic:crash:bundle',
 } as const;
 
 /** 可打开的特殊目录目标（SHELL_OPEN_DIR 白名单；路径解析在宿主，渲染侧只给意图）。 */
@@ -137,6 +141,11 @@ export interface SystemInfo {
   /** 壳形态（宿主构造注入：tauri = sidecar 传 'tauri'；electron/legacy 缺省 'electron' 保守）。 */
   shell: 'tauri' | 'electron';
   /**
+   * 上次启动器异常退出简报（P0 脏退出标记的下次启动消费，缺席 = 上次正常退出）：
+   * 标记读后即删，本快照只弹一次横幅。stack = 崩溃栈（宿主侧截断），summary = 栈首行。
+   */
+  lastCrash?: CrashBrief;
+  /**
    * portable 便携态（B 期，plan.md 2026-10-25 终拍；安装版省略本键）：
    * 宿主显式传程序目录（sidecar 的 process.execPath = node.exe 不可信，硬纪律），
    * runtime 按双指纹判定 = 程序目录 marker 在场 ∨（exe 旁 `.attic` ∧ 其内 `launcher/portable.anchor`）。
@@ -158,6 +167,34 @@ export interface SystemInfo {
     /** 生效根路径警示（警告不拦截，LWJGL2/Java8 非 ASCII 翻车面留给用户决策）：非 ASCII / 含空格 / 长度逼近 260（阈值 ≥240）。 */
     pathWarning?: 'non_ascii' | 'space' | 'long';
   };
+}
+
+/** 启动器异常退出简报（脏退出标记内容；SYS_INFO.lastCrash 投给 UI 横幅）。 */
+export interface CrashBrief {
+  /** ISO 时间（崩溃当场）。 */
+  at: string;
+  /** 崩溃类别（uncaught-exception / unhandled-rejection / render-process-gone / …）。 */
+  category: string;
+  /** 栈首行摘要（≤120 字符）。 */
+  summary: string;
+  /** 崩溃栈（宿主截断至 4000 字符；全量在 launcher/logs/crash-*.txt）。 */
+  stack: string;
+}
+
+/** 渲染层错误上报（CRASH_REPORT，P2）：静默落 launcher.log，不弹框。 */
+export interface RendererErrorReport {
+  /** 来源标识：window-error | unhandled-rejection | vue-error。 */
+  source: string;
+  message: string;
+  stack?: string;
+}
+
+/** 崩溃诊断包（CRASH_BUNDLE 响应）：text 供剪贴板，issuesUrl = releaseRepo 派生的预填报告链接。 */
+export interface CrashBundleResult {
+  /** 完整诊断文本（环境 + 栈 + launcher.log/output-client.log 尾 200 行）。 */
+  text: string;
+  /** GitHub 预填 issue 链接（repo 未配置 = 空串，UI 隐藏报告钮）。 */
+  issuesUrl: string;
 }
 
 /**
@@ -354,6 +391,10 @@ export interface RendererBridge {
   pickDirectory(): Promise<IpcResult<string | null>>;
   /** 系统浏览器打开外链（宿主限 http/https；渲染内导航被禁止后的唯一出门口）。 */
   openExternalUrl(url: string): Promise<IpcResult<void>>;
+  /** 渲染层错误静默上报（CRASH_REPORT）：宿主落 launcher.log；本调用永不弹框、失败可忽略。 */
+  reportRendererError(report: RendererErrorReport): Promise<IpcResult<void>>;
+  /** 拉取崩溃诊断包（CRASH_BUNDLE）：category = 现场类别（可带来源上下文），stack = 渲染侧已知的栈。 */
+  getCrashBundle(category: string, stack: string): Promise<IpcResult<CrashBundleResult>>;
   /** 订阅事件，返回退订函数。 */
   on<E extends keyof AtticEventPayloads>(event: E, cb: (payload: AtticEventPayloads[E]) => void): () => void;
 }

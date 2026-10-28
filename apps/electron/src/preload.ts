@@ -53,6 +53,8 @@ const bridge: RendererBridge = {
   pickJavaExecutable: () => invoke(IPC_CHANNELS.DIALOG_PICK, 'java-executable'),
   pickDirectory: () => invoke(IPC_CHANNELS.DIALOG_PICK, 'directory'),
   openExternalUrl: (url) => invoke(IPC_CHANNELS.SHELL_OPEN_URL, url),
+  reportRendererError: (report) => invoke(IPC_CHANNELS.CRASH_REPORT, report),
+  getCrashBundle: (category, stack) => invoke(IPC_CHANNELS.CRASH_BUNDLE, category, stack),
   on: <E extends keyof AtticEventPayloads>(event: E, cb: (payload: AtticEventPayloads[E]) => void) => {
     const handler = (_: unknown, payload: AtticEventPayloads[E]): void => {
       if (event === IPC_EVENTS.GAME_EXIT) console.log(`[attic-preload] recv ${event}`);
