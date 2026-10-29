@@ -11,6 +11,7 @@ import type { EndpointOverrides } from '@attic/core-spec';
 import type { Locale } from '../i18n';
 import { AVAILABLE_LOCALES, useI18n } from '../i18n';
 import { useBridge } from '../composables/useBridge';
+import { useExternalLink } from '../composables/useExternalLink';
 import { useSettings } from '../composables/useSettings';
 import { useSysInfo } from '../composables/useSysInfo';
 import { useSettingsNav } from '../composables/useSettingsNav';
@@ -25,6 +26,7 @@ import ConfirmDialog from './ConfirmDialog.vue';
 
 const { t, locale, setLocale } = useI18n();
 const { hasBridge, bridge } = useBridge();
+const { openExternal } = useExternalLink();
 const { settings, patch, patchDetailed } = useSettings();
 const { info } = useSysInfo();
 const { activeSection } = useSettingsNav();
@@ -140,7 +142,9 @@ const BUG_URL = 'https://github.com/CreatorCSIE/Attic-Minecraft-Launcher/issues/
 
 function feedback(url: string): void {
   feedbackOpen.value = false;
-  void bridge.openExternalUrl(url);
+  // 走 useExternalLink（2026-10-29 用户报障：此处 `void bridge.openExternalUrl` 丢结果 =
+  // 无默认浏览器时静默失败；关于页早已收口，此漏网调用点补上——失败落全局弹窗）
+  openExternal(url);
 }
 </script>
 
