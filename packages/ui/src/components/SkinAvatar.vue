@@ -1,68 +1,65 @@
 <script setup lang="ts">
 /**
- * 皮肤头头像 —— 走 minotar.net 在线头像（对齐 BlockHelm：LauncherAccount.cs L26 / HomePageViewModel.cs L158），
- * 未知用户名由 minotar 自动回落 Steve 脸。图片加载失败时回落到本地 canvas 绘制的 Steve 脸（断网兜底，不阻塞布局）。
+ * 皮肤头头像 —— 在线走 minotar.net（对齐 BlockHelm：LauncherAccount.cs L26），
+ * 图片加载失败（断网/限流）时回落**本地默认皮肤脸**——复刻原版 1.19.3+ / HMCL 的 UUID 选型算法：
+ * n = floorMod(uuid.hashCode(), 18)，n<9 → slim/<NAMES[n]>，否则 → wide/<NAMES[n-9]>；
+ * 9 枚 = alex,ari,efe,kai,makena,noor,steve,sunny,zuri（HMCL TexturesLoader 实拆同款表与次序）。
+ * 脸图 = 官方默认皮肤 (8,8) 处 8×8 脸区裁切，内置于 assets/skin-faces/（2026-10-29 用户拍板内置进包，
+ * 系「安装包零版权物」戒律的显式豁免——仅这 18 张 8×8 默认皮肤脸，HMCL/各启动器同款做法）。
+ * Java UUID.hashCode = (mostSig^leastSig) 高低 32 位互异或折叠——拆成 4 段 32 位直接四次 XOR，无 BigInt。
+ * uuid 缺席/非法（如浏览器 demo）→ wide/steve 兜底。
  *
- * 尺寸策略（用户拍板修复像素拉伸）：**恒请求 8px 原始脸**，放大交给 CSS `image-rendering: pixelated`（最近邻）。
- * 根因：`/avatar/{name}/{size}.png` 是 minotar 服务端缩放，非整数倍（如 28/8=3.5）产出双线性糊图——
- * 糊在源图上，浏览器端 pixelated 救不回；整数倍（64/8=8）才清晰。8px 源 + 本地最近邻 = 任意槽位都锐利。
- * 缓存共享：同用户名全站唯一 URL → 启动页 AccountHero(56)/账户列表(28)/详情(64) 三实例经浏览器
- * HTTP 缓存只取一次（防多次获取）。
+ * 尺寸策略（用户拍板修复像素拉伸）：**恒 8px 原始脸**，放大交给 CSS `image-rendering: pixelated`（最近邻）。
+ * 根因：minotar 服务端缩放非整数倍（如 28/8=3.5）产出双线性糊图——糊在源图上救不回。8px 源 + 本地最近邻 = 任意槽位都锐利。
+ * 缓存共享：同用户名全站唯一 URL → 启动页 AccountHero(56)/账户列表(28)/详情(64) 三实例经浏览器 HTTP 缓存只取一次。
  */
-import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 const props = withDefaults(
-  defineProps<{ username?: string; size?: number; rounded?: string }>(),
-  { username: 'Steve', size: 48, rounded: 'var(--radius-sm)' },
+  defineProps<{ username?: string; uuid?: string; size?: number; rounded?: string }>(),
+  { username: 'Steve', uuid: '', size: 48, rounded: 'var(--radius-sm)' },
 );
 
 const failed = ref(false);
-const canvas = ref<HTMLCanvasElement | null>(null);
 
 const src = computed(
   () => `https://minotar.net/avatar/${encodeURIComponent(props.username || 'Steve')}/8.png`,
 );
 
-// —— 断网回落：8×8 Steve 脸 canvas 放大（与 minotar 像素风一致） ——
-const PALETTE: Record<string, string> = {
-  h: '#4a3b2a',
-  s: '#b58863',
-  n: '#9c7350',
-  w: '#ffffff',
-  b: '#4a4a8a',
-  m: '#6e4f34',
-};
-const FACE = ['hhhhhhhh', 'hhhhhhhh', 'hssssssh', 'swbssbws', 'ssnnnsss', 'ssssssss', 'smssssms', 'ssmmmmss'];
+// —— 断网回落：原版 UUID 默认皮肤算法 + 内置脸图 ——
+const NAMES = ['alex', 'ari', 'efe', 'kai', 'makena', 'noor', 'steve', 'sunny', 'zuri'] as const;
 
-function drawSteveFallback(): void {
-  const el = canvas.value;
-  const ctx = el?.getContext('2d');
-  if (!el || !ctx) return;
-  const px = el.width / 8;
-  ctx.clearRect(0, 0, el.width, el.height);
-  for (let y = 0; y < 8; y++) {
-    for (let x = 0; x < 8; x++) {
-      ctx.fillStyle = PALETTE[FACE[y]?.[x] ?? 's'] ?? '#b58863';
-      ctx.fillRect(Math.round(x * px), Math.round(y * px), Math.ceil(px), Math.ceil(px));
-    }
-  }
+const faceUrls = import.meta.glob('../assets/skin-faces/*/*.png', {
+  eager: true,
+  query: '?url',
+  import: 'default',
+}) as Record<string, string>;
+
+/** Java UUID.hashCode：(most^least) 折叠 32 位 = 四段 32 位 XOR（有符号）。非法输入回 null。 */
+function javaUuidHashCode(uuid: string): number | null {
+  const h = uuid.replace(/-/g, '');
+  if (!/^[0-9a-fA-F]{32}$/.test(h)) return null;
+  const mHi = parseInt(h.slice(0, 8), 16);
+  const mLo = parseInt(h.slice(8, 16), 16);
+  const lHi = parseInt(h.slice(16, 24), 16);
+  const lLo = parseInt(h.slice(24, 32), 16);
+  return (mHi ^ lHi ^ mLo ^ lLo) | 0;
 }
 
+const fallbackSrc = computed(() => {
+  const hash = javaUuidHashCode(props.uuid);
+  if (hash === null) return faceUrls['../assets/skin-faces/wide/steve.png'];
+  const n = ((hash % 18) + 18) % 18;
+  const name = NAMES[n < 9 ? n : n - 9];
+  return faceUrls[`../assets/skin-faces/${n < 9 ? 'slim' : 'wide'}/${name}.png`];
+});
+
 watch(
-  () => [props.username, props.size],
+  () => [props.username, props.uuid, props.size],
   () => {
     failed.value = false;
   },
 );
-onMounted(() => {
-  if (failed.value) drawSteveFallback();
-});
-watch(failed, async (v) => {
-  if (v) {
-    await nextTick(); // 等 v-else canvas 上屏再绘制
-    drawSteveFallback();
-  }
-});
 </script>
 
 <template>
@@ -77,7 +74,7 @@ watch(failed, async (v) => {
       loading="lazy"
       @error="failed = true"
     />
-    <canvas v-else ref="canvas" class="face" :width="size" :height="size" aria-hidden="true"></canvas>
+    <img v-else class="face" :src="fallbackSrc" :width="size" :height="size" :alt="username" aria-hidden="true" />
   </span>
 </template>
 

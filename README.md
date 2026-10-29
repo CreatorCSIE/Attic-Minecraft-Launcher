@@ -190,7 +190,7 @@ https://nightly.link/CreatorCSIE/Attic-Minecraft-Launcher/workflows/release/main
 
 ### Q3：游戏 jar 在仓库里吗？
 
-不在，也不会分发。客户端 jar 与资产在首次启动时从 Betacraft 公共端点下载到本地数据目录，仓库不含任何 Mojang 版权内容（见许可证一节）。
+不在，也不会分发。客户端 jar 与资产在首次启动时从 Betacraft 公共端点下载到本地数据目录，仓库不含任何 Mojang 版权内容——唯一例外是账户头像断网兜底用的 18 张 8×8 官方默认皮肤脸（HMCL 同款内置做法，见许可证一节）。
 
 ### Q4：需要自己装 Java 吗？
 

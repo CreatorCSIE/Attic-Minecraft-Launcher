@@ -71,7 +71,7 @@ async function copyUuid(): Promise<void> {
             type="button"
             @click="select(a.id)"
           >
-            <SkinAvatar :username="a.name" :size="28" />
+            <SkinAvatar :username="a.name" :uuid="a.id" :size="28" />
             <span class="mi-name">{{ a.name }}</span>
           </button>
           <button
@@ -108,7 +108,7 @@ async function copyUuid(): Promise<void> {
     <!-- 右栏：用户信息（离线形态：头像 + 名称[重命名] + 类型 + UUID；皮肤节不实现） -->
     <div class="detail">
       <div v-if="current" class="info">
-        <SkinAvatar :username="current.name" :size="64" rounded="var(--radius-md)" />
+        <SkinAvatar :username="current.name" :uuid="current.id" :size="64" rounded="var(--radius-md)" />
 
         <div class="name-row">
           <h3 class="name">{{ current.name }}</h3>
