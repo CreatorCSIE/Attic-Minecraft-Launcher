@@ -3,7 +3,7 @@
  * 设置页 · 关于栏 —— 格式照搬 BlockHelm InfoSettingsView（用户定稿）：
  * 头区（名称 + v版本号 + GitHub/检查更新按钮）→ 启动器更新（策略单选组 + 通道占位）→
  * 版权及法律声明（版权/开源协议/用户协议三行）→ 引用的项目列表。
- * 许可证均经实查不虚构：上游四项目 LICENSE 逐字为 GPL-3.0，Vue/Electron=MIT，Lucide=ISC。
+ * 许可证均经实查不虚构：上游四项目 LICENSE 逐字为 GPL-3.0，Vue/Electron=MIT，Tauri=MIT/Apache-2.0，Lucide=ISC。
  * 外链走 openExternalUrl（宿主白名单校验；浏览器 mock 直放 window.open，demo 可用）；
  * 打开失败（无默认浏览器等）经 useExternalLink 全局弹窗显式报错，不再静默。
  * 检查更新（2026-10-25「更新 UI」定稿）：手动按钮走 checkManually（无视策略与忽略账恒显弹窗），
@@ -80,15 +80,32 @@ interface ReferenceProject {
   key: string;
 }
 
-const references: ReferenceProject[] = [
+// 壳行只显示壳自身（2026-10-29 用户定稿）：Electron 壳列 Electron、Tauri 壳列 Tauri，
+// 探测次序与 useBridge 两级真桥探测一致（window.attic 优先）；浏览器直开/demo 无壳，两行皆不列。
+const shell: 'electron' | 'tauri' | null =
+  typeof window === 'undefined'
+    ? null
+    : window.attic
+      ? 'electron'
+      : window.__TAURI__
+        ? 'tauri'
+        : null;
+
+const allReferences: ReferenceProject[] = [
   { name: 'Betacraft Launcher (v1)', url: 'https://github.com/betacraftuk/betacraft-launcher', license: 'GPL-3.0', key: 'betacraft' },
   { name: 'LegacyFix', url: 'https://github.com/betacraftuk/legacyfix', license: 'GPL-3.0', key: 'legacyfix' },
   { name: 'MCANextGen', url: 'https://github.com/CreatorCSIE/MCANextGen', license: 'GPL-3.0', key: 'mcanextgen' },
   { name: 'BlockHelm Launcher', url: 'https://github.com/zqq-699/BlockHelm-Launcher', license: 'GPL-3.0', key: 'blockhelm' },
+  { name: 'HMCL', url: 'https://github.com/huanghongxun/HMCL', license: 'GPL-3.0', key: 'hmcl' },
   { name: 'Vue', url: 'https://github.com/vuejs/core', license: 'MIT', key: 'vue' },
   { name: 'Electron', url: 'https://github.com/electron/electron', license: 'MIT', key: 'electron' },
+  { name: 'Tauri', url: 'https://github.com/tauri-apps/tauri', license: 'MIT / Apache-2.0', key: 'tauri' },
   { name: 'Lucide Icons', url: 'https://github.com/lucide-icons/lucide', license: 'ISC', key: 'lucide' },
 ];
+
+const references = computed(() =>
+  allReferences.filter((p) => (p.key === 'electron' || p.key === 'tauri' ? p.key === shell : true)),
+);
 
 function openUrl(url: string): void {
   openExternal(url);

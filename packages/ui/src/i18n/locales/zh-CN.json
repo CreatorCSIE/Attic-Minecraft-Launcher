@@ -478,8 +478,10 @@
         "legacyfix": "远古版本兼容性修复模组——所有 -Dlf.* 行为开关的来源。",
         "mcanextgen": "已归档的前身仓库——Java 探测与远古版本 JVM 参数知识的继承来源。",
         "blockhelm": "设置页与关于页版式的 UI 蓝本。",
+        "hmcl": "JavaFX 桌面启动器——断网头像兜底的原版 UUID 默认皮肤选型算法取自其 TexturesLoader 实现。",
         "vue": "前端框架——界面渲染与响应式状态。",
         "electron": "桌面壳——主进程、原生对话框与文件系统访问。",
+        "tauri": "桌面壳——Rust 窗层 + Node sidecar，系统 WebView 渲染。",
         "lucide": "界面图标的开源图标集（内联 SVG 路径）。"
       }
     },

@@ -489,8 +489,10 @@
         "legacyfix": "Legacy compatibility mod — origin of every -Dlf.* behavior switch.",
         "mcanextgen": "Archived predecessor repo — inherited Java detection and legacy JVM-argument knowledge.",
         "blockhelm": "UI blueprint for the settings and about page layouts.",
+        "hmcl": "JavaFX launcher — the vanilla UUID default-skin selection behind our offline avatar fallback comes from its TexturesLoader.",
         "vue": "Frontend framework — rendering and reactive state.",
         "electron": "Desktop shell — main process, native dialogs and file system access.",
+        "tauri": "Desktop shell — Rust window layer with a Node sidecar on the system WebView.",
         "lucide": "Open icon set behind the inline SVG icons."
       }
     },
