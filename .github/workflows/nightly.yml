@@ -27,9 +27,20 @@ name: Nightly（push 触发的试装构件轨道）
 # workflow_dispatch 同走全链，用于手动补班（默认分支 main 上点 Run workflow）。
 # 轨道解禁 = Actions 页 Enable workflow（纯 UI 开关）；disabled_manually 期间本文件零触发。
 
+# 免触发面（2026-10-29 与 release.yml 同口径收窄）：纯文档/仓库卫生改动只走 ci.yml，
+# 不起全平台矩阵 + Release 发布——媒体豁免按路径（docs/、release-notes/）不按后缀
+#（仓内媒体 54/57 是进包构件，按后缀一刀切会漏掉图标改动，详见 release.yml 头注）。
+# 混合提交（文档 + 代码同 push）照常构建；手动补班 = workflow_dispatch。
 on:
   push:
-    branches: [main] # B 案①：每推必构建；tag push 不匹配 branch 过滤，天然不自触发
+    branches: [main] # B 案①：每推必构建（免触发面除外）；tag push 不匹配 branch 过滤，天然不自触发
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'release-notes/**'
+      - '**/.gitignore'
+      - '**/.gitkeep'
+      - 'LICENSE'
   workflow_dispatch: {}
 
 concurrency:

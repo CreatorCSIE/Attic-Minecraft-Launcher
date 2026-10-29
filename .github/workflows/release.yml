@@ -20,9 +20,16 @@ name: Release（全平台矩阵）
 #    release_mode 输入决定 release job 是否建 Release（nightly 传 none = 只要产物，
 #    Release 由 nightly.yml 自己的 publish job 建——GITHUB_TOKEN 推 tag 不级联触发
 #    push 事件，tag push 触发这条路对 nightly 不存在，机制事实详见 nightly.yml 头注）。
-# 文档/媒体免触发（2026-10-25）：纯 .md / 图片改动只走 ci.yml，不起全平台矩阵——
-# paths-ignore 对 tag push 同样生效（tag 与上一 tag 的 diff 若纯文档也不出构件），
-# 真要发版被误拦时 workflow_dispatch 手动兜底。
+# 触发收窄（2026-10-29 用户拍板，修订 2026-10-25 的媒体按后缀豁免）：
+#  · branch push 触发整条删除——任意 feature 分支每次 push 起全平台矩阵（0.0.0 测试形态）
+#    与 ci.yml（typecheck/build/test/fixtures）+ nightly（main）重复，纯烧 runner；
+#    分支上要验打包链 = workflow_dispatch 手动点。
+#  · 媒体豁免改**按路径不按后缀**：仓内 57 个媒体文件 54 个是进包构件（tauri 图标 51、
+#    两壳 icon.ico、ui 资产）——按后缀一刀切 `**.png /**.ico` 会让品牌图标改动不触发构建，
+#    electron 腿 "Guard brand icon" 防线形同虚设。文档面（docs/、release-notes/、**.md）
+#    才是真免触发区，另加仓库卫生面（.gitignore/.gitkeep/LICENSE）。
+#  · paths-ignore 对 tag push 同样生效，但 stable/prerelease tag 锚定 commit 必含 version
+#    bump（.json）——永不会被误判纯文档拦掉；真要发版被误拦时 workflow_dispatch 手动兜底。
 on:
   workflow_dispatch: {}
   workflow_call:
@@ -39,17 +46,14 @@ on:
         required: false
         default: "none"
   push:
-    branches: ['**']
     tags: ['v*']
     paths-ignore:
       - '**.md'
-      - '**.png'
-      - '**.jpg'
-      - '**.jpeg'
-      - '**.gif'
-      - '**.svg'
-      - '**.ico'
-      - '**.webp'
+      - 'docs/**'
+      - 'release-notes/**'
+      - '**/.gitignore'
+      - '**/.gitkeep'
+      - 'LICENSE'
 
 jobs:
   # 版本与发布形态单点判定（plan「更新通道设计」版本轨语义条 2026-10-25 拍板）：
@@ -84,7 +88,8 @@ jobs:
             tag="v${ver}"
             if [[ -z "$ver" ]]; then echo "::error::workflow_call 语境 version 输入为空"; exit 1; fi
           else
-            # workflow_dispatch / 分支 push = 测试形态：版本钉 0.0.0、不建 Release
+            # workflow_dispatch = 测试形态：版本钉 0.0.0、不建 Release
+            #（branch push 触发已删 2026-10-29，见头注「触发收窄」）
             ver="0.0.0"
             tag="v0.0.0"
           fi
