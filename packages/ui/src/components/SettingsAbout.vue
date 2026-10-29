@@ -66,6 +66,7 @@ watch(activePolicy, () => void nextTick(locateThumb));
 
 const REPO_URL = 'https://github.com/CreatorCSIE/Attic-Minecraft-Launcher';
 const LICENSE_URL = `${REPO_URL}/blob/HEAD/LICENSE`;
+const AGREEMENT_URL = `${REPO_URL}/blob/HEAD/USER_AGREEMENT.md`;
 
 // 运行面后缀（宿主版本号零感知，标注全在 UI 侧合成）：
 // vite dev server（pnpm/npm run dev）下 DEV=true → `-dev`；?demo=1 时续接 `-demo`
@@ -197,13 +198,10 @@ function openUrl(url: string): void {
       </div>
       <div class="row">
         <div class="row-info">
-          <span class="row-name">
-            {{ t('settings.about.agreement') }}
-            <span class="soon">{{ t('settings.soon') }}</span>
-          </span>
+          <span class="row-name">{{ t('settings.about.agreement') }}</span>
           <p class="row-desc">{{ t('settings.about.agreementDesc') }}</p>
         </div>
-        <button class="mini" disabled>{{ t('settings.about.view') }}</button>
+        <button class="mini" @click="openUrl(AGREEMENT_URL)">{{ t('settings.about.view') }}</button>
       </div>
     </div>
 

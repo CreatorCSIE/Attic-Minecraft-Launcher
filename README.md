@@ -229,6 +229,7 @@ Linux x86_64（deb / AppImage）是正式分发平台，远古链路（c0.24-dev
 ## 📄 许可证与版权声明 (License & Copyright)
 
 - 本项目仅供 Minecraft 历史版本研究、怀旧与技术交流使用。
+- 使用本软件同时适用 **[用户协议](USER_AGREEMENT.md)**（v1.0，2026-10-30 生效）；该协议不限制 GPL-3.0 授予您的权利。
 - 为了防止代码被恶意倒卖、闭源修改或注入恶意软件，本项目源码采用 **[GNU General Public License v3 (GPL v3) 许可证](LICENSE)** 进行强制开源。
   - **Copyright (c) 2026 CreatorCSIE. All rights reserved.**
 - **第三方资产与商标免责声明**：
