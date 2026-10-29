@@ -1,0 +1,510 @@
+{
+  "app": {
+    "title": "Attic Minecraft Launcher",
+    "tagline": "Dusty, but still alive."
+  },
+  "nav": {
+    "menu": "Menu",
+    "launch": "Launch",
+    "instances": "Instances",
+    "accounts": "Accounts",
+    "custom": "Custom Versions",
+    "mods": "Mods",
+    "settings": "Settings",
+    "collapse": "Collapse sidebar",
+    "expand": "Expand sidebar"
+  },
+  "wizard": {
+    "title": "Welcome to Attic",
+    "subtitle": "Three quick steps — everything stays changeable in Settings later.",
+    "stepOf": "Step {n} of 3",
+    "stepDir": "Data folder",
+    "stepAccounts": "Account",
+    "stepJava": "Java",
+    "dirDefaultTitle": "Standard location (recommended)",
+    "dirDefaultHint": "Game data lives in your user profile — unaffected by updates or uninstalls.",
+    "dirCustomTitle": "Custom folder",
+    "dirCustomHint": "Pick any folder outside the install directory — the uninstaller deletes everything inside it.",
+    "dirPick": "Choose folder…",
+    "dirPending": "New data folder applies after restarting the app: {path}",
+    "dirLocalTitle": "Folder next to the app (travels with it)",
+    "dirLocalHint": "Game data lives in .attic beside the app folder — copy the folder anywhere and the data follows.",
+    "dirLocalFallback": "The app folder is not writable right now — data temporarily lives in the standard location (see the title-bar badge).",
+    "dirDefaultHintPortable": "Game data lives in your user profile — the portable folder stays light, but the data does not travel with it.",
+    "dirCustomHintPortable": "Pick any location — the pointer is written into portable.ini inside the pack and travels with it; relative paths resolve against the app folder.",
+    "accountsHave": "Existing accounts:",
+    "accountsEmpty": "No account yet — create an offline one to start playing.",
+    "accountsName": "Minecraft username (3–16 chars)",
+    "accountsSkipHint": "Leave empty to skip; accounts can be added anytime.",
+    "javaDetecting": "Detecting Java…",
+    "javaFound": "Auto-selected: {reason}",
+    "javaNone": "No suitable Java 8 found. The app can fetch one on launch, or pick manually.",
+    "javaManual": "Choose Java manually…",
+    "javaAuto": "Keep auto-detection",
+    "javaManualSet": "Manual Java: {path}",
+    "javaCandidates": "Detection details ({count})",
+    "skip": "Skip (use defaults)",
+    "back": "Back",
+    "next": "Next",
+    "finish": "Start playing"
+  },
+  "portable": {
+    "warnNonAscii": "Data root path contains non-ASCII characters — legacy Java 8 / LWJGL2 may garble or fail to launch (warning only).",
+    "warnSpace": "Data root path contains spaces — some legacy launch chains mishandle them (warning only).",
+    "warnLong": "Data root path is very long (240+ chars) — it may hit the 260 limit and break file operations (warning only).",
+    "fallbackBadge": "Data not portable",
+    "fallbackTooltip": "App folder is not writable — data temporarily lives at: {path}",
+    "recoverHint": "The portable breadcrumb points to another data root: {path} — if your data lives there, change the data folder and restart the app.",
+    "recoverDismiss": "Got it"
+  },
+  "account": {
+    "title": "Accounts",
+    "welcome": "Welcome to Attic Minecraft Launcher",
+    "none": "No account selected",
+    "hint": "Select an account to view or edit its settings.",
+    "add": "Add account",
+    "remove": "Remove",
+    "typeOffline": "Offline account",
+    "typeMicrosoft": "Microsoft account",
+    "namePlaceholder": "Minecraft username (3–16 chars)",
+    "uuid": "UUID",
+    "copy": "Copy",
+    "copied": "Copied",
+    "rename": "Rename",
+    "dialog": {
+      "subtitle": "Choose the account type to add.",
+      "offlineTitle": "Offline account",
+      "offlineDesc": "Play with a local username.",
+      "msTitle": "Microsoft account",
+      "msDesc": "Sign in with a Microsoft account and get your skin.",
+      "soon": "Coming soon",
+      "cancel": "Cancel",
+      "confirm": "Confirm",
+      "back": "Back",
+      "usernameLabel": "Username",
+      "usernameValidation": "Username must be 3–16 letters, digits or underscores."
+    },
+    "renameDialog": {
+      "title": "Rename account",
+      "subtitle": "Enter the new username; the offline UUID will be regenerated.",
+      "newUsernameLabel": "New username"
+    },
+    "removeDialog": {
+      "title": "Remove account",
+      "message": "Remove account \"{name}\"? This cannot be undone."
+    }
+  },
+  "window": {
+    "minimize": "Minimize",
+    "maximize": "Maximize / Restore",
+    "close": "Close"
+  },
+  "custom": {
+    "title": "Custom Versions",
+    "search": "Search versions",
+    "import": "Import jar",
+    "configured": "Configured",
+    "unconfigured": "Unconfigured",
+    "hint": "Select a custom version to edit its configuration.",
+    "none": "No custom versions yet",
+    "empty": "No matching custom versions",
+    "emptyHint": "Click \"Import jar\" to add a custom version.",
+    "launchMethod": "Launch method (launch-method)",
+    "launchMethodNone": "(unspecified)",
+    "launchMethodRequired": "launch-method is required; other fields are optional (left blank saves as `key=`).",
+    "detectedHint": "Detected launch method: {method} (saved into .info).",
+    "notDetected": "Could not detect a launch method; set launch-method or main-class manually.",
+    "modHint": "This mod version’s .info is managed by the Mods repository: only viewing details and deleting are available here (deleting also clears the install registry). Editing is disabled.",
+    "save": "Save",
+    "saving": "Saving…",
+    "saved": "Saved",
+    "remove": "Delete",
+    "removeDialog": {
+      "title": "Delete custom version",
+      "message": "Delete \"{id}\"? Its jar and .info configuration will be removed. This cannot be undone.",
+      "affected": "{n} instance(s) use it; after deletion they fall back to “No version selected” and need a new pick before launching."
+    },
+    "externalChanged": "This .info was modified by an external editor; your unsaved changes will not be overwritten.",
+    "reload": "Reload"
+  },
+  "mods": {
+    "title": "Mods",
+    "search": "Search mods",
+    "refresh": "Refresh list",
+    "sourceHint": "Phase 1 ships the official Betacraft repository only (getmods.jsp); adding other sources is not available yet.",
+    "repository": "Betacraft Mod Repository",
+    "hint": "\"Download\" fetches the .info metadata only; the mod jar and base assembly are completed automatically when you press Play.",
+    "loadError": "Failed to load the mod repository",
+    "retry": "Retry",
+    "noMatch": "No matching mods",
+    "empty": "Repository list is empty",
+    "count": "{n} mods",
+    "install": "Download",
+    "installing": "Downloading…",
+    "installed": "Installed",
+    "website": "Project website"
+  },
+  "external": {
+    "openError": "Could not open external link",
+    "openErrorHint": "Check that a default browser is configured on your system (the host refuses to open when no http/https association is registered).",
+    "close": "Close"
+  },
+  "confirmDialog": {
+    "cancel": "Cancel",
+    "confirm": "Delete",
+    "busy": "Deleting…"
+  },
+  "bridge": {
+    "missing": "No IPC bridge — running in a plain browser. Data is mocked; launch is unavailable."
+  },
+  "common": {
+    "loading": "Loading…",
+    "error": "Error",
+    "retry": "Retry",
+    "search": "Search",
+    "ok": "OK",
+    "confirm": "Confirm",
+    "cancel": "Cancel"
+  },
+  "era": {
+    "pre-classic": "Pre-Classic",
+    "classic": "Classic",
+    "4k": "4k",
+    "indev": "Indev",
+    "infdev": "Infdev",
+    "alpha": "Alpha",
+    "beta": "Beta",
+    "release": "Release",
+    "unknown": "Other"
+  },
+  "version": {
+    "list": "Version list",
+    "installed": "Installed",
+    "empty": "No versions match",
+    "emptyHint": "Try a different search term.",
+    "count": "{n} versions",
+    "pick": "Pick a version",
+    "pickHint": "Click to expand the version list.",
+    "pin": "Keep panel expanded",
+    "unpin": "Unpin (collapse after picking)",
+    "collapse": "Collapse panel"
+  },
+  "instance": {
+    "empty": "No instances yet",
+    "emptyHint": "Create one to keep a separate instance directory per version.",
+    "noMatch": "No instances match",
+    "noMatchHint": "Try a different search term.",
+    "list": "Instance list",
+    "count": "{n} instances",
+    "pick": "Pick an instance",
+    "pickHint": "Click to expand the instance list.",
+    "versionNone": "No version selected",
+    "pin": "Keep panel expanded",
+    "unpin": "Unpin (collapse after picking)",
+    "collapse": "Collapse panel",
+    "new": "New instance",
+    "name": "Name",
+    "namePlaceholder": "e.g. Beta 1.7.3 modded",
+    "create": "Create instance",
+    "created": "Instance saved",
+    "gameDir": "Instance directory",
+    "gameDirPlaceholder": "empty = <root>/<instance name>",
+    "launchArgs": "JVM arguments",
+    "launchArgsPlaceholder": "e.g. -Xmx1G",
+    "width": "Window width",
+    "height": "Window height",
+    "editing": "Editing: {name}",
+    "saveChanges": "Save changes",
+    "cancelEdit": "Cancel edit",
+    "hint": "Pick an instance on the left, or create a new one.",
+    "active": "Active",
+    "activate": "Set as launch instance",
+    "activateHint": "The Play button on the launch page will use this instance.",
+    "openDir": "Open instance directory",
+    "rename": "Rename",
+    "delete": "Delete instance",
+    "deleteDialog": {
+      "title": "Delete instance",
+      "message": "This removes the profile of instance \"{name}\".",
+      "withFiles": "Also delete the instance directory (saves included, not recoverable)"
+    },
+    "basic": "Basic settings",
+    "addons": "Addons",
+    "addonSoon": "Coming soon",
+    "addonList": {
+      "vsync": {
+        "name": "VSync",
+        "desc": "Sync rendering with the display refresh rate to reduce tearing (-Dlf.vsync)."
+      },
+      "visualizer": {
+        "name": "Infinite Map Visualizer",
+        "desc": "Launch this session with the bird-eye view Infinite Map Visualizer; only meaningful around inf-20100616 to b1.3 (-Dlf.visualizer, not persisted to the instance)."
+      },
+      "modloader": {
+        "name": "ModLoader support",
+        "desc": "Keep Risugami's ModLoader working on Java 9+ (-Dlf.modloader)."
+      },
+      "beta-forge": {
+        "name": "Beta Forge support",
+        "desc": "Keep Forge for b1.7.3-b1.8.1 working on Java 9+ (-Dlf.beta-forge)."
+      },
+      "bouncycastle": {
+        "name": "Bouncy Castle",
+        "desc": "Force-enable Bouncy Castle; requires bcprov/bcutil/bctls on the classpath (-Dlf.bouncycastle)."
+      },
+      "show-notice": {
+        "name": "\"1.6 is out\" notice",
+        "desc": "Keep the \"Minecraft 1.6 is out\" popup in 1.5.2 (-Dlf.showNotice)."
+      },
+      "demo": {
+        "name": "Demo mode",
+        "desc": "Launch in the historical demo (trial) mode, reproducing the 12w16a-1.5.2 demo restrictions (-Dlf.demo); no effect outside that range."
+      },
+      "skins": {
+        "name": "Skin handling",
+        "desc": "LegacyFix takes over skins and profiles; turn off when it conflicts with skin mods (on by default)."
+      },
+      "proxy": {
+        "name": "Network proxy",
+        "desc": "Handles all HTTP/HTTPS requests that some fixes rely on; disabling them makes those fixes unavailable (on by default)."
+      },
+      "server-auth": {
+        "name": "Server join auth",
+        "desc": "Authenticate with Mojang when joining servers on c0.0.15a-c0.30 and a1.0.5-a1.0.15 (on by default)."
+      },
+      "fullscreen": {
+        "name": "Fullscreen launch",
+        "desc": "Start the game in fullscreen mode (v1 feature, not wired yet)."
+      },
+      "game-mode-switch": {
+        "name": "Game mode switch",
+        "desc": "Toggle creative/survival by key in Classic (v1 feature, not wired yet)."
+      },
+      "quit-game": {
+        "name": "Quick quit",
+        "desc": "In-game quit-to-launcher shortcut (v1 feature, not wired yet)."
+      }
+    },
+    "javaPath": "Java path",
+    "javaPathPlaceholder": "Empty = global auto-detect",
+    "intelFix": {
+      "name": "Intel Graphics Fix",
+      "desc": "Injects -XX:HeapDumpPath on Windows to guard against Intel GPU heap-dump failures (v1 intelFix, on by default)."
+    },
+    "forceUpdate": {
+      "name": "Force Update",
+      "desc": "Re-download version files (jar/libraries/assets) on launch even when already present locally (v1 Force Update)."
+    },
+    "exists": "An instance with this name already exists. Edit it or choose another name.",
+    "saved": "Saved"
+  },
+  "launch": {
+    "play": "Play",
+    "kill": "Stop",
+    "cancel": "Cancel",
+    "version": "Version",
+    "memory": "Memory",
+    "java": "Java",
+    "failed": "Launch failed",
+    "noVersion": "Select a version to launch.",
+    "hintNeedAccount": "A valid account is required",
+    "hintNeedVersion": "Select a version first",
+    "hintNeedBoth": "Add a valid account and select a version first",
+    "menu": "More actions",
+    "instanceSettings": "Instance settings",
+    "testLaunch": "Test launch",
+    "visualizerLaunch": "Launch Infinite Map Visualizer",
+    "visualizerOff": "The selected version jar does not contain the visualizer class (or is not downloaded yet)",
+    "downloadFailed": "Download failed",
+    "stage": {
+      "version-manifest": "Fetching version list…",
+      "version-json": "Fetching version info…",
+      "client-jar": "Downloading game client…",
+      "asset-index": "Fetching asset index…",
+      "asset": "Downloading assets…",
+      "library": "Downloading libraries…",
+      "java-runtime": "Downloading Java runtime…",
+      "legacyfix": "Downloading LegacyFix…"
+    }
+  },
+  "console": {
+    "title": "Console",
+    "empty": "Game output appears here.",
+    "crash": "Crash summary",
+    "stopped": "Stopped",
+    "autoscroll": "Auto-scroll",
+    "clear": "Clear"
+  },
+  "crash": {
+    "none": "Clean exit",
+    "java-missing": "Java missing",
+    "out-of-memory": "Out of memory",
+    "gl-init": "GL init failed",
+    "lwjgl-native": "LWJGL native",
+    "unsatisfied-link": "Unsatisfied link",
+    "unknown": "Unknown error"
+  },
+  "launcherCrash": {
+    "liveTitle": "Renderer error (logged to launcher log)",
+    "lastTitle": "Launcher exited abnormally last run",
+    "copy": "Copy diagnostics",
+    "copied": "Copied",
+    "openLogs": "Open log folder",
+    "report": "Report on GitHub",
+    "reportNoRepo": "No repository configured — diagnostics copied to clipboard",
+    "dismiss": "Dismiss"
+  },
+  "settings": {
+    "title": "Settings",
+    "soon": "Coming soon",
+    "nav": {
+      "general": "General",
+      "language": "Language",
+      "launch": "Launch & Memory",
+      "java": "Java",
+      "theme": "Appearance",
+      "about": "About",
+      "developer": "Developer",
+      "feedback": "Feedback"
+    },
+    "sectionGeneral": "General",
+    "sectionLanguage": "Interface Language",
+    "sectionLaunch": "Launch & Memory",
+    "sectionJava": "Java",
+    "sectionTheme": "Appearance",
+    "sectionAbout": "About",
+    "sectionDeveloper": "Developer Settings",
+    "saved": "Saved",
+    "general": {
+      "dataRoot": "Data root",
+      "dataRootDesc": "Where game versions, instances and downloads live.",
+      "open": "Open",
+      "change": "Change…",
+      "rootPending": "New data root pending — takes effect after restarting the app: {path}",
+      "logs": "Launcher logs",
+      "logsClear": "Clear logs",
+      "clearConfirmTitle": "Clear logs",
+      "clearConfirmMessage": "Deletes every .log file in the logs directory (locked files are skipped). This cannot be undone.",
+      "cleared": "Cleared {n} log file(s).",
+      "clearNothing": "No log files to clear.",
+      "diagLog": "Launch diagnostic log",
+      "diagLogDesc": "Record the launch command and output to the logs directory on every game launch for troubleshooting."
+    },
+    "language": {
+      "label": "Interface language",
+      "hint": "Applies instantly without restart, and is saved to settings."
+    },
+    "theme": {
+      "mode": "Theme mode",
+      "dark": "Dark",
+      "light": "Light",
+      "system": "System",
+      "accent": "Accent color",
+      "accentDesc": "Custom UI accent color (planned).",
+      "background": "Home background",
+      "backgroundDesc": "Custom home page background (planned)."
+    },
+    "launch": {
+      "integrity": "Integrity check before launch",
+      "integrityDesc": "Verify the sha1 of the local game jar; handle missing or corrupt files per the repair policy.",
+      "fixMissing": "Auto-repair missing files",
+      "fixMissingDesc": "Re-download automatically when issues are found; when off, only report errors without touching files.",
+      "minimize": "Minimize after successful launch",
+      "minimizeDesc": "Minimize the launcher window to the background once the game starts.",
+      "consoleOnLaunch": "Open console window on launch",
+      "consoleOnLaunchDesc": "Pop up the standalone console window after a successful launch to follow LegacyFix and game logs live. Test launch always opens it, regardless of this switch.",
+      "server": "Level server",
+      "serverPlaceholder": "Empty = LegacyFix asks once",
+      "serverDesc": "LegacyFix lf.proxy.levelServer: URL = online level saves; local = force local singleplayer.",
+      "memory": "Memory allocation",
+      "memoryManual": "Manual (fixed cap)",
+      "memoryAuto": "Auto (estimated from this machine)",
+      "memoryMax": "Max heap",
+      "sysMem": "Total RAM {total} MB, {free} MB currently free.",
+      "memoryAutoEst": "Auto mode estimates from total RAM — currently about {mb} MB.",
+      "jvmGlobal": "Global JVM arguments",
+      "jvmGlobalPlaceholder": "e.g. -XX:+UseSerialGC -Dfile.encoding=UTF-8",
+      "jvmGlobalDesc": "Injected after fixed heap flags and before instance args; instance-level same flags win (last wins)."
+    },
+    "java": {
+      "auto": "Auto-detect",
+      "manual": "Manual",
+      "refresh": "Refresh",
+      "import": "Import Java…",
+      "noneDetected": "No usable Java detected",
+      "usedFallback": "Using 32-bit fallback runtime",
+      "manualCurrent": "Manually set to:",
+      "noCandidates": "No Java installations detected",
+      "autoLockHint": "The candidate list is read-only in auto mode; switch to manual to pick an install.",
+      "probeDetails": "Probe details (failures & diagnostics)",
+      "source": {
+        "manual": "manual",
+        "env": "env",
+        "registry": "registry",
+        "directory": "directory",
+        "path": "PATH"
+      }
+    },
+    "about": {
+      "ghRepo": "View GitHub repository",
+      "checkUpdate": "Check for updates",
+      "checking": "Checking…",
+      "newBadge": "new",
+      "updateDialog": {
+        "title": "Check for updates",
+        "upToDate": "You are on the latest version (v{version}).",
+        "found": "A new version v{version} is available!",
+        "published": "Published {date}",
+        "unconfigured": "The release repository (owner/repo) is not configured — update check is unavailable.",
+        "failed": "Update check failed: {message}",
+        "openReleases": "Open releases page",
+        "close": "Close",
+        "ignore": "Ignore this version",
+        "update": "Update",
+        "cancel": "Cancel",
+        "ignoreHint": "Ignoring records this version in a single local slot: automatic checks stay silent for it (manual check is unaffected)."
+      },
+      "updateSection": "Launcher Update",
+      "updatePolicy": {
+        "label": "Update check policy",
+        "desc": "Governs only the automatic check at startup; the \"Check for updates\" button stays available under both policies.",
+        "startup": "Check at startup",
+        "off": "Never check"
+      },
+      "updateChannel": "Update channel",
+      "updateSoon": "The launcher auto-update system is not online yet; the channel is not selectable.",
+      "channelRelease": "Release",
+      "channelBeta": "Beta",
+      "legalSection": "Copyright & Legal",
+      "copyright": "Copyright notice",
+      "copyrightDesc": "Copyright © 2026 Attic Minecraft Launcher developers",
+      "license": "Open-source license",
+      "licenseDesc": "This software is released under GNU GPL v3 (GPL-3.0-only).",
+      "agreement": "User agreement",
+      "agreementDesc": "Applicable terms and important notices, provided with the official release.",
+      "view": "View",
+      "refsSection": "Referenced projects",
+      "ref": {
+        "betacraft": "Upstream Betacraft v1 launcher — source of truth for version lists, .info shape and launch semantics.",
+        "legacyfix": "Legacy compatibility mod — origin of every -Dlf.* behavior switch.",
+        "mcanextgen": "Archived predecessor repo — inherited Java detection and legacy JVM-argument knowledge.",
+        "blockhelm": "UI blueprint for the settings and about page layouts.",
+        "vue": "Frontend framework — rendering and reactive state.",
+        "electron": "Desktop shell — main process, native dialogs and file system access.",
+        "lucide": "Open icon set behind the inline SVG icons."
+      }
+    },
+    "developer": {
+      "endpoints": "Download endpoint overrides",
+      "endpointsNote": "Endpoint changes take effect on next app launch."
+    },
+    "feedback": {
+      "title": "Suggestions & Feedback",
+      "subtitle": "Submit via GitHub — pick a type first.",
+      "feature": "Feature suggestion",
+      "featureDesc": "Ideas and improvements — start a thread in GitHub Discussions.",
+      "bug": "Bug report",
+      "bugDesc": "Report launch, download or compatibility problems."
+    }
+  }
+}

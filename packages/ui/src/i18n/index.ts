@@ -2,11 +2,13 @@
  * i18n —— 手写深合并（零依赖）。
  * 策略：en 为 base/fallback，zh-CN 覆盖同名键；默认 locale = zh-CN，持久化到 localStorage。
  * t(key) 走点路径；缺键回落 en，仍缺则原样返回路径。
+ * 词典形态 = JSON（2026-10-29「从 TS 解放」）：翻译贡献者零工具链直接 PR locales/*.json，
+ * 外挂语言包通道（launcher/lang/<locale>.json 运行期覆盖层）与仓内词典同形同校验。
  */
 
 import { ref, computed, type Ref } from 'vue';
-import { en } from './locales/en';
-import { zhCN } from './locales/zh-CN';
+import en from './locales/en.json';
+import zhCN from './locales/zh-CN.json';
 
 export type Locale = 'en' | 'zh-CN';
 
