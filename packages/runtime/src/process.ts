@@ -63,18 +63,41 @@ export interface GameProcessEvents {
  * isCloseRequested（v1 靠 JVM wrapper 的 windowClosing→exit 兜底，legacyfix AppletFrame 无此监听），
  * 关窗后进程空转不退。deawt 模式下窗口属 LWJGL，关闭后进程 MainWindowHandle 归零——
  * 轮询到归零即 SIGTERM，让"关窗=退出"与常规版本行为一致。
+ *
+ * 游戏主窗识别 = 窗口类 `SunAwtFrame`（AppletFrame extends Frame 的 AWT 注册类），
+ * 不吃 MainWindowHandle/标题字符串（2026-10-30 缺陷修复）：
+ *   - legacyfix 的 levelServer 询问弹窗是 SunAwtDialog，且弹窗关闭后到游戏窗出现之间
+ *     还有 downloadAssets 合法空窗——旧实现 $seen 被弹窗/瞬窗误闩 → 空窗期误报 CLOSED
+ *     → SIGTERM 静默杀进程（用户实测「询问窗挂起 10s 内自动退出」）；
+ *   - 标题匹配同样不可用——legacyfix-attic fork 已支持 -Dlf.title 自定义窗口标题，
+ *     按 "Minecraft" 匹配会在自定义标题下永不闩上（看门狗失效 = 新缺陷）。
+ * 共享 owner 帧（无标题）与隐藏窗被「未离屏 + 标题非空」过滤出局；双向 2 拍去抖
+ * 防创建动画期瞬时枚举失败。
+ * 实现选型 = UIAutomation（GAC 程序集直加载）——弃 Add-Type -MemberDefinition P/Invoke
+ * 路线：那条路要现场跑 csc 编译，宿主环境 LIB 含失效路径时警告被当错误炸编译
+ * （2026-10-30 本机实测），看门狗整体瘫痪。
  */
 function windowWatchdogScript(pid: number): string {
   return [
-    `$seen=$false`,
+    `Add-Type -AssemblyName UIAutomationClient`,
+    `Add-Type -AssemblyName UIAutomationTypes`,
+    `$gpid=${pid}`,
+    `$seen=$false; $up=0; $down=0`,
+    `$cond=[System.Windows.Automation.Condition]::TrueCondition`,
+    `$root=[System.Windows.Automation.AutomationElement]::RootElement`,
     `for(;;) {`,
-    `  $p=Get-Process -Id ${pid} -ErrorAction SilentlyContinue`,
-    `  if(-not $p){ 'EXITED'; break }`,
-    `  if(-not $seen -and $p.MainWindowHandle -ne 0){ $seen=$true }`,
-    `  if($seen -and $p.MainWindowHandle -eq 0){ 'CLOSED'; break }`,
+    `  if(-not (Get-Process -Id $gpid -ErrorAction SilentlyContinue)){ 'EXITED'; break }`,
+    `  $found=$false`,
+    `  $wins=$root.FindAll([System.Windows.Automation.TreeScope]::Children,$cond)`,
+    `  foreach($w in $wins){`,
+    `    $c=$w.Current`,
+    `    if($c.ProcessId -eq $gpid -and $c.ClassName -eq 'SunAwtFrame' -and (-not $c.IsOffscreen) -and $c.Name.Length -gt 0){ $found=$true; break }`,
+    `  }`,
+    `  if($found){ $down=0; if(-not $seen){ $up++; if($up -ge 2){ $seen=$true } } }`,
+    `  else { $up=0; if($seen){ $down++; if($down -ge 2){ 'CLOSED'; break } } }`,
     `  Start-Sleep -Milliseconds 1000`,
     `}`,
-  ].join('; ');
+  ].join('\n');
 }
 
 export class GameProcessManager {
