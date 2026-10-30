@@ -31,6 +31,13 @@ const selected = computed(() => instances.value.find((i) => i.name === selectedN
 const gameDir = ref('');
 const launchArgs = ref('');
 const javaPath = ref('');
+// 多人直连（Attic 扩展键，独立 card + 单开保存；空 = 未配置不询问）：
+// UI 双框（地址/端口），档案单串 `ip[:port]`（契约不变 §2.7）——保存拼接、载入拆解。
+// 常量必须声明在 watch(immediate) 之前（const 无提升）：loadForm 同步引用，setup 期即执行。
+const SERVER_RE = /^([^:/\s]+)(?::(\d{1,5}))?$/;
+const SERVER_PORT_OK = (v: string): boolean => /^\d{1,5}$/.test(v) && Number(v) >= 1 && Number(v) <= 65535;
+const serverHost = ref('');
+const serverPort = ref('');
 const width = ref<number | ''>(854);
 const height = ref<number | ''>(480);
 // v1 intelFix 缺键 = 开（v1 语义）；forceUpdate（Attic 扩展键）缺省 = 关
@@ -73,6 +80,10 @@ function loadForm(inst: InstanceView): void {
   gameDir.value = inst.gameDir ?? '';
   launchArgs.value = inst.launchArgs ?? '';
   javaPath.value = inst.javaPath ?? '';
+  // 档案单串拆双框；解析失败 = 原样进地址框（校验会拦住直连保存，不让数据静默丢失）
+  const sm = SERVER_RE.exec(inst.server?.trim() ?? '');
+  serverHost.value = sm ? (sm[1] ?? '') : (inst.server ?? '');
+  serverPort.value = sm?.[2] ?? '';
   width.value = inst.width ?? 854;
   height.value = inst.height ?? 480;
   // 无 addons 键的老档案：展示按默认开集（与 legacyfix 缺省行为一致，保存时显式落键）
@@ -171,6 +182,8 @@ function onNew(): void {
   gameDir.value = '';
   launchArgs.value = '';
   javaPath.value = '';
+  serverHost.value = '';
+  serverPort.value = '';
   width.value = 854;
   height.value = 480;
   addonsSel.value = [...DEFAULT_ADDONS];
@@ -202,9 +215,9 @@ function flashSaved(on: boolean): void {
   if (on) savedTimer = setTimeout(() => (savedFlash.value = false), 1500);
 }
 
-async function onSave(): Promise<void> {
-  if (!canSave.value) return;
-  saving.value = true;
+/** 当前表单态 → 全档案视图（基本设置保存与直连 card 保存共用——
+ * 保存通道是整档案合并写回，任一钮都带走全部表单现值，互不误删）。 */
+function currentView(): InstanceView {
   const inst: InstanceView = {
     name: creating.value ? newName.value.trim() : (selectedName.value as string),
     // 新建 = 启动页当前选中版本；编辑 = 档案版本不动（调整走启动页）
@@ -218,10 +231,24 @@ async function onSave(): Promise<void> {
   if (gameDir.value.trim()) inst.gameDir = gameDir.value.trim();
   if (launchArgs.value.trim()) inst.launchArgs = launchArgs.value.trim();
   if (javaPath.value.trim()) inst.javaPath = javaPath.value.trim();
+  // 直连双框 → 档案单串 `ip[:port]`（端口留空 = 不带冒号，拼装器注入缺省 25565）；
+  // 地址空 = 不携带（宿主清空删键语义）。格式校验在 card 侧（canSaveServer），此处原样拼接
+  const serverAddr = serverHost.value.trim();
+  if (serverAddr) {
+    const port = serverPort.value.trim();
+    inst.server = port ? `${serverAddr}:${port}` : serverAddr;
+  }
   const w = Number(width.value);
   const h = Number(height.value);
   if (Number.isFinite(w) && w > 0) inst.width = w;
   if (Number.isFinite(h) && h > 0) inst.height = h;
+  return inst;
+}
+
+async function onSave(): Promise<void> {
+  if (!canSave.value) return;
+  saving.value = true;
+  const inst = currentView();
   const ok = await save(inst);
   saving.value = false;
   if (ok) {
@@ -229,6 +256,37 @@ async function onSave(): Promise<void> {
     selectedName.value = inst.name;
     newName.value = '';
     flashSaved(true);
+  }
+}
+
+// —— 多人直连 card（单开保存）：格式校验 = 拼装器同源宽松版（host[:port]，端口 1-65535）；
+// 空 = 未配置（保存即删键）；校验只拦 card 自己的保存钮，不拦基本设置保存（地址缺席由 trim 判定）。
+// SERVER_RE / SERVER_PORT_OK 声明在上方 refs 区（watch(immediate) 的 const 无提升纪律）。
+const savingServer = ref(false);
+const serverSavedFlash = ref(false);
+let serverSavedTimer: ReturnType<typeof setTimeout> | undefined;
+
+const serverError = computed(() => {
+  const host = serverHost.value.trim();
+  const port = serverPort.value.trim();
+  if (!host && !port) return false;
+  // 只填端口没填地址 = 无效组合；地址框承载非法串（老档案解析失败原样回填）同样拦下
+  if (!host || !SERVER_RE.test(port ? `${host}:${port}` : host)) return true;
+  return port !== '' && !SERVER_PORT_OK(port);
+});
+const canSaveServer = computed(
+  () => hasBridge.value && !savingServer.value && !serverError.value && !creating.value && !!selected.value,
+);
+
+async function onSaveServer(): Promise<void> {
+  if (!canSaveServer.value) return;
+  savingServer.value = true;
+  const ok = await save(currentView());
+  savingServer.value = false;
+  if (ok) {
+    serverSavedFlash.value = true;
+    clearTimeout(serverSavedTimer);
+    serverSavedTimer = setTimeout(() => (serverSavedFlash.value = false), 1500);
   }
 }
 
@@ -513,6 +571,45 @@ async function onConfirmRemove(): Promise<void> {
           </div>
           <p v-if="dirError" class="field-err">{{ dirError }}</p>
         </form>
+
+        <!-- 多人直连（Attic 扩展键，用户指定单开 card + 单开保存）：非空 = 启动页 Play 前置
+             「直连/单人」询问弹窗（一次性注入，不因启动改写本档案）；空 = 不询问。新建态不展示（先建档再配）。 -->
+        <section v-if="!creating && selected" class="card server-card">
+          <h4 class="card-title">{{ t('instance.server.title') }}</h4>
+          <div class="server-fields">
+            <div class="field field--wide">
+              <label class="label" for="inst-server-host">{{ t('instance.server.label') }}</label>
+              <input
+                id="inst-server-host"
+                v-model="serverHost"
+                class="input mono"
+                type="text"
+                :placeholder="t('instance.server.placeholder')"
+                :disabled="!hasBridge"
+              />
+            </div>
+            <div class="field field--port">
+              <label class="label" for="inst-server-port">{{ t('instance.server.portLabel') }}</label>
+              <input
+                id="inst-server-port"
+                v-model="serverPort"
+                class="input mono"
+                type="text"
+                inputmode="numeric"
+                placeholder="25565"
+                :disabled="!hasBridge"
+              />
+            </div>
+          </div>
+          <p class="addon-desc">{{ t('instance.server.desc') }}</p>
+          <p v-if="serverError" class="field-err">{{ t('instance.server.invalid') }}</p>
+          <div class="actions">
+            <button class="primary" type="button" :disabled="!canSaveServer" @click="onSaveServer">
+              {{ t('instance.server.save') }}
+            </button>
+            <span v-if="serverSavedFlash" class="saved">{{ t('instance.saved') }}</span>
+          </div>
+        </section>
 
         <!-- Addons 栏：目录驱动（INSTANCE_ADDONS 中 uiSection 缺省项）；已接入项开关映射 legacyfix -Dlf.*，占位项禁用。
              高频四项归基本设置 card、visualizer 归启动页「≡」菜单（uiSection 分区，数据模型不分家）。 -->
@@ -941,6 +1038,21 @@ async function onConfirmRemove(): Promise<void> {
   font-weight: 700;
   letter-spacing: 0.05em;
   color: var(--text-muted);
+}
+/* 多人直连 card：本页卡距 = 各卡自带 margin-top（.form/.addons 同配方），新卡缺位即贴上一卡末端 */
+.server-card {
+  margin-top: var(--space-5);
+}
+/* 地址/端口双框：地址吃满、端口定宽（field--num 同档） */
+.server-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-4);
+}
+.field--port {
+  flex: 0 0 120px;
+  min-width: 0;
 }
 .addons {
   margin-top: var(--space-5);

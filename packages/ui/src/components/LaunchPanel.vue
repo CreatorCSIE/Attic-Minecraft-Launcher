@@ -7,8 +7,8 @@
  * v1 语义：每次启动成功自动唤起独立控制台窗口（MC 日志与主页解耦）。
  * 请求形状全走契约（LaunchRequest），UI 不拼参数（戒律 #1）。
  */
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
-import { INSTANCE_ADDONS } from '@attic/core-spec';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { INSTANCE_ADDONS, MULTIPLAYER_JOIN_LAUNCH_METHODS, parseServerAddress } from '@attic/core-spec';
 import { useI18n } from '../i18n';
 import { useSelection } from '../composables/useSelection';
 import { useGame } from '../composables/useGame';
@@ -17,6 +17,7 @@ import { useAccounts } from '../composables/useAccounts';
 import { useBridge } from '../composables/useBridge';
 import { useDownloads } from '../composables/useDownloads';
 import { useInstances } from '../composables/useInstances';
+import AppDialog from './AppDialog.vue';
 import InstanceDock from './InstanceDock.vue';
 import VersionSelector from './VersionSelector.vue';
 
@@ -29,7 +30,7 @@ const { settings } = useSettings();
 const { current } = useAccounts();
 const { bridge, hasBridge } = useBridge();
 const { percent, rateBps, stage, active, failed, reset: resetDownloads } = useDownloads();
-const { activeName } = useInstances();
+const { activeName, instances } = useInstances();
 
 const running = computed(() => status.value.running);
 /* 聚合进度区可见性（BlockHelm 配方）：启动中展示；下载失败则常驻红态直到下次启动。 */
@@ -97,7 +98,7 @@ function onMenuToggle(): void {
  * 普通启动受全局开关 consoleOnLaunch（缺省开）约束；测试启动属显式诊断，恒弹。
  * visualizer=true = 一次性带 -Dlf.visualizer 启动（「≡」菜单动作项，不写档案）。
  */
-async function doLaunch(test: boolean, visualizer = false): Promise<void> {
+async function doLaunch(test: boolean, visualizer = false, server?: string): Promise<void> {
   const v = selected.value;
   if (!v) return;
   menuOpen.value = false;
@@ -111,14 +112,79 @@ async function doLaunch(test: boolean, visualizer = false): Promise<void> {
     maxMemoryMb: settings.value.maxMemoryMb,
     ...(test ? { testLaunch: true } : {}),
     ...(visualizer ? { visualizer: true } : {}),
+    ...(server ? { server } : {}),
   });
   if (ok && (test || settings.value.consoleOnLaunch !== false)) void bridge.openConsoleWindow();
+}
+
+// —— 直连询问弹窗（Play 前置，MVP）：激活实例档案 server 非空必拦；server 缺省时，选中版本
+// launchMethod 命中 MULTIPLAYER_JOIN_LAUNCH_METHODS（经典多人数据表，戒律 #1）仍拦 = 弹窗现场
+// 填地址一次性直连（不写档案）。测试启动/可视化器属诊断与特殊动作路径不打扰。
+// 关窗（Esc/遮罩）= 放弃本次启动（询问语义：不选就不启动）。
+const serverPrompt = ref(false);
+const activeServer = computed(
+  () => instances.value.find((i) => i.name === activeName.value)?.server?.trim() ?? '',
+);
+// 缺省触发面探测：launchMethod 只在 VersionJson.betacraft 上（VersionRef 轻量形状无此字段），
+// 按版本 id 缓存探测结果（本地 json 读，失败 = 否，不拦正常启动）。
+const mpJoinCapable = ref(false);
+const mpJoinCache = new Map<string, boolean>();
+watch(
+  () => selected.value?.id,
+  (id) => {
+    if (!id) {
+      mpJoinCapable.value = false;
+      return;
+    }
+    const hit = mpJoinCache.get(id);
+    if (hit !== undefined) {
+      mpJoinCapable.value = hit;
+      return;
+    }
+    void bridge.getVersionJson(id).then((res) => {
+      const ok = res.ok && MULTIPLAYER_JOIN_LAUNCH_METHODS.includes(res.value.betacraft?.launchMethod ?? '');
+      mpJoinCache.set(id, ok);
+      // 竞态护栏：回包时选中已换 = 只留缓存不落地
+      if (selected.value?.id === id) mpJoinCapable.value = ok;
+    });
+  },
+  { immediate: true },
+);
+// 弹窗内现场填地址（仅 server 缺省的手动模式生效）：地址/端口双框，与档案单串同构拼接
+const promptHost = ref('');
+const promptPort = ref('');
+const promptAddr = computed(() => {
+  const host = promptHost.value.trim();
+  const port = promptPort.value.trim();
+  return host ? (port ? `${host}:${port}` : host) : '';
+});
+const promptValid = computed(() => promptAddr.value !== '' && parseServerAddress(promptAddr.value) !== null);
+
+function requestNormalLaunch(): void {
+  if (activeServer.value || mpJoinCapable.value) {
+    promptHost.value = '';
+    promptPort.value = '';
+    serverPrompt.value = true;
+    return;
+  }
+  void doLaunch(false);
+}
+
+function onLaunchDirect(): void {
+  if (!activeServer.value && !promptValid.value) return;
+  serverPrompt.value = false;
+  void doLaunch(false, false, activeServer.value || promptAddr.value);
+}
+
+function onLaunchSingle(): void {
+  serverPrompt.value = false;
+  void doLaunch(false);
 }
 
 function onToggle(): void {
   if (running.value) kill();
   else if (busy.value) void cancel();
-  else void doLaunch(false);
+  else void requestNormalLaunch();
 }
 
 function onTestLaunch(): void {
@@ -233,6 +299,54 @@ function mb(bytes: number): string {
         </div>
       </div>
     </div>
+
+    <!-- 直连询问弹窗（AppDialog 壳，实例删除确认同款配方）：档案有地址 = 确认形态；
+         缺省但版本命中经典多人表 = 手动形态（现场填地址，一次性、不写档案） -->
+    <AppDialog :open="serverPrompt" @close="serverPrompt = false">
+      <header class="prompt-head">
+        <h2 class="prompt-title">{{ t('launch.serverDialog.title') }}</h2>
+        <p v-if="activeServer" class="prompt-message">
+          {{ t('launch.serverDialog.message', { server: activeServer }) }}
+        </p>
+        <template v-else>
+          <p class="prompt-message">{{ t('launch.serverDialog.manualHint') }}</p>
+          <div class="prompt-fields">
+            <input
+              v-model="promptHost"
+              class="prompt-input mono"
+              type="text"
+              :placeholder="t('instance.server.placeholder')"
+              @keydown.enter="onLaunchDirect"
+            />
+            <input
+              v-model="promptPort"
+              class="prompt-input prompt-input--port mono"
+              type="text"
+              inputmode="numeric"
+              placeholder="25565"
+              @keydown.enter="onLaunchDirect"
+            />
+          </div>
+          <p v-if="promptHost.trim() !== '' && !promptValid" class="prompt-err">
+            {{ t('instance.server.invalid') }}
+          </p>
+        </template>
+      </header>
+      <footer class="prompt-foot">
+        <span class="prompt-spacer"></span>
+        <button class="prompt-single" type="button" @click="onLaunchSingle">
+          {{ t('launch.serverDialog.single') }}
+        </button>
+        <button
+          class="prompt-direct"
+          type="button"
+          :disabled="!activeServer && !promptValid"
+          @click="onLaunchDirect"
+        >
+          {{ t('launch.serverDialog.direct') }}
+        </button>
+      </footer>
+    </AppDialog>
   </section>
 </template>
 
@@ -446,5 +560,101 @@ function mb(bytes: number): string {
 .menu-item:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+/* 直连询问弹窗（AppDialog 插槽内容，ConfirmDialog 三段式同配方） */
+.prompt-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.prompt-title {
+  margin: 0;
+  font-size: var(--fs-xl);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.prompt-message {
+  margin: 0;
+  font-size: var(--fs-md);
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+.prompt-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.prompt-spacer {
+  flex: 1;
+}
+.prompt-single {
+  padding: var(--space-2) var(--space-5);
+  background: var(--surface-3);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--inset-bottom);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.prompt-single:hover {
+  background: var(--surface-4);
+}
+.prompt-direct {
+  padding: var(--space-2) var(--space-5);
+  background: var(--accent);
+  color: var(--accent-ink);
+  border: none;
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+.prompt-direct:hover {
+  background: var(--accent-hover);
+}
+.prompt-direct:active {
+  transform: scale(0.97);
+}
+.prompt-direct:disabled {
+  background: var(--surface-3);
+  color: var(--text-muted);
+  cursor: not-allowed;
+  transform: none;
+}
+/* 手动形态：地址/端口双框（输入质感对齐全局 .input 配方） */
+.prompt-fields {
+  display: flex;
+  gap: var(--space-3);
+}
+.prompt-input {
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-3);
+  border: none;
+  border-radius: var(--radius-md);
+  box-shadow: var(--input-inset);
+  color: var(--text-primary);
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+.prompt-input:hover {
+  background: var(--surface-4);
+}
+.prompt-input:focus-visible {
+  outline: none;
+  box-shadow: var(--input-focus-shadow);
+}
+.prompt-input--port {
+  flex: 0 0 96px;
+}
+.prompt-err {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--danger);
 }
 </style>

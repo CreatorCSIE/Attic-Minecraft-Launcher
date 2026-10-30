@@ -231,6 +231,15 @@
     "basic": "Basic settings",
     "addons": "Addons",
     "addonSoon": "Coming soon",
+    "server": {
+      "title": "Multiplayer Direct Connect",
+      "label": "Server address",
+      "portLabel": "Port",
+      "placeholder": "ip or hostname, e.g. mc.example.com",
+      "desc": "Blank port = server default 25565. When set, the launch screen asks whether to join this server directly (one-off --server/--port injection; this profile is not modified).",
+      "save": "Save direct-connect setting",
+      "invalid": "Invalid address (ip/hostname, optional :port) or port out of range (1-65535)"
+    },
     "addonList": {
       "vsync": {
         "name": "VSync",
@@ -314,6 +323,13 @@
     "instanceSettings": "Instance settings",
     "testLaunch": "Test launch",
     "visualizerLaunch": "Launch Infinite Map Visualizer",
+    "serverDialog": {
+      "title": "Join Server Directly",
+      "message": "The active instance has a direct-connect address configured: {server}. Join this server on this launch?",
+      "manualHint": "This version supports classic multiplayer. Enter a server address to join directly on this launch (one-off; not saved to the instance profile).",
+      "direct": "Direct connect",
+      "single": "Singleplayer"
+    },
     "visualizerOff": "The selected version jar does not contain the visualizer class (or is not downloaded yet)",
     "downloadFailed": "Download failed",
     "stage": {

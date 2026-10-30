@@ -220,6 +220,15 @@
     "basic": "基本设置",
     "addons": "Addons",
     "addonSoon": "即将推出",
+    "server": {
+      "title": "多人直连",
+      "label": "服务器地址",
+      "portLabel": "端口",
+      "placeholder": "ip 或域名，例如 mc.example.com",
+      "desc": "端口留空 = 服务器缺省 25565。配置后每次启动前会询问是否直连该服务器（一次性注入 --server/--port，不改本档案）。",
+      "save": "保存直连设置",
+      "invalid": "地址格式非法（ip/域名，可含 :端口）或端口超出 1-65535"
+    },
     "addonList": {
       "vsync": {
         "name": "垂直同步",
@@ -303,6 +312,13 @@
     "instanceSettings": "实例设置",
     "testLaunch": "测试启动",
     "visualizerLaunch": "启动无限地图可视化器",
+    "serverDialog": {
+      "title": "直连服务器",
+      "message": "当前实例配置了直连地址 {server}。本次启动是否直连该服务器？",
+      "manualHint": "该版本支持经典多人联机。输入服务器地址可本次启动直连（一次性，不写入实例档案）。",
+      "direct": "直连启动",
+      "single": "单人启动"
+    },
     "visualizerOff": "选中版本的本地 jar 不含无限地图预览类（或未下载），暂不可用",
     "downloadFailed": "下载失败",
     "stage": {
