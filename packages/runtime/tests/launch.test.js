@@ -273,6 +273,36 @@ test('一次性 visualizer：LaunchRequest 透传注入 -Dlf.visualizer（同 ad
   assert.equal(count(dup), 1);
 });
 
+test('一次性 server 直连：ip[:port] 解析注入 --server/--port（端口恒显式传缺省 25565），非法格式忽略不拦启动', () => {
+  const versionJson = { id: 'b1.7.3', mainClass: 'net.minecraft.client.Minecraft' };
+  // 不带键 = 零注入（老行为零回归）
+  const off = assembleLaunchConfig(versionJson, baseContext());
+  assert.ok(!off.gameArgs.includes('--server'));
+  // 仅主机：--server + --port 25565 恒显式传（端口缺省由本侧注入；裸指令实锤缺 --port = 游戏直进单人）
+  const hostOnly = assembleLaunchConfig(versionJson, { ...baseContext(), server: 'mc.example.com' });
+  assert.deepEqual(hostOnly.gameArgs.slice(-4), ['--server', 'mc.example.com', '--port', '25565']);
+  // 带端口：两参齐发
+  const withPort = assembleLaunchConfig(versionJson, { ...baseContext(), server: '127.0.0.1:25566' });
+  assert.deepEqual(withPort.gameArgs.slice(-4), ['--server', '127.0.0.1', '--port', '25566']);
+  // 插入位：请求侧 gameParams 之后
+  const gp = assembleLaunchConfig(versionJson, { ...baseContext(), server: 'a.b' }, { gameParams: { foo: 'bar' } });
+  assert.deepEqual(gp.gameArgs.slice(-6), ['--foo', 'bar', '--server', 'a.b', '--port', '25565']);
+  // Applet 容器：server 组在 --width/--height 之前
+  const applet = assembleLaunchConfig(
+    { id: 'c0.0.15a', mainClass: APPLET_LAUNCHER_CLASS },
+    { ...baseContext(), width: 854, height: 480, server: 'a.b:1234' },
+  );
+  assert.deepEqual(applet.gameArgs.slice(-8), ['--server', 'a.b', '--port', '1234', '--width', '854', '--height', '480']);
+  // 非法格式（含空格/越界端口）= 忽略 + 诊断，不拦启动
+  const diags = [];
+  const bad = assembleLaunchConfig(versionJson, { ...baseContext(), server: 'bad host!' }, { onDiagnostic: (m) => diags.push(m) });
+  assert.ok(!bad.gameArgs.includes('--server'));
+  assert.equal(diags.length, 1);
+  const badPort = assembleLaunchConfig(versionJson, { ...baseContext(), server: 'a.b:99999' }, { onDiagnostic: (m) => diags.push(m) });
+  assert.ok(!badPort.gameArgs.includes('--server'));
+  assert.equal(diags.length, 2);
+});
+
 test('intelFix：true = -XX:HeapDumpPath 置 jvmArgs 首位（v1 javapath 后首位语义），false/缺省不注入', () => {
   const versionJson = { id: 'b1.7.3', mainClass: 'net.minecraft.client.Minecraft' };
   const on = assembleLaunchConfig(versionJson, { ...baseContext(), intelFix: true });

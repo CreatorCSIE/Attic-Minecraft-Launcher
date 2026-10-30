@@ -51,6 +51,10 @@ export interface LaunchContext {
   /** 一次性无限地图可视化器（LaunchRequest.visualizer 透传，不写档案）：
    * true = addons 目录映射之后补注 `-Dlf.visualizer`（档案已含 visualizer 时不重复）。 */
   visualizer?: boolean;
+  /** 一次性直连地址 `ip[:port]`（LaunchRequest.server 透传，不写档案；启动询问弹窗「直连」才带）：
+   * 解析注入 gameArgs `--server <host> --port <n>`（端口恒显式传，缺省 25565 由本侧注入）；
+   * 非法格式 = 忽略仅诊断，不拦启动。 */
+  server?: string;
 }
 
 export interface AssembleOptions {
@@ -250,6 +254,22 @@ export function assembleLaunchConfig(
   if (opts.gameParams) {
     for (const [key, value] of Object.entries(opts.gameParams)) {
       gameArgs.push(`--${key}`, value);
+    }
+  }
+  // 一次性直连（启动询问弹窗「直连」，LaunchRequest.server 透传，不写档案）：legacyfix GameArgs
+  // 消费 --server/--port。**端口恒显式传**（缺省 25565 由本侧注入）：CLI --server 路径端口缺省 = -1
+  // （GameArgs.getServerPort()），游戏自动加入要求 server+port 参数齐（裸指令实锤 2026-10-30：
+  // 带 --port 真实发起 TCP 连接；缺 --port 直进单人）。25565 缺省只存在于 readServer（-Dlf.server
+  // 属性路径），不吃 CLI 路径——「不显传避免双真相源」的早期假设已被现场证伪。
+  // 非法格式 = 忽略（诊断），不拦启动；插入位 = gameParams 之后、Applet --width/--height 之前。
+  if (context.server) {
+    const m = /^([^:/\s]+)(?::(\d{1,5}))?$/.exec(context.server.trim());
+    const host = m?.[1];
+    const port = m?.[2];
+    if (host && (port === undefined || (Number(port) >= 1 && Number(port) <= 65535))) {
+      gameArgs.push('--server', host, '--port', port ?? '25565');
+    } else {
+      opts.onDiagnostic?.(`[attic-launch] 直连地址格式非法，已忽略：${context.server}`);
     }
   }
   // Applet 容器窗口尺寸（AppletFrame.java L24-25 读 --width/--height，缺省兜底 640x480）：

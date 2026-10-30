@@ -139,6 +139,7 @@ export function instanceViewFromConfig(config: {
   height?: number;
   javaPath?: string;
   addons?: string;
+  server?: string;
   intelFix?: boolean;
   forceUpdate?: boolean;
 }): InstanceView {
@@ -154,5 +155,7 @@ export function instanceViewFromConfig(config: {
   }
   if (config.intelFix !== undefined) view.intelFix = config.intelFix;
   if (config.forceUpdate !== undefined) view.forceUpdate = config.forceUpdate;
+  // 直连地址：空串 = 无效值（视图不携带，保存即删键）
+  if (config.server) view.server = config.server;
   return view;
 }

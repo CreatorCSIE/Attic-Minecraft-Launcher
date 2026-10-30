@@ -329,6 +329,12 @@ export interface LaunchRequest {
    * 注入 `-Dlf.visualizer`（与 addons 同位，§2.6），**不写实例档案**、本次启动后不留痕。
    */
   visualizer?: boolean;
+  /**
+   * 一次性直连地址 `ip[:port]`（启动页「直连/单人」询问弹窗选「直连」才发，来源 =
+   * 实例档案 `InstanceView.server`）：拼装器解析注入 gameArgs `--server`/`--port`（§2.6），
+   * **不写实例档案**、本次启动后不留痕（visualizer 同款一次性语义）。非法格式 = 忽略不拦启动。
+   */
+  server?: string;
 }
 
 /** preload/桥面：渲染进程看到的全部能力面。 */

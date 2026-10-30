@@ -1,6 +1,7 @@
 /**
  * @attic/core-spec — IPC 契约唯一真相（戒律 #2）。
- * 纯形状与常量：不含任何实现逻辑；quirk/版本判断一律以数据字段表达（戒律 #1）。
+ * 纯形状、常量与无副作用校验助手（如 parseServerAddress）：不含任何实现逻辑；
+ * quirk/版本判断一律以数据字段表达（戒律 #1）。
  */
 
 export type { Account, AccountType, AccountView, MicrosoftAccount, OfflineAccount } from './account';
@@ -68,4 +69,5 @@ export type {
   ThemeMode,
   UpdatePolicy,
 } from './settings';
-export { INSTANCE_ADDONS, DEFAULT_ADDONS } from './settings';
+export { MULTIPLAYER_JOIN_LAUNCH_METHODS } from './version';
+export { INSTANCE_ADDONS, DEFAULT_ADDONS, parseServerAddress } from './settings';

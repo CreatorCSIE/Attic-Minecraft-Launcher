@@ -109,6 +109,14 @@ export interface BetacraftExtension {
 }
 
 /**
+ * 支持经典多人「加入服务器」的 launchMethod 值（数据表键控，非版本 id 判断，戒律 #1）。
+ * 启动页直连询问弹窗的缺省触发面：激活实例未配 `server` 时，选中版本命中此表仍弹窗
+ * （现场填地址一次性直连，不写实例档案）；配了 server 则无条件弹（§2.7）。
+ * 事实来源：Betacraft `.info` launch-method——ClassicMpWithSaving = c0.28+（MP + 存档）。
+ */
+export const MULTIPLAYER_JOIN_LAUNCH_METHODS: readonly string[] = ['ClassicMpWithSaving'];
+
+/**
  * 版本 JSON：Mojang 兼容字段 + Betacraft 扩展。
  * 远古版本 JSON 大量字段缺失（无 arguments/无 downloads.client），全部可选；
  * 运行时按"缺什么补什么"的解析器策略处理（Phase 2），契约只声明形状。

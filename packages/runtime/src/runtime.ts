@@ -1273,6 +1273,8 @@ export class AtticRuntime {
       javaPath: view.javaPath,
       // v1 `addons` 键 = 逗号分隔；[] → 空串 = 显式全关（区别于无键的 legacyfix 缺省）
       addons: view.addons?.join(','),
+      // Attic 扩展键：直连地址原样存（undefined = 清空删键，与 javaPath 同语义）
+      server: view.server,
       // v1 同名键 intelFix（缺键 = v1 缺省 true，视图 undefined 不落键）；forceUpdate = Attic 扩展键
       intelFix: view.intelFix,
       forceUpdate: view.forceUpdate,
@@ -1444,6 +1446,8 @@ export class AtticRuntime {
       intelFix: this.platform === 'win32' && instance.intelFix !== false,
       // 一次性可视化器（「≡」菜单动作项）：true 才带键，false/缺省不落（dryRun/launch 同走此路）
       visualizer: request.visualizer === true ? true : undefined,
+      // 一次性直连（启动询问弹窗「直连」才带键，来源 = 档案 server；拼装器解析，§2.6）
+      server: request.server,
       width: instance.width,
       height: instance.height,
       assetsDir: path.join(this.root, 'assets'),

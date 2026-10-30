@@ -150,6 +150,26 @@ export interface InstanceView {
    * Attic 判定为实例属性放基本设置）。true = 启动时旁路 jar/库/资产的「已存在即复用」检查重下。
    */
   forceUpdate?: boolean;
+  /**
+   * 多人直连地址 `ip[:port]`（Attic 扩展键，原样存；v1 无对应物）。非空 = 启动页询问
+   * 「直连/单人」，直连走 `LaunchRequest.server` 一次性注入（§2.6），**本键只在弹窗里被读、
+   * 不因启动而改写**；缺键/空 = 仅当选中版本命中 `MULTIPLAYER_JOIN_LAUNCH_METHODS`
+   * （经典多人 launchMethod 数据表）时仍询问（弹窗现场填地址、一次性），否则直接单人启动。
+   */
+  server?: string;
+}
+
+/**
+ * 解析直连地址 `ip[:port]`（UI 校验/展示共用；runtime 拼装器侧解析语义一致）：
+ * host 非空无冒号无空白，端口可选 1-65535；非法 = null。
+ */
+export function parseServerAddress(raw: string): { host: string; port?: number } | null {
+  const m = /^([^:/\s]+)(?::(\d{1,5}))?$/.exec(raw.trim());
+  const host = m?.[1];
+  if (!m || !host) return null;
+  const port = m[2] !== undefined ? Number(m[2]) : undefined;
+  if (port !== undefined && (port < 1 || port > 65535)) return null;
+  return { host, ...(port !== undefined ? { port } : {}) };
 }
 
 /**

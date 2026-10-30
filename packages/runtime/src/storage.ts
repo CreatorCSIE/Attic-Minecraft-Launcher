@@ -180,6 +180,8 @@ export interface InstanceConfig {
   javaPath?: string;
   isJavaPathNew?: boolean;
   addons?: string;
+  /** Attic 扩展键（v1 无对应物）：多人直连地址 `ip[:port]` 原样存（启动询问弹窗数据源）。 */
+  server?: string;
   /** Attic 扩展键（v1 无对应物——v1 是全局 static）：启动时旁路「已存在即复用」强制重下。 */
   forceUpdate?: boolean;
 }
@@ -240,7 +242,7 @@ export function loadInstance(root: string, name: string): InstanceConfig | null 
   if (width !== undefined) config.width = width;
   const height = toNumber(props['height']);
   if (height !== undefined) config.height = height;
-  for (const key of ['javaPath', 'addons'] as const) {
+  for (const key of ['javaPath', 'addons', 'server'] as const) {
     if (props[key] !== undefined) config[key] = props[key];
   }
   for (const key of ['proxy', 'keepopen', 'RPC', 'intelFix', 'console', 'isJavaPathNew', 'forceUpdate'] as const) {
@@ -320,6 +322,7 @@ export function saveInstance(root: string, config: InstanceConfig): void {
     launchArgs: config.launchArgs,
     javaPath: config.javaPath,
     addons: config.addons,
+    server: config.server,
     width: config.width === undefined ? undefined : String(config.width),
     height: config.height === undefined ? undefined : String(config.height),
   };

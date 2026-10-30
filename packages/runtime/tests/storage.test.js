@@ -107,6 +107,18 @@ test('addons 档案回环：逗号串原样保存/读回；空串=显式全关�
   assert.equal(loadInstance(root, 'c').addons, undefined);
 });
 
+test('server 档案回环：原样保存/读回；视图缺席 = 清空删键（javaPath 同语义）；空串视图不携带', (t) => {
+  const root = tempRoot(t);
+  ensureLayout(root);
+  saveInstance(root, { name: 's1', version: 'b1.7.3', gameDir: path.join(root, 's1'), server: 'mc.example.com:25565' });
+  assert.equal(loadInstance(root, 's1').server, 'mc.example.com:25565');
+  saveInstance(root, { name: 's1', version: 'b1.7.3', gameDir: path.join(root, 's1') });
+  assert.equal(loadInstance(root, 's1').server, undefined);
+  const base = { name: 'x', version: 'b1.7.3', gameDir: '/g' };
+  assert.equal(instanceViewFromConfig({ ...base, server: '' }).server, undefined);
+  assert.equal(instanceViewFromConfig({ ...base, server: '1.2.3.4' }).server, '1.2.3.4');
+});
+
 test('instanceViewFromConfig：addons 三态（无键 undefined / 空串 [] / trim 切分）', () => {
   const base = { name: 'x', version: 'b1.7.3', gameDir: '/g' };
   assert.equal(instanceViewFromConfig(base).addons, undefined);
