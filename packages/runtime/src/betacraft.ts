@@ -34,7 +34,12 @@ const ERA_TABLE: { from: number; era: VersionEra }[] = [
   { from: Date.UTC(2010, 1, 27), era: 'infdev' },
   { from: Date.UTC(2010, 5, 28), era: 'alpha' },
   { from: Date.UTC(2010, 11, 20), era: 'beta' },
-  { from: Date.UTC(2011, 10, 18), era: 'release-1.0-1.5.2' },
+  // 边界取证（2026-10-30 串组事故修正 + 用户拍板 rc 系归 beta 时代）：分组吃 compile 日期，
+  // 原边界按 1.0.0 官方发布日 11-18 定 → 1.0.0 全族跌进 beta 桶。用户口径 = rc1/rc2 仍属 beta
+  // 段（发布候选），release 组自 tominecon/1.0.0 起。新边界钉进空窗：rc2-1656=1321203394000
+  // （11-13 23:36 +08）< 11-14 00:00 UTC=1321228800000 ≤ tominecon=1321267414000（11-14 11:23 +08）。
+  // 本边界只当 release 锚；rc 系归 beta 由 ERA_FIXUPS 命名规则兜底（见其头注）。
+  { from: Date.UTC(2011, 10, 14), era: 'release-1.0-1.5.2' },
 ];
 
 export function eraForDate(ms: number | undefined): VersionEra | undefined {
@@ -53,8 +58,15 @@ const DATE_FIXUPS: Record<string, number> = {
   '2.0-preview': 1364841285000,
 };
 
-/** 4k-* 单开年代组（Classic 之后展示，用户指定）。 */
-const ERA_FIXUPS: { prefix: string; era: VersionEra }[] = [{ prefix: '4k-', era: '4k' }];
+/** 4k-* 单开年代组（Classic 之后展示，用户指定）。
+ *  1.0.0-rc* 钉回 beta：年代本质是系列/命名分类，日期只是近似——rc 系 compile 落在 beta 末位
+ *  （b1.9-pre6，11-11）之后、1.0.0/tominecon 之前，纯日期边界无法同时满足「rc 归 beta + 
+ *  tominecon/1.0.0 归 release」（用户 2026-10-30 点破例外），故边界（11-14）只当 release 锚，
+ *  rc 归属由命名规则兜底（同族先例：4k- 前缀、-renew 继承、DATE_FIXUPS）。 */
+const ERA_FIXUPS: { prefix: string; era: VersionEra }[] = [
+  { prefix: '4k-', era: '4k' },
+  { prefix: '1.0.0-rc', era: 'beta' },
+];
 
 export function parseVersionList(text: string): VersionRef[] {
   const refs: VersionRef[] = [];
@@ -86,6 +98,19 @@ export function parseVersionList(text: string): VersionRef[] {
       era,
       installed: false,
     });
+  }
+  // `-renew` = BC 重传替身行，日期栏两代写法不一（c0.0.13a_03-renew 保原时刻；c0.30-c-1900-renew
+  // 写重传时刻 2011-07-31 → eraForDate 误归 beta，用户 2026-10-30 报「Classic 组不见了」）。
+  // 通用矫正 = 基名（去后缀）在清单 → 继承基名 compile/release/era；基名缺席保持本行原样。
+  // 数据驱动矫正，非客户端版本推断（戒律 #1 同族：与 DATE_FIXUPS/ERA_FIXUPS 一个层级）。
+  const byId = new Map(refs.map((ref) => [ref.id, ref]));
+  for (const ref of refs) {
+    if (!ref.id.endsWith('-renew')) continue;
+    const base = byId.get(ref.id.slice(0, -'-renew'.length));
+    if (!base) continue;
+    ref.compileDate = base.compileDate;
+    ref.releaseDate = base.releaseDate;
+    ref.era = base.era;
   }
   return refs;
 }

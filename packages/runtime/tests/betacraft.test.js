@@ -73,6 +73,37 @@ test('parseVersionList：数据缺陷矫正（双 0 日期归位 + 4k 单开年�
   assert.equal(by.get('4k-0144').era, '4k');
 });
 
+test('parseVersionList：1.0.0 边界区命名规则（rc 系无条件钉 beta，tominecon/1.0.0 归 release）', () => {
+  const text = [
+    // 假想更晚 compile 的 rc（越过 11-14 边界）——命名规则兜底，仍归 beta
+    '1.0.0-rc9``1321400000000`1321400000000',
+    '1.0.0-tominecon``1321267414000`1321395786000',
+    '1.0.0``1321289032000`1321653290000',
+  ].join('\n');
+  const by = new Map(parseVersionList(text).map((r) => [r.id, r]));
+  assert.equal(by.get('1.0.0-rc9').era, 'beta');
+  assert.equal(by.get('1.0.0-tominecon').era, 'release-1.0-1.5.2');
+  assert.equal(by.get('1.0.0').era, 'release-1.0-1.5.2');
+});
+
+test('parseVersionList：-renew 重传行继承基名日期/年代（基名缺席不动）', () => {
+  const text = [
+    'c0.30-c-1900`c0.30_01c`1257879638000`1257879900001`classic_7',
+    // 重传时刻写进日期栏（真实事故形状）：不矫正则 eraForDate(2011-07-31) 误归 beta
+    'c0.30-c-1900-renew`c0.30_01c`1312118096000`1312118096000`classic_7',
+    'orphan-renew``1312118096000`1312118096000',
+  ].join('\n');
+  const by = new Map(parseVersionList(text).map((r) => [r.id, r]));
+  const renew = by.get('c0.30-c-1900-renew');
+  assert.equal(renew.era, 'classic');
+  assert.equal(renew.compileDate, 1257879638000);
+  assert.equal(renew.releaseDate, 1257879900001);
+  // 基名缺席：三值原样保留（无副作用）
+  const orphan = by.get('orphan-renew');
+  assert.equal(orphan.compileDate, 1312118096000);
+  assert.equal(orphan.era, 'beta');
+});
+
 test('eraForDate：年代边界（编译日期）', () => {
   assert.equal(eraForDate(1242245460000), 'pre-classic'); // rd-20090513
   assert.equal(eraForDate(1243796664000), 'classic'); // c0.0.15a
@@ -81,6 +112,11 @@ test('eraForDate：年代边界（编译日期）', () => {
   assert.equal(eraForDate(1277856000000), 'alpha'); // 2010-06-30
   assert.equal(eraForDate(1292866740000), 'beta'); // b1.0
   assert.equal(eraForDate(1310110334000), 'beta'); // b1.7.3
+  assert.equal(eraForDate(1321025580000), 'beta'); // b1.9-pre6（真 beta 末位）
+  assert.equal(eraForDate(1321196546000), 'beta'); // 1.0.0-rc1（用户拍板：rc 系仍属 beta 段）
+  assert.equal(eraForDate(1321203394000), 'beta'); // 1.0.0-rc2-1656（rc 末位，边界前最后一名）
+  assert.equal(eraForDate(1321267414000), 'release-1.0-1.5.2'); // 1.0.0-tominecon（release 组首位）
+  assert.equal(eraForDate(1321289032000), 'release-1.0-1.5.2'); // 1.0.0 本尊
   assert.equal(eraForDate(1368748800000), 'release-1.0-1.5.2'); // 1.5.2
 });
 
