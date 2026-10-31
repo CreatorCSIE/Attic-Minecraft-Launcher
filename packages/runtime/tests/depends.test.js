@@ -109,6 +109,22 @@ test('幂等：版本号一致时二次调用零下载', async () => {
   assert.equal(state.downloads.length, 0);
 });
 
+test('暂存 zip 解包后即删 + 幂等路径清扫历史遗留（v1 unzip delete=true 语义，缺陷修复 2026-10-31）', async () => {
+  const { state, io } = makeEnv();
+  await ensureDepends(io, DEFAULT_ENDPOINTS);
+  assert.ok(!fs.existsSync(path.join(state.root, 'launcher', 'libs.zip')));
+  assert.ok(!fs.existsSync(path.join(state.root, 'launcher', 'natives.zip')));
+  // 历史遗留清扫：旧版本残留的 zip 塞回 launcher/，幂等路径（零下载）应将其删除
+  fs.writeFileSync(path.join(state.root, 'launcher', 'libs.zip'), 'leftover');
+  fs.writeFileSync(path.join(state.root, 'launcher', 'natives.zip'), 'leftover');
+  state.downloads.length = 0;
+  io.settings = state.settings;
+  await ensureDepends(io, DEFAULT_ENDPOINTS);
+  assert.equal(state.downloads.length, 0);
+  assert.ok(!fs.existsSync(path.join(state.root, 'launcher', 'libs.zip')));
+  assert.ok(!fs.existsSync(path.join(state.root, 'launcher', 'natives.zip')));
+});
+
 test('版本变更：重拉并清空旧库池（sentinel 消失）', async () => {
   const { state, io } = makeEnv();
   await ensureDepends(io, DEFAULT_ENDPOINTS);

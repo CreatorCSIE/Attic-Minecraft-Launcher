@@ -114,14 +114,21 @@ export async function ensureDepends(
   } catch {
     remote = null;
   }
-  if (!opts.force && isDependsCurrent(io.root, io.settings, remote)) return;
+  if (!opts.force && isDependsCurrent(io.root, io.settings, remote)) {
+    dropStaleZips(io.root);
+    return;
+  }
   if (!remote) {
     // 拿不到版本号：本地已有库集且非强更 → v1 assume-all-good，不拦启动。
-    if (!opts.force && isDependsCurrent(io.root, io.settings, null)) return;
+    if (!opts.force && isDependsCurrent(io.root, io.settings, null)) {
+      dropStaleZips(io.root);
+      return;
+    }
     throw new Error('无法获取 depends-version.txt，且本地 BC 基础库集（libs/natives）缺失或需强制更新——无法完成');
   }
 
-  // v1 L922-930 同位：zip 暂存 launcher/（同名覆盖，解包后不清理，与 v1 一致）。
+  // v1 L922-930 同位：zip 暂存 launcher/（同名覆盖）；v1 Util.unzip(delete=true)
+  // 解包后即删源 zip（Util.java L259-263 定罪）——照做，解包成功后清理。
   const libsZip = path.join(launcherDir(io.root), 'libs.zip');
   const nativesZip = path.join(launcherDir(io.root), 'natives.zip');
   await io.download(endpoints.libsZip(io.os), libsZip, 'libs.zip');
@@ -132,7 +139,15 @@ export async function ensureDepends(
   fs.mkdirSync(nativesDir(io.root), { recursive: true });
   extractZipTo(nativesZip, nativesDir(io.root));
   extractZipTo(libsZip, binDir(io.root));
+  dropStaleZips(io.root);
   io.saveVersionKeys({ 'libs-version': remote.libs, 'natives-version': remote.natives });
+}
+
+/** v1 unzip(delete=true) 语义：解包后删暂存 zip；幂等路径顺带清扫历史遗留（缺陷修复 2026-10-31）。 */
+function dropStaleZips(root: string): void {
+  for (const name of ['libs.zip', 'natives.zip']) {
+    fs.rmSync(path.join(launcherDir(root), name), { force: true });
+  }
 }
 
 function removeContents(dir: string): void {
