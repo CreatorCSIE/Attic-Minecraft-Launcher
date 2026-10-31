@@ -20,7 +20,6 @@ const portableFallback = computed(() => info.value?.portable?.fallback === true)
   <!-- data-tauri-drag-region = Tauri 壳拖拽通道（-webkit-app-region 仅 Electron 认，双壳并用无副作用） -->
   <header class="titlebar" data-tauri-drag-region>
     <div class="brand">
-      <span class="mark" aria-hidden="true"></span>
       <span class="name">{{ t('app.title') }}</span>
     </div>
     <span
@@ -29,7 +28,6 @@ const portableFallback = computed(() => info.value?.portable?.fallback === true)
       :title="t('portable.fallbackTooltip', { path: info?.dataRoot ?? '' })"
     >{{ t('portable.fallbackBadge') }}</span>
     <div class="right">
-      <span class="dot" :class="hasBridge ? 'dot--ok' : 'dot--muted'" :title="hasBridge ? 'bridge' : 'no-bridge'"></span>
       <div v-if="hasBridge" class="wctls">
         <button
           class="wctl"
@@ -91,13 +89,6 @@ const portableFallback = computed(() => info.value?.portable?.fallback === true)
   align-items: center;
   gap: var(--space-2);
 }
-.mark {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 8px var(--accent-soft);
-}
 .name {
   font-size: var(--fs-sm);
   font-weight: 600;
@@ -117,17 +108,6 @@ const portableFallback = computed(() => info.value?.portable?.fallback === true)
   display: flex;
   align-items: center;
   gap: var(--space-3);
-}
-.dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-}
-.dot--ok {
-  background: var(--ok);
-}
-.dot--muted {
-  background: var(--text-muted);
 }
 /* —— 窗控制三键：no-drag，否则点击被拖拽区吞掉 —— */
 .wctls {
