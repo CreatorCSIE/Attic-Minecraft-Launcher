@@ -252,7 +252,9 @@ function wireEvents(): void {
     backlogFor(payload.pid).exit = payload;
     broadcast(IPC_EVENTS.GAME_EXIT, payload);
   });
-  for (const event of [IPC_EVENTS.DOWNLOAD_PROGRESS, IPC_EVENTS.CUSTOM_INFO_CHANGED] as const) {
+  // MS_LOGIN 漏钉曾致 electron 双壳设备码弹窗收不到终局、状态永不更新（2026-10-31 测试者报障；
+  // tauri 壳事件表早已接对，故开发验收未暴露）——新增宿主事件必须同时进本列表与 lib.rs EVENT_CHANNELS
+  for (const event of [IPC_EVENTS.DOWNLOAD_PROGRESS, IPC_EVENTS.CUSTOM_INFO_CHANGED, IPC_EVENTS.MS_LOGIN] as const) {
     runtime.on(event, (payload: AtticEventPayloads[typeof event]) => {
       broadcast(event, payload);
     });

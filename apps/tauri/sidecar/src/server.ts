@@ -115,7 +115,9 @@ function wireEvents(): void {
     backlogFor(payload.pid).exit = payload;
     send({ event: IPC_EVENTS.GAME_EXIT, payload });
   });
-  for (const event of [IPC_EVENTS.DOWNLOAD_PROGRESS, IPC_EVENTS.CUSTOM_INFO_CHANGED] as const) {
+  // MS_LOGIN 与 electron main.ts 同款漏钉（2026-10-31 测试者报障修复）：新增宿主事件
+  // 必须三处同步——本列表、electron main.ts wireEvents、lib.rs EVENT_CHANNELS
+  for (const event of [IPC_EVENTS.DOWNLOAD_PROGRESS, IPC_EVENTS.CUSTOM_INFO_CHANGED, IPC_EVENTS.MS_LOGIN] as const) {
     runtime.on(event, (payload) => {
       send({ event, payload });
     });
