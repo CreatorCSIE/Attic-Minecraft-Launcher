@@ -24,6 +24,9 @@ export interface MicrosoftAccount extends AccountBase {
   tokenExpiresAt?: number;
   /** Minecraft profile id（sessionid 第三段）。 */
   profileId?: string;
+  /** 官方皮肤贴图 URL（textures.minecraft.net，登录/刷新时从 profile textures 解出；
+   * 公开资源非机密，明文落盘）。 */
+  skinUrl?: string;
 }
 
 export interface OfflineAccount extends AccountBase {
@@ -39,4 +42,6 @@ export interface AccountView {
   type: AccountType;
   /** 微软账户：令牌是否仍有效。 */
   tokenValid?: boolean;
+  /** 微软账户：官方皮肤贴图 URL（公开资源；缺席 = 旧账户未记录，UI 回落 minotar/内置脸）。 */
+  skinUrl?: string;
 }

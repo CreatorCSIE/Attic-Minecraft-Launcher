@@ -14,7 +14,7 @@ const { current } = useAccounts();
 
 <template>
   <button class="hero" type="button" :title="t('account.title')" @click="emit('open-accounts')">
-    <SkinAvatar class="face" :username="current?.name ?? 'Steve'" :uuid="current?.id" :size="56" rounded="var(--radius-md)" />
+    <SkinAvatar class="face" :username="current?.name ?? 'Steve'" :uuid="current?.id" :skin-url="current?.skinUrl ?? ''" :size="56" rounded="var(--radius-md)" />
     <span class="text">
       <span class="name">{{ current ? current.name : t('account.none') }}</span>
       <span class="welcome">{{ t('account.welcome') }}</span>

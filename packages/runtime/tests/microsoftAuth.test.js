@@ -48,6 +48,8 @@ function mockFetch(routes) {
       ok: status >= 200 && status < 300,
       status,
       json: async () => (res.json === undefined ? null : res.json),
+      // jsonWithRaw 消费面：text = 序列化 mock json（缺省 = 空串 → unparsable 分支）。
+      text: async () => (res.json === undefined ? '' : JSON.stringify(res.json)),
     };
   };
   fetchImpl.calls = calls;
@@ -78,7 +80,16 @@ function happyRoutes(overrides = {}) {
     '/user/authenticate': { json: { Token: 'XBL-TOKEN', DisplayClaims: { xui: [{ uhs: 'UHS123' }] } } },
     '/xsts/authorize': { json: { Token: 'XSTS-TOKEN', DisplayClaims: { xui: [{ uhs: 'UHS123' }] } } },
     '/login_with_xbox': { json: { access_token: `MC-${SECRET}`, token_type: 'Bearer', expires_in: '86400' } },
-    '/minecraft/profile': { json: { id: 'cafe1234deadbeef00000000000000ff', name: 'SteveOnline' } },
+    // 真响应形状（2026-10-31 实测：顶层 skins[] + http url + variant，非旧 properties/base64 形状）。
+    '/minecraft/profile': {
+      json: {
+        id: 'cafe1234deadbeef00000000000000ff',
+        name: 'SteveOnline',
+        skins: [{ id: 'sk-1', state: 'ACTIVE', url: 'http://textures.minecraft.net/texture/deadbeefcafe', variant: 'SLIM' }],
+        capes: [],
+        profileActions: {},
+      },
+    },
     ...overrides,
   };
 }
@@ -163,6 +174,43 @@ test('六步链 happy path：各步载荷/头与 v1 源码逐字段对齐', asyn
   assert.equal(chain.mcAccessToken, `MC-${SECRET}`);
   assert.equal(chain.mcExpiresIn, 86400);
   assert.equal(chain.refreshToken, `MS-REFRESH.${SECRET}`);
+  // 皮肤 URL 从 profile skins[] ACTIVE 项解出（UI 头像一级数据源），http 统一升级 https。
+  assert.equal(chain.skinUrl, 'https://textures.minecraft.net/texture/deadbeefcafe');
+});
+
+test('皮肤解析旧形状兼容：properties.textures(base64) 仍可解', async () => {
+  const { deps: d } = makeDeps(
+    happyRoutes({
+      '/minecraft/profile': {
+        json: {
+          id: 'cafe1234deadbeef00000000000000ff',
+          name: 'SteveOnline',
+          properties: [
+            {
+              name: 'textures',
+              value: Buffer.from(
+                JSON.stringify({ skins: { SKIN: { url: 'http://textures.minecraft.net/texture/legacyb64' } } }),
+              ).toString('base64'),
+            },
+          ],
+        },
+      },
+    }),
+  );
+  const chain = await runAuthTail(d, { accessToken: 'MS-AT', refreshToken: 'MS-RT' });
+  assert.equal(chain.skinUrl, 'https://textures.minecraft.net/texture/legacyb64');
+});
+
+test('皮肤缺席/坏值 = skinUrl 缺席，不拦登录', async () => {
+  const { deps: d } = makeDeps(
+    happyRoutes({
+      '/minecraft/profile': {
+        json: { id: 'cafe1234deadbeef00000000000000ff', name: 'SteveOnline', skins: [{ state: 'INACTIVE', url: 'http://textures.minecraft.net/texture/x' }], properties: [{ name: 'textures', value: '!!not-base64-json' }] },
+      },
+    }),
+  );
+  const chain = await runAuthTail(d, { accessToken: 'MS-AT', refreshToken: 'MS-RT' });
+  assert.equal(chain.skinUrl, undefined);
 });
 
 test('轮询退避：authorization_pending 继续（interval 不变）、slow_down +5s', async () => {
@@ -374,6 +422,7 @@ test('msStartLogin 成功终局：MS_LOGIN success=AccountView；accounts.json t
     name: 'SteveOnline',
     type: 'microsoft',
     tokenValid: true,
+    skinUrl: 'https://textures.minecraft.net/texture/deadbeefcafe',
   });
   assert.ok(!JSON.stringify(event).includes(SECRET), '事件载荷零 token（渲染只见 AccountView）');
 
@@ -423,13 +472,54 @@ test('msRefreshAccount：装载旧明文 → 重放链 → 落盘更新，返回
     msDeps: { dpapi: { platform: 'linux' } },
   });
   const view = await rt.msRefreshAccount('cafe1234deadbeef00000000000000ff');
-  assert.deepEqual(view, { id: 'cafe1234deadbeef00000000000000ff', name: 'SteveOnline', type: 'microsoft', tokenValid: true });
+  assert.deepEqual(view, {
+    id: 'cafe1234deadbeef00000000000000ff',
+    name: 'SteveOnline',
+    type: 'microsoft',
+    tokenValid: true,
+    skinUrl: 'https://textures.minecraft.net/texture/deadbeefcafe',
+  });
   const parsed = JSON.parse(fs.readFileSync(path.join(dir, 'launcher', 'accounts.json'), 'utf8'));
   assert.equal(parsed[0].accessToken, `MC-${SECRET}`);
   assert.ok(parsed[0].tokenExpiresAt > Date.now());
   await assert.rejects(rt.msRefreshAccount('nope'), /账户不存在/);
   const offline = rt.addAccount('SteveOffline');
   await assert.rejects(rt.msRefreshAccount(offline.id), /仅微软账户/);
+});
+
+test('skinUrl 惰性回填：旧账户（无 skinUrl 落盘）首拉列表后台补跑刷新链回填', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'attic-skinfill-'));
+  fs.mkdirSync(path.join(dir, 'launcher'), { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, 'launcher', 'accounts.json'),
+    JSON.stringify([
+      {
+        id: 'cafe1234deadbeef00000000000000ff',
+        name: 'SteveOnline',
+        type: 'microsoft',
+        accessToken: `MC-${SECRET}`,
+        refreshToken: `MS-REFRESH.${SECRET}`,
+        tokenExpiresAt: Date.now() + 86400_000, // 令牌仍有效（无 UI 重验入口）→ 只能靠回填
+        profileId: 'cafe1234deadbeef00000000000000ff',
+      },
+    ]),
+    'utf8',
+  );
+  const rt = new AtticRuntime({
+    rootDir: dir,
+    fetchImpl: mockFetch(happyRoutes()),
+    msDeps: { dpapi: { platform: 'linux' } },
+  });
+  // 首拉 = 当帧旧数据 + 后台回填启动；回填完成后（磁盘出现 skinUrl）再拉即见新皮肤。
+  const first = await rt.listAccounts();
+  assert.equal(first[0].skinUrl, undefined);
+  await until(() => {
+    const raw = JSON.parse(fs.readFileSync(path.join(dir, 'launcher', 'accounts.json'), 'utf8'));
+    return raw[0].skinUrl === 'https://textures.minecraft.net/texture/deadbeefcafe';
+  });
+  const second = await rt.listAccounts();
+  assert.equal(second[0].skinUrl, 'https://textures.minecraft.net/texture/deadbeefcafe');
+  fs.rmSync(dir, { recursive: true, force: true });
 });
 
 test('CLIENT_ID 生效值：内嵌缺省 → settings.microsoftClientId 覆盖', async (t) => {

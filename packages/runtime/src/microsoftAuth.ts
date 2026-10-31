@@ -19,12 +19,14 @@ import type { MsDeviceCode, MsLoginErrorCode } from '@attic/core-spec';
 import type { FetchImpl } from './betacraft';
 
 /**
- * 缺省 CLIENT_ID（Azure 应用注册 15bc4a50，2026-10-31 落定；个人账户租户 + 公共客户端流已开，
- * devicecode 端点实测 200，无 secret——plan.md §7 安全约束③：public client 公开常量，
- * 随安装包分发不构成泄漏面。注：前值 c24c74e6 因单一租户注册 + 公共流未开被弃）。
+ * 缺省 CLIENT_ID（**临时 = Betacraft 社区白名单 id**，v1 MicrosoftAuth.java L28 同源——Mojang 对
+ * 第三方启动器实行 app 白名单制，未过审 id 在 login_with_xbox 被 403 "Invalid app registration"，
+ * 2026-10-31 实测实锤；借用面风险 = Mojang 可随时撤白（LiquidBounce 先例），仅作过审前过渡）。
+ * 自有 id 15bc4a50（Azure 应用注册，个人账户租户 + 公共客户端流 + devicecode 实测 200）已提交
+ * aka.ms/mce-reviewappid 白名单审批，**批下来即日换回**。注：更早值 c24c74e6 因单一租户+公共流未开被弃。
  * 生效值 = settings.microsoftClientId || DEFAULT_MS_CLIENT_ID（覆盖键供换绑/排障）。
  */
-export const DEFAULT_MS_CLIENT_ID = '15bc4a50-ecdd-4573-ad32-aa5114ed76ef';
+export const DEFAULT_MS_CLIENT_ID = '8075fa74-4091-4356-a0b8-a7c118ef121c';
 
 /** 端点白名单（plan.md §7 安全约束②所列五域；msFetch 硬闸，域外直接 internal）。 */
 export const MS_HOST_WHITELIST: ReadonlySet<string> = new Set([
@@ -75,6 +77,8 @@ export interface DpapiDeps {
   spawnImpl?: typeof spawn;
   platform?: NodeJS.Platform;
   timeoutMs?: number;
+  /** 宿主本地诊断日志（失败原因落 launcher.log；永不跨 IPC——脱敏闸不变）。 */
+  log?: (msg: string) => void;
 }
 
 /** 认证链依赖（fetch 面 + CLIENT_ID + 可注入的轮询退避/IP 解析/DPAPI 执行体）。 */
@@ -85,6 +89,8 @@ export interface MsAuthDeps {
   sleep?: SleepFn;
   lookup?: LookupFn;
   dpapi?: DpapiDeps;
+  /** 宿主本地诊断日志（internal 归因用：步骤+HTTP 状态+OAuth error 字段；token/响应体原文不落）。 */
+  log?: (msg: string) => void;
 }
 
 // ---------- 端点白名单硬闸 + 统一请求 helper ----------
@@ -107,7 +113,10 @@ export function isMsEndpointAllowed(url: string): boolean {
 
 /** 唯一出门口：host 不在五域白名单 = 直接 internal（纪律不是建议）；传输失败 = network。 */
 async function msFetch(deps: MsAuthDeps, url: string, init: RequestInit = {}): Promise<Response> {
-  if (!isMsEndpointAllowed(url)) throw new MsAuthError('internal');
+  if (!isMsEndpointAllowed(url)) {
+    deps.log?.(`whitelist-deny host=${new URL(url).host}`);
+    throw new MsAuthError('internal');
+  }
   try {
     return await deps.fetchImpl(url, { ...init, signal: deps.signal });
   } catch (error) {
@@ -116,13 +125,20 @@ async function msFetch(deps: MsAuthDeps, url: string, init: RequestInit = {}): P
   }
 }
 
-/** 响应体 JSON（解析失败 = null；body 永不进错误消息——脱敏闸）。 */
-async function jsonOrNull(res: Response): Promise<Record<string, unknown> | null> {
+/** 响应体 = JSON + 原文首 300 字符（json 解析失败 = null）。raw 只进宿主本地日志归因，永不跨 IPC——脱敏闸不变。 */
+async function jsonWithRaw(res: Response): Promise<{ json: Record<string, unknown> | null; raw: string }> {
+  let text: string;
   try {
-    const parsed: unknown = await res.json();
-    return parsed !== null && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null;
+    text = await res.text();
   } catch {
-    return null;
+    return { json: null, raw: '(body-read-fail)' };
+  }
+  const raw = text.replace(/\s+/g, ' ').slice(0, 300);
+  try {
+    const parsed: unknown = JSON.parse(text);
+    return { json: parsed !== null && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null, raw };
+  } catch {
+    return { json: null, raw };
   }
 }
 
@@ -135,6 +151,34 @@ function num(body: Record<string, unknown> | null, key: string): number | undefi
   const v = body?.[key];
   const n = typeof v === 'number' ? v : typeof v === 'string' ? Number(v) : NaN;
   return Number.isFinite(n) ? n : undefined;
+}
+
+/**
+ * internal 归因（宿主本地诊断面）：步骤 + HTTP 状态 + OAuth error/error_description/XErr 摘要
+ * 进 deps.log（launcher.log 本地可见；error_description 为 AADSTS 说明文本，不含 token）。
+ * 跨 IPC 面不变——事件/错误消息仍只有分类码（脱敏硬闸）。
+ */
+function failInternal(
+  deps: MsAuthDeps,
+  step: string,
+  res?: { status: number },
+  body?: Record<string, unknown> | null,
+  raw?: string,
+): MsAuthError {
+  const parts = [step];
+  if (res) parts.push(`status=${res.status}`);
+  if (body === null) parts.push(`body=unparsable(非JSON/代理劫持嫌疑) raw=${raw ?? '(none)'}`);
+  else if (body) {
+    const err = str(body, 'error');
+    const desc = str(body, 'error_description');
+    const xerr = num(body, 'XErr');
+    if (err) parts.push(`error=${err}`);
+    if (desc) parts.push(`desc=${desc.slice(0, 200)}`);
+    if (xerr !== undefined) parts.push(`XErr=${xerr}`);
+    if (!err && !desc && xerr === undefined) parts.push(`fields=missing raw=${raw ?? '(none)'}`);
+  }
+  deps.log?.(parts.join(' '));
+  return new MsAuthError('internal');
 }
 
 const FORM_HEADERS: Record<string, string> = { 'Content-Type': 'application/x-www-form-urlencoded' };
@@ -163,11 +207,11 @@ export async function requestDeviceCode(deps: MsAuthDeps): Promise<MsDeviceCodeI
     headers: FORM_HEADERS,
     body: `client_id=${deps.clientId}&scope=XboxLive.signin offline_access`,
   });
-  const body = await jsonOrNull(res);
+  const { json: body, raw } = await jsonWithRaw(res);
   const deviceCode = str(body, 'device_code');
   const userCode = str(body, 'user_code');
   const verificationUri = str(body, 'verification_uri');
-  if (!res.ok || !deviceCode || !userCode || !verificationUri) throw new MsAuthError('internal');
+  if (!res.ok || !deviceCode || !userCode || !verificationUri) throw failInternal(deps, 'devicecode', res, body, raw);
   return {
     deviceCode,
     view: {
@@ -200,9 +244,9 @@ function parseTokenPair(body: Record<string, unknown> | null): MsTokenPair | nul
   };
 }
 
-async function postTokenForm(deps: MsAuthDeps, form: string): Promise<Record<string, unknown> | null> {
+async function postTokenForm(deps: MsAuthDeps, form: string): Promise<{ json: Record<string, unknown> | null; raw: string }> {
   const res = await msFetch(deps, MS_URL.token, { method: 'POST', headers: FORM_HEADERS, body: form });
-  return jsonOrNull(res);
+  return jsonWithRaw(res);
 }
 
 /**
@@ -218,7 +262,7 @@ export async function pollDeviceToken(
   let interval = Math.max(1, intervalSec);
   for (;;) {
     if (deps.signal?.aborted) throw new MsAbortError();
-    const body = await postTokenForm(
+    const { json: body, raw } = await postTokenForm(
       deps,
       `client_id=${deps.clientId}&grant_type=urn:ietf:params:oauth:grant-type:device_code&device_code=${deviceCode}`,
     );
@@ -236,15 +280,15 @@ export async function pollDeviceToken(
     }
     if (error === 'expired_token') throw new MsAuthError('expired_token');
     if (error === 'authorization_declined' || error === 'invalid_user') throw new MsAuthError('access_denied');
-    throw new MsAuthError('internal');
+    throw failInternal(deps, 'poll', undefined, body, raw);
   }
 }
 
 /** 刷新链入口：token endpoint grant_type=refresh_token（v1 CheckTokenRequest devcode=null 分支）。 */
 export async function refreshMsToken(deps: MsAuthDeps, refreshToken: string): Promise<MsTokenPair> {
-  const body = await postTokenForm(deps, `client_id=${deps.clientId}&grant_type=refresh_token&refresh_token=${refreshToken}`);
+  const { json: body, raw } = await postTokenForm(deps, `client_id=${deps.clientId}&grant_type=refresh_token&refresh_token=${refreshToken}`);
   const pair = parseTokenPair(body);
-  if (!pair) throw new MsAuthError('internal');
+  if (!pair) throw failInternal(deps, 'refresh', undefined, body, raw);
   return pair;
 }
 
@@ -271,12 +315,12 @@ export async function xblAuthenticate(deps: MsAuthDeps, msAccessToken: string): 
       TokenType: 'JWT',
     }),
   });
-  const body = await jsonOrNull(res);
+  const { json: body, raw } = await jsonWithRaw(res);
   const token = str(body, 'Token');
   const claims = body?.['DisplayClaims'];
   const xui = claims !== null && typeof claims === 'object' ? (claims as Record<string, unknown>)['xui'] : undefined;
   const uhs = Array.isArray(xui) && xui.length > 0 ? str(xui[0] as Record<string, unknown>, 'uhs') : undefined;
-  if (!res.ok || !token || !uhs) throw new MsAuthError('internal');
+  if (!res.ok || !token || !uhs) throw failInternal(deps, 'xbl', res, body, raw);
   return { token, uhs };
 }
 
@@ -295,7 +339,7 @@ export async function xstsAuthenticate(deps: MsAuthDeps, xblToken: string): Prom
       TokenType: 'JWT',
     }),
   });
-  const body = await jsonOrNull(res);
+  const { json: body, raw } = await jsonWithRaw(res);
   const xerr = num(body, 'XErr');
   if (xerr === XERR_NO_XBOX_PROFILE) throw new MsAuthError('no_xbox_profile');
   if (xerr === XERR_MINOR_PARENTAL) throw new MsAuthError('minor_parental');
@@ -303,7 +347,7 @@ export async function xstsAuthenticate(deps: MsAuthDeps, xblToken: string): Prom
   const claims = body?.['DisplayClaims'];
   const xui = claims !== null && typeof claims === 'object' ? (claims as Record<string, unknown>)['xui'] : undefined;
   const uhs = Array.isArray(xui) && xui.length > 0 ? str(xui[0] as Record<string, unknown>, 'uhs') : undefined;
-  if (!res.ok || !token || !uhs) throw new MsAuthError('internal');
+  if (!res.ok || !token || !uhs) throw failInternal(deps, 'xsts', res, body, raw);
   return { token, uhs };
 }
 
@@ -314,9 +358,9 @@ export async function mcsLogin(deps: MsAuthDeps, uhs: string, xstsToken: string)
     headers: JSON_HEADERS,
     body: JSON.stringify({ identityToken: `XBL3.0 x=${uhs};${xstsToken}` }),
   });
-  const body = await jsonOrNull(res);
+  const { json: body, raw } = await jsonWithRaw(res);
   const accessToken = str(body, 'access_token');
-  if (!res.ok || !accessToken) throw new MsAuthError('internal');
+  if (!res.ok || !accessToken) throw failInternal(deps, 'mcs', res, body, raw);
   return { accessToken, expiresIn: num(body, 'expires_in') ?? 86400 };
 }
 
@@ -324,6 +368,8 @@ export interface MsProfileResult {
   /** MCS profile id（32 位 hex，v1 local_uuid 同源）。 */
   id: string;
   name: string;
+  /** 官方皮肤贴图 URL（properties.textures base64 → skins.SKIN.url；解不出 = 缺席）。 */
+  skinUrl?: string;
 }
 
 /** profile（GET Bearer；404/无档案 → no_minecraft）。 */
@@ -333,11 +379,48 @@ export async function mcProfile(deps: MsAuthDeps, mcAccessToken: string): Promis
     headers: { Authorization: `Bearer ${mcAccessToken}` },
   });
   if (res.status === 404) throw new MsAuthError('no_minecraft');
-  const body = await jsonOrNull(res);
+  const { json: body } = await jsonWithRaw(res);
   const id = str(body, 'id');
   const name = str(body, 'name');
   if (!res.ok || !id || !name) throw new MsAuthError('no_minecraft');
-  return { id, name };
+  const skinUrl = parseSkinUrl(body);
+  return { id, name, ...(skinUrl ? { skinUrl } : {}) };
+}
+
+/**
+ * 皮肤 URL 双形状解析（2026-10-31 实测 api.minecraftservices.com/minecraft/profile 真响应定稿）：
+ * ① 新形状 = 顶层 `skins[]` 数组（`{state:'ACTIVE', url:'http://textures...', variant}`），
+ *    取 ACTIVE 项；② 旧形状 = `properties[]` 的 textures 条目（base64(JSON) → skins.SKIN.url，
+ *    sessionserver 遗留形状，防上游回切）。任何一环断 = 缺席（皮肤是展示面，不拦登录）。
+ * textures 域真响应给 http——统一升级 https（该域 https 可用，UI webview 加载 http 图反被混合内容策略拦）。
+ */
+function parseSkinUrl(body: Record<string, unknown> | null): string | undefined {
+  const skins = body?.['skins'];
+  if (Array.isArray(skins)) {
+    for (const s of skins) {
+      const entry = s as Record<string, unknown> | null;
+      if (entry?.state === 'ACTIVE' && typeof entry.url === 'string' && entry.url.startsWith('http')) {
+        return entry.url.replace(/^http:/, 'https:');
+      }
+    }
+  }
+  const props = body?.['properties'];
+  if (!Array.isArray(props)) return undefined;
+  for (const p of props) {
+    const value = (p as Record<string, unknown> | null)?.['value'];
+    if ((p as Record<string, unknown> | null)?.['name'] !== 'textures' || typeof value !== 'string') continue;
+    try {
+      const decoded = JSON.parse(Buffer.from(value, 'base64').toString('utf8')) as {
+        skins?: { SKIN?: { url?: unknown } };
+      };
+      const url = decoded?.skins?.SKIN?.url;
+      if (typeof url === 'string' && url.startsWith('http')) return url.replace(/^http:/, 'https:');
+    } catch {
+      /* 坏 textures 忽略 */
+    }
+    return undefined;
+  }
+  return undefined;
 }
 
 /** 链尾 ③-⑥（设备码成功与刷新链共用重放段）。 */
@@ -455,7 +538,8 @@ function runDpapi(kind: 'protect' | 'unprotect', stdinData: string, deps: DpapiD
         stdio: ['pipe', 'pipe', 'pipe'],
         windowsHide: true,
       });
-    } catch {
+    } catch (error) {
+      deps.log?.(`dpapi-${kind} spawn-fail ${error instanceof Error ? error.message : String(error)}`);
       reject(new MsAuthError('internal'));
       return;
     }
@@ -465,21 +549,31 @@ function runDpapi(kind: 'protect' | 'unprotect', stdinData: string, deps: DpapiD
       } catch {
         /* 已退出 */
       }
+      deps.log?.(`dpapi-${kind} timeout(${timeoutMs}ms)`);
       reject(new MsAuthError('internal'));
     }, timeoutMs);
     let out = '';
+    let err = '';
     child.stdout?.on('data', (chunk: Buffer) => {
       out += chunk.toString('utf8');
     });
-    child.on('error', () => {
+    child.stderr?.on('data', (chunk: Buffer) => {
+      err += chunk.toString('utf8');
+    });
+    child.on('error', (error) => {
       clearTimeout(timer);
+      deps.log?.(`dpapi-${kind} child-error ${error.message}`);
       reject(new MsAuthError('internal'));
     });
     child.on('close', (code) => {
       clearTimeout(timer);
       const b64 = out.replace(/\s+/g, '');
       if (code === 0 && b64.length > 0) resolve(b64);
-      else reject(new MsAuthError('internal'));
+      else {
+        // stderr = PowerShell 报错文本（无 token——stdin 数据不出现在错误里）；截断防日志爆量。
+        deps.log?.(`dpapi-${kind} exit=${code} stderr=${err.replace(/\s+/g, ' ').slice(0, 240) || '(empty)'}`);
+        reject(new MsAuthError('internal'));
+      }
     });
     child.stdin?.on('error', () => {
       /* powershell 提前退出时写管道 EPIPE：由 close 分支统一失败 */

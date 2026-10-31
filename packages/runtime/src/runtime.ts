@@ -227,7 +227,13 @@ function readJsonIfPresent<T>(file: string): T | null {
 function toAccountView(account: Account): AccountView {
   if (account.type === 'microsoft') {
     const expires = account.tokenExpiresAt;
-    return { id: account.id, name: account.name, type: account.type, tokenValid: expires === undefined || expires > Date.now() };
+    return {
+      id: account.id,
+      name: account.name,
+      type: account.type,
+      tokenValid: expires === undefined || expires > Date.now(),
+      ...(account.skinUrl ? { skinUrl: account.skinUrl } : {}),
+    };
   }
   return { id: account.id, name: account.name, type: 'offline' };
 }
@@ -858,7 +864,31 @@ export class AtticRuntime {
   }
 
   async listAccounts(): Promise<AccountView[]> {
+    this.backfillMicrosoftSkins();
     return this.currentAccounts().map(toAccountView);
+  }
+
+  /**
+   * skinUrl 惰性回填（2026-10-31 皮肤直链上线的迁移面）：旧版落盘的微软账户没有 skinUrl
+   * （当时 profile 步未解 textures），首拉账户列表时后台补跑一次刷新链回填；失败静默，
+   * 下次启动再试。第三方头像生态已随 Mojang 匿名 profile 端点退役而失效（minotar 等仅存
+   * 旧缓存），带 token 的 services 链是唯一皮肤数据源——不回填则头像永远默认脸。
+   */
+  private skinBackfillStarted = false;
+  private backfillMicrosoftSkins(): void {
+    if (this.skinBackfillStarted) return;
+    this.skinBackfillStarted = true;
+    void (async () => {
+      for (const a of loadAccounts(this.root)) {
+        if (a.type === 'microsoft' && a.refreshToken && !a.skinUrl) {
+          try {
+            await this.msRefreshAccount(a.id);
+          } catch {
+            /* 静默：网络/DPAPI 失败不打扰，下次启动重试 */
+          }
+        }
+      }
+    })();
   }
 
   /**
@@ -912,6 +942,11 @@ export class AtticRuntime {
     return override && override.length > 0 ? override : DEFAULT_MS_CLIENT_ID;
   }
 
+  /** MS 链宿主本地诊断通道（internal 归因进 launcher.log；跨 IPC 面仍只有分类码——脱敏闸不变）。 */
+  private msDpapi(): DpapiDeps {
+    return { ...this.msDeps.dpapi, log: (m) => console.warn(`[attic-ms] ${m}`) };
+  }
+
   private msAuthDeps(signal?: AbortSignal): MsAuthDeps {
     return {
       fetchImpl: this.fetchImpl,
@@ -919,7 +954,8 @@ export class AtticRuntime {
       signal,
       sleep: this.msDeps.sleep,
       lookup: this.msDeps.lookup,
-      dpapi: this.msDeps.dpapi,
+      dpapi: this.msDpapi(),
+      log: (m) => console.warn(`[attic-ms] ${m}`),
     };
   }
 
@@ -981,7 +1017,7 @@ export class AtticRuntime {
     if (!account) throw new Error(`账户不存在：${id}`);
     if (account.type !== 'microsoft') throw new Error('仅微软账户支持 token 刷新');
     if (!account.refreshToken) throw new Error('微软账户缺刷新令牌，请重新走设备码登录');
-    const deps = this.msDeps.dpapi ?? {};
+    const deps = this.msDpapi();
     const refreshToken = await decodeTokenSecret(account.refreshToken, deps);
     const pair = await refreshMsToken(this.msAuthDeps(), refreshToken);
     const chain = await runAuthTail(this.msAuthDeps(), pair);
@@ -994,7 +1030,7 @@ export class AtticRuntime {
    * （plan.md §7 安全约束①——refresh token 是长期凭证，禁明文）；返回内存态明文账户。
    */
   private async upsertMicrosoftAccount(chain: MsChainResult): Promise<MicrosoftAccount> {
-    const deps = this.msDeps.dpapi ?? {};
+    const deps = this.msDpapi();
     const accessToken = await encodeTokenSecret(chain.mcAccessToken, deps);
     const refreshToken = chain.refreshToken ? await encodeTokenSecret(chain.refreshToken, deps) : undefined;
     const disk: MicrosoftAccount = {
@@ -1005,6 +1041,7 @@ export class AtticRuntime {
       ...(refreshToken !== undefined ? { refreshToken } : {}),
       tokenExpiresAt: Date.now() + chain.mcExpiresIn * 1000,
       profileId: chain.id,
+      ...(chain.skinUrl ? { skinUrl: chain.skinUrl } : {}),
     };
     const stored = loadAccounts(this.root);
     const idx = stored.findIndex((a) => a.id === disk.id);
@@ -1030,7 +1067,7 @@ export class AtticRuntime {
     const account = request.accountId ? accounts.find((a) => a.id === request.accountId) : accounts[0];
     if (!account) throw new Error('无可用账户，请先在账户页添加账户');
     if (account.type !== 'microsoft') return account;
-    const deps = this.msDeps.dpapi ?? {};
+    const deps = this.msDpapi();
     return {
       ...account,
       accessToken: await decodeTokenSecret(account.accessToken, deps),

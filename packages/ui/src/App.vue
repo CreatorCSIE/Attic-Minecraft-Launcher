@@ -25,6 +25,7 @@ import UpdateDialog from './components/UpdateDialog.vue';
 import WelcomeWizard from './components/WelcomeWizard.vue';
 import { goSection } from './composables/useSettingsNav';
 import { useUpdateCheck } from './composables/useUpdateCheck';
+import { useJava } from './composables/useJava';
 
 /** 独立控制台窗模式：主进程以 ?window=console 加载同一 UI，只渲染控制台。 */
 const isConsoleWindow =
@@ -116,6 +117,9 @@ onMounted(() => {
   if (!isConsoleWindow) {
     void loadCreatorAvatar();
     updateCheck.start();
+    // Java 探测启动预热（2026-10-31 用户拍板）：useJava 模块级缓存，进设置 Java 栏/向导
+    // 直接命中不再干等扫描；「刷新检测」按钮强制重探行为不变。
+    void useJava().detect();
   }
 });
 </script>

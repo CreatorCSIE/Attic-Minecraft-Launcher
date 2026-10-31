@@ -14,8 +14,8 @@ const accounts = ref<AccountView[]>([]);
 const loading = ref(false);
 const error = ref<string | null>(null);
 const currentId = ref<string | null>(readStored());
-
 let started = false;
+
 
 const { bridge } = useBridge();
 
@@ -95,6 +95,10 @@ function select(id: string): void {
   }
 }
 
+/**
+ * 进程生命周期首拉一次（既有模型：列表变化由增删改操作显式 load() 驱动）。
+ * skinUrl 宿主回填是一次性迁移（落盘后不再变），下次启动首拉天然带皮肤，无需实时感知。
+ */
 function ensureLoaded(): void {
   if (started) return;
   started = true;
