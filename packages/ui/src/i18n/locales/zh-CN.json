@@ -505,6 +505,7 @@
       }
     },
     "about": {
+      "copyright": "Copyright © 2026 Attic Minecraft Launcher · 开发者 CreatorCSIE",
       "ghRepo": "查看 GitHub 仓库",
       "checkUpdate": "检查更新",
       "checking": "检查中…",

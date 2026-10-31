@@ -127,6 +127,7 @@ function openUrl(url: string): void {
         <div>
           <p class="head-name">{{ t('app.title') }}</p>
           <p v-if="info" class="head-version mono">v{{ info.launcherVersion }}{{ versionSuffix }}</p>
+          <p class="head-copyright">{{ t('settings.about.copyright') }}</p>
         </div>
       </div>
       <div class="head-actions">
@@ -281,6 +282,11 @@ function openUrl(url: string): void {
   margin: var(--space-1) 0 0;
   font-size: var(--fs-sm);
   color: var(--text-secondary);
+}
+.head-copyright {
+  margin: var(--space-1) 0 0;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
 }
 .head-actions {
   display: flex;

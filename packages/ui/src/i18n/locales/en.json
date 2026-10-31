@@ -516,6 +516,7 @@
       }
     },
     "about": {
+      "copyright": "Copyright © 2026 Attic Minecraft Launcher · Developed by CreatorCSIE",
       "ghRepo": "View GitHub repository",
       "checkUpdate": "Check for updates",
       "checking": "Checking…",
