@@ -31,7 +31,11 @@ import {
   type LaunchCancelResult,
   type LaunchConfig,
   type LaunchRequest,
+  type MicrosoftAccount,
   type ModCategoryView,
+  type MsDeviceCode,
+  type MsLoginErrorCode,
+  type MsLoginEvent,
   type ModInstallRequest,
   type UpdateCheckResult,
   type VersionJson,
@@ -69,6 +73,24 @@ import {
   upsertModRegistry,
   type ModRegistryEntry,
 } from './mods';
+import {
+  DEFAULT_MS_CLIENT_ID,
+  MsAbortError,
+  MsAuthError,
+  decodeTokenSecret,
+  encodeTokenSecret,
+  joinServer,
+  pollDeviceToken,
+  refreshMsToken,
+  requestDeviceCode,
+  runAuthTail,
+  type DpapiDeps,
+  type LookupFn,
+  type MsAuthDeps,
+  type MsChainResult,
+  type MsDeviceCodeIssue,
+  type SleepFn,
+} from './microsoftAuth';
 import { GameProcessManager } from './process';
 import { parseProperties } from './properties';
 import {
@@ -158,6 +180,15 @@ export interface AtticRuntimeOptions {
   releaseRepo?: string;
   /** 壳形态（SYS_INFO shell 字段数据源；宿主构造注入，缺省 'electron' 保守）。 */
   shell?: 'tauri' | 'electron';
+  /**
+   * 微软登录测试缝：覆盖轮询退避计时器 / join 的 IPv4 解析 / DPAPI 执行体（platform、spawn）。
+   * 缺省 = 真 setTimeout + dns.lookup(family 4) + 真 powershell.exe DPAPI（Windows 生产面）。
+   */
+  msDeps?: {
+    sleep?: SleepFn;
+    lookup?: LookupFn;
+    dpapi?: DpapiDeps;
+  };
 }
 
 function messageOf(error: unknown): string {
@@ -248,6 +279,10 @@ export class AtticRuntime {
   private lastLaunchError: string | null = null;
   /** 在途启动的取消控制器（feat①）：launch() 建、finally 清；cancelLaunch() 消费。 */
   private launchAbort: AbortController | null = null;
+  /** 在途微软设备码流（single-flight）：msStartLogin 建、链终局清；msCancelLogin 消费 abort。 */
+  private msLoginFlow: { controller: AbortController } | null = null;
+  /** 微软登录测试缝（见 AtticRuntimeOptions.msDeps）。 */
+  private readonly msDeps: NonNullable<AtticRuntimeOptions['msDeps']>;
   private infoWatcher: fs.FSWatcher | null = null;
   /** .info 监视去抖：id → 挂起定时器（编辑器保存常触发多事件）。 */
   private readonly infoWatchTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -287,6 +322,7 @@ export class AtticRuntime {
     this.releaseRepo = options.releaseRepo ?? (options.env ?? process.env)['ATTIC_RELEASE_REPO'] ?? DEFAULT_RELEASE_REPO;
     this.shell = options.shell ?? 'electron';
     this.platform = options.platform ?? process.platform;
+    this.msDeps = options.msDeps ?? {};
     // 便携态构造期副作用（幂等、值变才写）：面包屑登记 / 只读回落标记（默认根登记簿，plan.md 终拍②③）。
     if (this.portable?.active) syncPortableRegistry(this.defaultRoot, this.portable);
     // 端点优先级：构造参数（测试/程序化）> launcher.settings 的 endpoint.* 覆盖 > 默认。
@@ -714,7 +750,8 @@ export class AtticRuntime {
       // java-runtime 阶段合成对括住 buildContext（Java 解析/探测在其中以 execFile 异步跑，
       // 全本地无下载时本行也可见；真下载 runtime 时 download() 同 item 不同 id 并存）。
       this.client.emitProgress({ item: 'java-runtime', id: request.versionId, phase: 'queued', bytesDone: 0 });
-      const context = await this.buildContext(request, signal);
+      const launchAccount = await this.resolveLaunchAccount(request);
+      const context = await this.buildContext(request, signal, launchAccount);
       this.client.emitProgress({ item: 'java-runtime', id: request.versionId, phase: 'done', bytesDone: 0 });
       context.appletClass = this.resolvePreclassicAppletClass(json);
       // 死链声音预置（gameDir 侧写数据，不动 JVM 参数；dryRun 不预置——纯检视不留副作用）。
@@ -734,10 +771,34 @@ export class AtticRuntime {
         fs.copyFileSync(source, path.join(targetDir, path.basename(mount.path)));
       }
 
+      // 微软验证预注册（plan.md §7 启动编排插 join）：server 直连 ∧ 微软账户 → spawn 前 joinServer
+      // （token 过期先自动刷新链重放）。join 失败 = 不拦截启动，spawn 后向游戏输出面推一行可见警告；
+      // 离线账户路径零改动。戒律 #1：零版本判断。
+      let joinWarning: string | null = null;
+      if (context.server && launchAccount.type === 'microsoft') {
+        try {
+          let mc = launchAccount;
+          if (mc.tokenExpiresAt !== undefined && mc.tokenExpiresAt <= Date.now() && mc.refreshToken) {
+            await this.msRefreshAccount(mc.id);
+            const reloaded = await this.resolveLaunchAccount(request);
+            if (reloaded.type === 'microsoft') mc = reloaded;
+          }
+          await joinServer(this.msAuthDeps(signal), {
+            sessionid: mc.accessToken,
+            profileId: mc.profileId ?? mc.id,
+            serverHost: context.server,
+          });
+        } catch (error) {
+          joinWarning = `[attic] 微软验证预注册失败：验证未注册，正版服可能被踢（${error instanceof MsAuthError ? error.code : 'internal'}）`;
+        }
+      }
       fs.mkdirSync(context.gameDir, { recursive: true });
       // spawn 前最后一道闸门（防竞态）：取消落在 start 之前 = 中止；之后 = 游戏已在跑，走 KILL。
       signal.throwIfAborted();
       const session = this.processes.start(config, request.versionId);
+      if (joinWarning) {
+        this.emitEvent(IPC_EVENTS.GAME_OUTPUT, { stream: 'stderr', chunk: joinWarning, pid: session.pid });
+      }
       // 日志落盘：testLaunch 恒写；普通启动受「诊断日志」开关（diagnosticLog=true 全量落盘）
       if (request.testLaunch || settings['diagnosticLog'] === 'true') {
         this.attachLaunchLog(
@@ -841,6 +902,140 @@ export class AtticRuntime {
     const renamed: OfflineAccount = { ...account, name: trimmed, id: offlineUuid(trimmed) };
     saveAccounts(this.root, stored.map((a) => (a.id === id ? renamed : a)));
     return toAccountView(renamed);
+  }
+
+  // ---------- 微软登录（ACCOUNTS_MS_* 三通道 + MS_LOGIN 事件面） ----------
+
+  /** 生效 CLIENT_ID：settings.microsoftClientId 覆盖 > 内嵌缺省（plan.md §7 安全约束③：public client 公开常量）。 */
+  private msClientId(): string {
+    const override = settingsFromProps(loadSettings(this.root)).microsoftClientId?.trim();
+    return override && override.length > 0 ? override : DEFAULT_MS_CLIENT_ID;
+  }
+
+  private msAuthDeps(signal?: AbortSignal): MsAuthDeps {
+    return {
+      fetchImpl: this.fetchImpl,
+      clientId: this.msClientId(),
+      signal,
+      sleep: this.msDeps.sleep,
+      lookup: this.msDeps.lookup,
+      dpapi: this.msDeps.dpapi,
+    };
+  }
+
+  /**
+   * 发起微软设备码登录（single-flight，同时只允许一条流——在跑 = 稳定错误拒绝）：
+   * 第①步设备码同步返回（弹窗展示面），轮询 + 链尾后台推进，终局经 MS_LOGIN 事件异步送达
+   * （success = 落盘账户的 AccountView，同 profileId 幂等覆盖既有微软账户；error = 分类码，
+   * HTTP 原文/ token 永不外传——token 全程驻宿主）。
+   */
+  async msStartLogin(): Promise<MsDeviceCode> {
+    if (this.msLoginFlow) throw new Error('微软登录流已在进行中，请等待完成或先取消');
+    const controller = new AbortController();
+    const flow = { controller };
+    this.msLoginFlow = flow;
+    let issued: MsDeviceCodeIssue;
+    try {
+      issued = await requestDeviceCode(this.msAuthDeps(controller.signal));
+    } catch (error) {
+      if (this.msLoginFlow === flow) this.msLoginFlow = null;
+      throw error;
+    }
+    void this.runMsLoginChain(issued, controller.signal).finally(() => {
+      if (this.msLoginFlow === flow) this.msLoginFlow = null;
+    });
+    return issued.view;
+  }
+
+  /** 中止设备码轮询与链尾（canceled 事件由链 catch 发射）；无流在跑 = no-op 成功。 */
+  async msCancelLogin(): Promise<void> {
+    this.msLoginFlow?.controller.abort();
+  }
+
+  private async runMsLoginChain(issued: MsDeviceCodeIssue, signal: AbortSignal): Promise<void> {
+    try {
+      const pair = await pollDeviceToken(this.msAuthDeps(signal), issued.deviceCode, issued.view.interval);
+      const chain = await runAuthTail(this.msAuthDeps(signal), pair);
+      const account = await this.upsertMicrosoftAccount(chain);
+      const event: MsLoginEvent = { state: 'success', account: toAccountView(account) };
+      this.emitEvent(IPC_EVENTS.MS_LOGIN, event);
+    } catch (error) {
+      const code: MsLoginErrorCode =
+        signal.aborted || error instanceof MsAbortError
+          ? 'canceled'
+          : error instanceof MsAuthError
+            ? error.code
+            : 'internal';
+      const event: MsLoginEvent = { state: 'error', code };
+      this.emitEvent(IPC_EVENTS.MS_LOGIN, event);
+    }
+  }
+
+  /**
+   * 刷新链（ACCOUNTS_MS_REFRESH）：refreshToken → token endpoint 重放 → XBL/XSTS/MCS/profile → 落盘。
+   * 错误以 MsAuthError 抛（message = 分类码，脱敏闸保证不含 token 原文）。
+   */
+  async msRefreshAccount(id: string): Promise<AccountView> {
+    const stored = loadAccounts(this.root);
+    const account = stored.find((a) => a.id === id);
+    if (!account) throw new Error(`账户不存在：${id}`);
+    if (account.type !== 'microsoft') throw new Error('仅微软账户支持 token 刷新');
+    if (!account.refreshToken) throw new Error('微软账户缺刷新令牌，请重新走设备码登录');
+    const deps = this.msDeps.dpapi ?? {};
+    const refreshToken = await decodeTokenSecret(account.refreshToken, deps);
+    const pair = await refreshMsToken(this.msAuthDeps(), refreshToken);
+    const chain = await runAuthTail(this.msAuthDeps(), pair);
+    const saved = await this.upsertMicrosoftAccount(chain);
+    return toAccountView(saved);
+  }
+
+  /**
+   * 账户落盘（同 profileId 幂等覆盖）：token 磁盘形态 = DPAPI 密文 `dpapi:v1:<b64>`
+   * （plan.md §7 安全约束①——refresh token 是长期凭证，禁明文）；返回内存态明文账户。
+   */
+  private async upsertMicrosoftAccount(chain: MsChainResult): Promise<MicrosoftAccount> {
+    const deps = this.msDeps.dpapi ?? {};
+    const accessToken = await encodeTokenSecret(chain.mcAccessToken, deps);
+    const refreshToken = chain.refreshToken ? await encodeTokenSecret(chain.refreshToken, deps) : undefined;
+    const disk: MicrosoftAccount = {
+      id: chain.id,
+      name: chain.name,
+      type: 'microsoft',
+      accessToken,
+      ...(refreshToken !== undefined ? { refreshToken } : {}),
+      tokenExpiresAt: Date.now() + chain.mcExpiresIn * 1000,
+      profileId: chain.id,
+    };
+    const stored = loadAccounts(this.root);
+    const idx = stored.findIndex((a) => a.id === disk.id);
+    if (idx === -1) saveAccounts(this.root, [...stored, disk]);
+    else {
+      const next = [...stored];
+      next[idx] = disk;
+      saveAccounts(this.root, next);
+    }
+    return {
+      ...disk,
+      accessToken: chain.mcAccessToken,
+      ...(chain.refreshToken !== undefined ? { refreshToken: chain.refreshToken } : {}),
+    };
+  }
+
+  /**
+   * 启动面账户解析（buildContext 选型逻辑的单点）：微软账户 token 从磁盘 DPAPI 密文解密为
+   * 内存明文（旧明文形态原样装载，见 decodeTokenSecret）。
+   */
+  private async resolveLaunchAccount(request: LaunchRequest): Promise<Account> {
+    const accounts = this.currentAccounts();
+    const account = request.accountId ? accounts.find((a) => a.id === request.accountId) : accounts[0];
+    if (!account) throw new Error('无可用账户，请先在账户页添加账户');
+    if (account.type !== 'microsoft') return account;
+    const deps = this.msDeps.dpapi ?? {};
+    return {
+      ...account,
+      accessToken: await decodeTokenSecret(account.accessToken, deps),
+      ...(account.refreshToken !== undefined ? { refreshToken: await decodeTokenSecret(account.refreshToken, deps) } : {}),
+    };
   }
 
   // ---------- 自定义版本配置页（CUSTOM_* 四通道） ----------
@@ -1463,11 +1658,11 @@ export class AtticRuntime {
     return [...refs].sort((a, b) => dateOf(a) - dateOf(b)).map((ref) => ref.id);
   }
 
-  private async buildContext(request: LaunchRequest, signal?: AbortSignal): Promise<LaunchContext> {
+  private async buildContext(request: LaunchRequest, signal?: AbortSignal, preAccount?: Account): Promise<LaunchContext> {
     const settings = loadSettings(this.root);
-    const accounts = this.currentAccounts();
-    const account = request.accountId ? accounts.find((a) => a.id === request.accountId) : accounts[0];
-    if (!account) throw new Error('无可用账户，请先在账户页添加账户');
+    // 账户选型 + 微软 token DPAPI 解密单点（resolveLaunchAccount）；launch 已解析过则直接带走，
+    // 免二次 PowerShell spawn。
+    const account = preAccount ?? (await this.resolveLaunchAccount(request));
 
     const javaPath = request.javaPath ?? settings['javaPath'] ?? (await this.ensureJavaPath(settings, signal));
     await this.gateLwjgl2Arch(javaPath);

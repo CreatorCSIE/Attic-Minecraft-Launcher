@@ -74,6 +74,7 @@ export function settingsFromProps(props: Record<string, string>): AppSettings {
   if (props['updateIgnoreVersion']) out.updateIgnoreVersion = props['updateIgnoreVersion'];
   if (props['accentColor']) out.accentColor = props['accentColor'];
   if (props['backgroundImage']) out.backgroundImage = props['backgroundImage'];
+  if (props['microsoftClientId']) out.microsoftClientId = props['microsoftClientId'];
 
   const endpoints: EndpointOverrides = {};
   let hasEndpoint = false;
@@ -126,6 +127,7 @@ export function applySettingsToProps(
   put('updateIgnoreVersion', settings.updateIgnoreVersion);
   put('accentColor', settings.accentColor);
   put('backgroundImage', settings.backgroundImage);
+  put('microsoftClientId', settings.microsoftClientId);
 
   for (const key of ENDPOINT_KEYS) {
     put(`${ENDPOINT_PREFIX}${key}`, settings.endpoints?.[key]);

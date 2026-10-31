@@ -129,6 +129,12 @@ export interface AppSettings {
    * 文件不可读时 UI 回落纯色（可见失败由选择动作当场承担，应用侧静默兜底）。
    */
   backgroundImage?: string;
+  /**
+   * 微软登录 CLIENT_ID 覆盖值（开发者设置面；空 = 用 runtime 内嵌缺省值）。
+   * CLIENT_ID 是 public client 公开标识符、非机密（plan.md §7 微软登录安全约束③）；
+   * 此键供自注册 Azure 应用先行实机验证，官方值随发布内嵌后一般无需触碰。
+   */
+  microsoftClientId?: string;
 }
 
 /**

@@ -25,6 +25,7 @@ import type {
   ModCategoryView,
   ModInstallRequest,
   LaunchCancelResult,
+  MsDeviceCode,
   RendererBridge,
   SystemInfo,
   UpdateCheckResult,
@@ -76,6 +77,10 @@ const mockBridge: RendererBridge = {
   addAccount: async () => err<AccountView>(NO_BRIDGE),
   removeAccount: async () => err<void>(NO_BRIDGE),
   renameAccount: async () => err<AccountView>(NO_BRIDGE),
+  // 微软登录属宿主认证链语义（DPAPI 落盘 + 五域白名单出站）：浏览器 mock 无真值。
+  msStartLogin: async () => err<MsDeviceCode>(NO_BRIDGE),
+  msCancelLogin: async () => err<void>(NO_BRIDGE),
+  msRefreshAccount: async () => err<AccountView>(NO_BRIDGE),
   getSettings: async () => ok<AppSettings>({}),
   setSettings: async (s) => ok(s),
   listInstances: async () => ok([]),
@@ -155,6 +160,10 @@ function demoBridge(): RendererBridge {
       ),
     // 首启向导演练面：建号/目录选择器/Java 选择器给假值可走通三步。
     addAccount: async (name: string) => ok<AccountView>({ id: `demo-${name.toLowerCase()}`, name, type: 'offline' }),
+    // 设备码弹窗排版面：start 回假码（demo 无事件流，停在等待态可排；cancel 可关）。
+    msStartLogin: async () =>
+      ok<MsDeviceCode>({ userCode: 'ABCD-EFGH', verificationUri: 'https://www.microsoft.com/link', expiresIn: 900, interval: 5 }),
+    msCancelLogin: async () => ok<void>(undefined),
     // demo 假安装目录：演练护栏口径——rootOverride 落进它内即拒绝（文案与 runtime 护栏一致；
     // 前缀比对去掉尾部分隔符再拼 sep，兄弟前缀不误判 = isPathWithin 同纪律）。
     setSettings: async (s: AppSettings) => {

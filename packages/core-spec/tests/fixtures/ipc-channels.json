@@ -2,6 +2,9 @@
   "allChannels": [
     "attic:accounts:add",
     "attic:accounts:list",
+    "attic:accounts:ms:cancel",
+    "attic:accounts:ms:refresh",
+    "attic:accounts:ms:start",
     "attic:accounts:remove",
     "attic:accounts:rename",
     "attic:crash:bundle",
@@ -54,6 +57,9 @@
   "sidecarChannels": [
     "attic:accounts:add",
     "attic:accounts:list",
+    "attic:accounts:ms:cancel",
+    "attic:accounts:ms:refresh",
+    "attic:accounts:ms:start",
     "attic:accounts:remove",
     "attic:accounts:rename",
     "attic:crash:bundle",
@@ -94,6 +100,7 @@
     "attic:internal:special-dir"
   ],
   "eventChannels": [
+    "attic:account:ms:login",
     "attic:custom:info-changed",
     "attic:download:progress",
     "attic:game:exit",

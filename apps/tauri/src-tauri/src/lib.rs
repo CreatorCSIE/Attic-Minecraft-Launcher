@@ -37,6 +37,9 @@ pub mod channels {
         "attic:accounts:add",
         "attic:accounts:remove",
         "attic:accounts:rename",
+        "attic:accounts:ms:start",
+        "attic:accounts:ms:cancel",
+        "attic:accounts:ms:refresh",
         "attic:settings:get",
         "attic:settings:set",
         "attic:instances:list",
@@ -91,6 +94,9 @@ pub mod channels {
         "attic:accounts:add",
         "attic:accounts:remove",
         "attic:accounts:rename",
+        "attic:accounts:ms:start",
+        "attic:accounts:ms:cancel",
+        "attic:accounts:ms:refresh",
         "attic:settings:get",
         "attic:settings:set",
         "attic:instances:list",
@@ -125,6 +131,7 @@ pub mod channels {
         "attic:game:exit",
         "attic:download:progress",
         "attic:custom:info-changed",
+        "attic:account:ms:login",
     ];
 
     pub const LAUNCH: &str = "attic:launch";

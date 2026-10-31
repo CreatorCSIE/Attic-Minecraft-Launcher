@@ -6,7 +6,12 @@
  */
 import { onBeforeUnmount, onMounted, watch } from 'vue';
 
-const props = defineProps<{ open: boolean }>();
+/**
+ * zIndex：叠窗场景抬层（缺省走 CSS 100）。全局 ExternalLinkErrorDialog 用 200——
+ * 其 Teleport 挂载先于业务弹窗，同 z-index 时 DOM 序在下，从登录窗内点「打开浏览器」
+ * 失败会被压在登录窗下不可见（2026-10-31 用户报障修复）。
+ */
+const props = defineProps<{ open: boolean; zIndex?: number }>();
 const emit = defineEmits<{ close: [] }>();
 
 function onKey(e: KeyboardEvent): void {
@@ -32,7 +37,7 @@ watch(
            的最近共同祖先——弹窗内拖选文字（如全选用户名）拖出卡片、松手在遮罩上时，
            click.target 塌缩成 backdrop，click.self 误判"点空白"把弹窗关掉（issue #1
            "修改用户名全选的时候窗口闪退"）。按下动作本身落在遮罩才关，拖选免疫。 -->
-      <div v-if="open" class="backdrop" @mousedown.self="emit('close')">
+      <div v-if="open" class="backdrop" :style="zIndex ? { zIndex } : undefined" @mousedown.self="emit('close')">
         <div class="card" role="dialog" aria-modal="true">
           <slot />
         </div>

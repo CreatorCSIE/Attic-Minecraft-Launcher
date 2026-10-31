@@ -112,9 +112,12 @@ c0.24 家族死链声音预置（`<gameDir>/resources/`，同样不动命令行�
 | `attic:status` | — | `IpcResult<GameStatus>` |
 | `attic:java:detect` | — | `IpcResult<JavaDetectionReport>` |
 | `attic:accounts:list` | — | `IpcResult<AccountView[]>`（可为空：无默认账户回落，空列表时 UI 禁用启动） |
-| `attic:accounts:add` | `name: string` | `IpcResult<AccountView>`（离线账户；MC 规则 3-16 位字母/数字/下划线校验，同名幂等返回既有。微软账户无此通道=占位） |
+| `attic:accounts:add` | `name: string` | `IpcResult<AccountView>`（仅离线账户；MC 规则 3-16 位字母/数字/下划线校验，同名幂等返回既有。微软账户走 `attic:accounts:ms:start`） |
 | `attic:accounts:remove` | `id: string` | `IpcResult<void>`（可移除至空，无默认账户回落） |
 | `attic:accounts:rename` | `id: string, name: string` | `IpcResult<AccountView>`（仅离线账户；MC 规则校验，同名幂等、与他名冲突报错；离线 UUID 随新名重生成，返回视图含新 id） |
+| `attic:accounts:ms:start` | — | `IpcResult<MsDeviceCode>`（发起微软设备码登录；single-flight：已有在途流=错误返回。成功值=设备码展示面（`userCode/verificationUri/verificationUriComplete?/expiresIn/interval`），终局经 `attic:account:ms:login` 事件异步送达；token 机密全程驻宿主（DPAPI 用户作用域加密落盘，磁盘形态 `dpapi:v1:<b64>`），渲染只见 AccountView） |
+| `attic:accounts:ms:cancel` | — | `IpcResult<void>`（取消在途设备码流：轮询中止 + 落 `canceled` 终局事件；无流在跑 = no-op 成功） |
+| `attic:accounts:ms:refresh` | `id: string` | `IpcResult<AccountView>`（refreshToken → XBL/XSTS/MCS/profile 重放链，返回刷新后脱敏视图；启动编排对过期 token 自动刷新，本通道供 UI 手动「重新验证」；id 非微软账户/无 refreshToken/刷新失败=错误返回） |
 | `attic:settings:get` | — | `IpcResult<AppSettings>` |
 | `attic:settings:set` | `AppSettings` | `IpcResult<AppSettings>`（保存后的视图） |
 | `attic:instances:list` | — | `IpcResult<InstanceView[]>` |
@@ -150,6 +153,7 @@ c0.24 家族死链声音预置（`<gameDir>/resources/`，同样不动命令行�
 | `attic:game:exit` | `GameExitEvent{code,signal,crash,stoppedByUser?,pid,versionId}` | 退出 + 崩溃分类摘要；`stoppedByUser:true` = 用户主动停止（点停止按钮/关游戏窗触发看门狗），`crash` 恒为 null，控制台以中性条显示最后一行日志；外部 taskkill/自身异常退出仍照常报崩溃条 |
 | `attic:download:progress` | `DownloadProgressEvent{item,id,phase,bytesDone,bytesTotal?,bytesPerSec?,error?}` | jar/资产/Java/legacyfix 统一形状；`phase`: `queued/transferring/verifying/done/failed/cancelled`（cancelled=feat①取消中止，UI 落中性态）；`item=asset-check` = 资产检查阶段合成事件（queued/transferring/done 括住存在性+尺寸核对循环，id=资产索引 id；`bytesDone/bytesTotal` = 已核对对象数/对象总数（**非字节**，动态节流连发并让出事件循环——UI 字节聚合层对此 item 除外计入；HMCL 启动弹窗移植，UI 阶段行数据源）。**cache-hit 合成对**（五轮根因修正：全本地启动曾零事件、弹窗空白）：version-json/client-jar/mod-jar/library/asset-index/legacyfix 缓存命中同样发 queued/done 一对（字节=本地文件大小或 0），阶段行「缓存=秒过 ✓」；真下载路径 download() 同键自带序列覆盖，无双计 |
 | `attic:custom:info-changed` | `CustomInfoChangedEvent{id}` | 宿主监视 `versions/jsons/` 目录：外部编辑/新建/删除 `.info`，按 id 去抖 250ms 合并后发射；自定义版本配置页实时刷新（未编辑自动重载，有未保存编辑则提示不覆盖；本方保存/删除的回声由 UI selfWrite 窗口吸收） |
+| `attic:account:ms:login` | `MsLoginEvent`（`{state:'success',account:AccountView}` \| `{state:'error',code:MsLoginErrorCode}`） | 微软设备码登录流终局（success=账户已落盘；error=八分类码之一：`access_denied/expired_token/no_xbox_profile/minor_parental/no_minecraft/canceled/network/internal`——HTTP 原文可能含 token/URL 查询串，一律不过桥，只传分类码；弹窗按码出文案） |
 
 ## 4. 契约测试夹具
 
@@ -190,7 +194,7 @@ Tauri 线 Rust↔sidecar 线协议（stdio NDJSON，一行一帧；sidecar `src/
 
 - 请求 `{id:number, method:string, params:unknown[]}`；响应 `{id, result}` | `{id, error}`；事件推送 `{event, payload}`（无 id）。
 - **错误以数据返回不跨进程抛**（IpcResult 语义的线协议形态）；`IpcResult` 封装由 Rust 壳完成（`{result|error}` → `{ok,value|error}`）。
-- 通道切分：37 契约通道 = **30 sidecar 承接** + **7 宿主面**（`window:control / window:console / instances:open-dir / shell:open-dir / shell:open-url / dialog:pick / custom:import-jar`，Rust 直处理；sidecar 收到即防御拒绝）。宿主面拆步走 `attic:internal:*` 私有方法（`instance-game-dir / special-dir / import-jar / shutdown`：Rust「先拿路径/入参，再做宿主动作」）。
+- 通道切分：40 契约通道 = **33 sidecar 承接** + **7 宿主面**（`window:control / window:console / instances:open-dir / shell:open-dir / shell:open-url / dialog:pick / custom:import-jar`，Rust 直处理；sidecar 收到即防御拒绝）。宿主面拆步走 `attic:internal:*` 私有方法（`instance-game-dir / special-dir / import-jar / shutdown`：Rust「先拿路径/入参，再做宿主动作」）。
 - 控制台 backlog（seq 盖戳 + 1MB 环形 + 4 会话）归属**壳层**：Electron 线在主进程、Tauri 线在 sidecar。
 - 环境面：`ATTIC_LAUNCHER_VERSION`（Rust 注入包版本）；`ATTIC_SIDECAR_NODE / ATTIC_SIDECAR_ENTRY`（开发/调试逃生舱）；sidecar 解析次序 = env 覆盖 → 安装态（resource 目录 `sidecar/server.cjs` + 随行/PATH node）→ 开发态仓内 dist。
 

@@ -1,9 +1,10 @@
 <script setup lang="ts">
 /**
- * 添加账户弹窗 —— BlockHelm AddAccountDialogView 两步流程的离线优先裁剪版：
- * ① 类型选择（离线 / 正版 Microsoft 占位禁用 + 即将推出标注；第三方与购买入口按用户指示移除）；
+ * 添加账户弹窗 —— BlockHelm AddAccountDialogView 两步流程：
+ * ① 类型选择（离线 / 正版 Microsoft[0.0.9 实装]；第三方与购买入口按用户指示移除）；
  * ② 离线用户名输入（MC 规则 3-16 位字母/数字/下划线，与 runtime.addAccount 校验一致）。
  * 底部按钮：名称步左侧"返回"，右侧 取消/确定。
+ * 微软路径确定 = 关本窗并向父级发 ms 事件（设备码弹窗由账户页挂载与驱动）。
  */
 import { computed, ref, watch } from 'vue';
 import { useI18n } from '../i18n';
@@ -12,7 +13,7 @@ import { useBridge } from '../composables/useBridge';
 import AppDialog from './AppDialog.vue';
 
 const props = defineProps<{ open: boolean }>();
-const emit = defineEmits<{ 'update:open': [value: boolean] }>();
+const emit = defineEmits<{ 'update:open': [value: boolean]; ms: [] }>();
 
 const { t } = useI18n();
 const { add, error } = useAccounts();
@@ -31,9 +32,7 @@ const NAME_RE = /^[A-Za-z0-9_]{3,16}$/;
 const nameValid = computed(() => NAME_RE.test(name.value.trim()));
 
 const confirmDisabled = computed(() =>
-  step.value === 'type'
-    ? selected.value !== 'offline'
-    : !hasBridge.value || !nameValid.value || submitting.value,
+  step.value === 'type' ? selected.value === null : !hasBridge.value || !nameValid.value || submitting.value,
 );
 
 // 每次打开复位两步状态（避免上次选择残留）
@@ -57,6 +56,11 @@ async function onConfirm(): Promise<void> {
   error.value = null;
   if (step.value === 'type') {
     if (selected.value === 'offline') step.value = 'name';
+    else if (selected.value === 'microsoft') {
+      // 微软路径：关本窗，设备码弹窗由父级（账户页）接管
+      close();
+      emit('ms');
+    }
     return;
   }
   if (!nameValid.value || submitting.value) return;
@@ -98,7 +102,12 @@ async function onConfirm(): Promise<void> {
         </button>
       </li>
       <li>
-        <button class="option" type="button" disabled>
+        <button
+          class="option"
+          :class="{ 'option--selected': selected === 'microsoft' }"
+          type="button"
+          @click="selected = 'microsoft'"
+        >
           <span class="opt-icon" aria-hidden="true">
             <!-- lucide: user -->
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -110,7 +119,6 @@ async function onConfirm(): Promise<void> {
             <span class="opt-title">{{ t('account.dialog.msTitle') }}</span>
             <span class="opt-desc">{{ t('account.dialog.msDesc') }}</span>
           </span>
-          <span class="soon">{{ t('account.dialog.soon') }}</span>
         </button>
       </li>
     </ul>
@@ -225,15 +233,6 @@ async function onConfirm(): Promise<void> {
 .opt-desc {
   font-size: var(--fs-xs);
   color: var(--text-secondary);
-}
-.soon {
-  flex: 0 0 auto;
-  font-size: var(--fs-xs);
-  letter-spacing: var(--tracking-label);
-  padding: 1px var(--space-2);
-  border-radius: var(--radius-sm);
-  color: var(--warn);
-  background: var(--warn-soft);
 }
 .form {
   display: flex;

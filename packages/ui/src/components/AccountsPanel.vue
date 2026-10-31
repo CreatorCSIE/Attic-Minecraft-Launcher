@@ -6,7 +6,7 @@
  * 皮肤/披风节按用户指示不实现（仅留 UUID 部分）；添加账户为弹出子窗口（AddAccountDialog），非页内组件。
  * 选中列表项即设为当前账户（BlockHelm SelectAccountCommand 同款语义）。
  */
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import { useI18n } from '../i18n';
 import { useAccounts } from '../composables/useAccounts';
 import { useBridge } from '../composables/useBridge';
@@ -14,16 +14,41 @@ import type { AccountView } from '@attic/core-spec';
 import SkinAvatar from './SkinAvatar.vue';
 import AddAccountDialog from './AddAccountDialog.vue';
 import RenameAccountDialog from './RenameAccountDialog.vue';
+import MsLoginDialog from './MsLoginDialog.vue';
 import ConfirmDialog from './ConfirmDialog.vue';
 
 const { t } = useI18n();
-const { accounts, current, loading, remove, select } = useAccounts();
-const { hasBridge } = useBridge();
+const { accounts, current, loading, remove, select, load } = useAccounts();
+const { bridge, hasBridge } = useBridge();
 
 const addOpen = ref(false);
 const renameOpen = ref(false);
+const msOpen = ref(false);
 const copied = ref(false);
 let copiedTimer: ReturnType<typeof setTimeout> | undefined;
+
+// 微软账户「重新验证」（tokenValid=false 行内动作）：在途态 + 可见失败行；切账户即清错误
+const refreshing = ref(false);
+const refreshError = ref<string | null>(null);
+watch(
+  () => current.value?.id,
+  () => {
+    refreshError.value = null;
+  },
+);
+
+async function revalidate(account: AccountView): Promise<void> {
+  if (refreshing.value) return;
+  refreshError.value = null;
+  refreshing.value = true;
+  const res = await bridge.msRefreshAccount(account.id);
+  refreshing.value = false;
+  if (!res.ok) {
+    refreshError.value = res.error;
+    return;
+  }
+  await load();
+}
 
 // 删除确认（防误删，用户指定）：记录目标账户 + 弹窗开关 + 在途态
 const removeOpen = ref(false);
@@ -73,6 +98,10 @@ async function copyUuid(): Promise<void> {
           >
             <SkinAvatar :username="a.name" :uuid="a.id" :size="28" />
             <span class="mi-name">{{ a.name }}</span>
+            <!-- 微软令牌失效徽标（tokenValid=false；离线账户无此面） -->
+            <span v-if="a.type === 'microsoft' && a.tokenValid === false" class="mi-warn">{{
+              t('account.ms.revalidateBadge')
+            }}</span>
           </button>
           <button
             class="mi-del"
@@ -128,7 +157,20 @@ async function copyUuid(): Promise<void> {
         </div>
         <p class="kind">
           {{ current.type === 'microsoft' ? t('account.typeMicrosoft') : t('account.typeOffline') }}
+          <span v-if="current.type === 'microsoft' && current.tokenValid === false" class="mi-warn">{{
+            t('account.ms.revalidateBadge')
+          }}</span>
         </p>
+
+        <!-- 微软令牌失效：行内「重新验证」动作（成功刷新列表，失败可见错误行；离线账户无此面） -->
+        <div v-if="current.type === 'microsoft' && current.tokenValid === false && hasBridge" class="reval-row">
+          <button class="reval-btn" type="button" :disabled="refreshing" @click="revalidate(current)">
+            {{ refreshing ? t('account.ms.revalidating') : t('account.ms.revalidate') }}
+          </button>
+        </div>
+        <p v-if="current.type === 'microsoft' && refreshError" class="reval-err">{{
+          t('account.ms.revalidateFailed', { message: refreshError })
+        }}</p>
 
         <section class="uuid-sec">
           <h4 class="sec-title">{{ t('account.uuid') }}</h4>
@@ -154,8 +196,10 @@ async function copyUuid(): Promise<void> {
       </div>
     </div>
 
-    <AddAccountDialog v-model:open="addOpen" />
+    <AddAccountDialog v-model:open="addOpen" @ms="msOpen = true" />
     <RenameAccountDialog v-model:open="renameOpen" :account="current" />
+    <!-- 微软设备码登录弹窗（添加流程「正版账户」入口唤起；成功事件内自刷列表） -->
+    <MsLoginDialog v-model:open="msOpen" />
     <!-- 删除确认（防误删）：文案含账户名 -->
     <ConfirmDialog
       v-model:open="removeOpen"
@@ -241,6 +285,16 @@ async function copyUuid(): Promise<void> {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* 令牌失效徽标（warn 配方可选添加弹窗 .soon 同款色系）：行内 + 详情类型行共用 */
+.mi-warn {
+  flex: 0 0 auto;
+  font-size: var(--fs-xs);
+  letter-spacing: var(--tracking-label);
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--warn);
+  background: var(--warn-soft);
 }
 /* 删除钮：hover 行时浮现（BlockHelm Opacity 0→1 触发器等效） */
 .mi-del {
@@ -330,6 +384,37 @@ async function copyUuid(): Promise<void> {
   margin: var(--space-2) 0 0;
   font-size: var(--fs-sm);
   color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+/* 重新验证动作行 + 失败可见错误行（微软令牌失效态专属） */
+.reval-row {
+  margin-top: var(--space-3);
+}
+.reval-btn {
+  padding: var(--space-2) var(--space-5);
+  background: var(--surface-3);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--inset-bottom);
+  color: var(--text-primary);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.reval-btn:hover:not(:disabled) {
+  background: var(--surface-4);
+}
+.reval-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.reval-err {
+  margin: var(--space-2) 0 0;
+  font-size: var(--fs-xs);
+  color: var(--danger);
+  overflow-wrap: anywhere;
 }
 .uuid-sec {
   margin-top: var(--space-6);

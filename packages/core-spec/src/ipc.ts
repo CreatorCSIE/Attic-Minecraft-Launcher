@@ -44,6 +44,14 @@ export const IPC_CHANNELS = {
   ACCOUNTS_REMOVE: 'attic:accounts:remove',
   /** 重命名离线账户（同名校验；离线 UUID 随用户名重生成，id 即新 UUID）。 */
   ACCOUNTS_RENAME: 'attic:accounts:rename',
+  /** 发起微软设备码登录（single-flight，同时只允许一条流；成功值 = 设备码展示面，
+   * 终局经 MS_LOGIN 事件异步送达；token 机密全程驻宿主，渲染只见 AccountView）。 */
+  ACCOUNTS_MS_START: 'attic:accounts:ms:start',
+  /** 取消进行中的设备码流（无流在跑 = no-op 成功；轮询中止 + 落 CANCELED 事件）。 */
+  ACCOUNTS_MS_CANCEL: 'attic:accounts:ms:cancel',
+  /** 刷新微软账户 token（refreshToken → XBL/XSTS/MCS/profile 重放链，返回刷新后脱敏视图；
+   * 启动编排对过期 token 自动刷新，此通道供 UI 手动「重新验证」）。 */
+  ACCOUNTS_MS_REFRESH: 'attic:accounts:ms:refresh',
   /** 读取全局设置（launcher.settings 的渲染侧视图）。 */
   SETTINGS_GET: 'attic:settings:get',
   /** 写入全局设置（合并落盘，返回保存后的视图）。 */
@@ -239,6 +247,8 @@ export const IPC_EVENTS = {
   DOWNLOAD_PROGRESS: 'attic:download:progress',
   /** 自定义版本 .info 外部改动（宿主监视 jsons 目录、按 id 去抖后发射；配置页实时刷新消费）。 */
   CUSTOM_INFO_CHANGED: 'attic:custom:info-changed',
+  /** 微软设备码登录流终局（success = 账户已落盘；error = 分类码，原文不外传防敏感泄漏）。 */
+  MS_LOGIN: 'attic:account:ms:login',
 } as const;
 
 export type IpcEventName = (typeof IPC_EVENTS)[keyof typeof IPC_EVENTS];
@@ -272,6 +282,47 @@ export interface CustomInfoChangedEvent {
   /** 改动的 `jsons/<id>.info` 对应版本 id。 */
   id: string;
 }
+
+/** 设备码请求结果（ACCOUNTS_MS_START 成功值；弹窗展示面，字段 = MS devicecode 响应原样）。 */
+export interface MsDeviceCode {
+  /** 用户需在浏览器输入的短码（如 ABCD-EFGH）。 */
+  userCode: string;
+  /** 授权页地址（打开浏览器用）。 */
+  verificationUri: string;
+  /** 预填码直达链接（存在时优先，用户免手输）。 */
+  verificationUriComplete?: string;
+  /** 码有效期（秒）。 */
+  expiresIn: number;
+  /** 服务端要求的最小轮询间隔（秒；slow_down 错误时宿主侧 +5s 退避）。 */
+  interval: number;
+}
+
+/**
+ * 设备码登录流失败分类码（弹窗按码出文案；HTTP 原文可能含 token/URL 查询串，
+ * 一律不过桥——实装安全约束 plan.md §7 微软登录）。
+ */
+export type MsLoginErrorCode =
+  /** 用户拒绝授权或账户体系不符（authorization_declined / invalid_user）。 */
+  | 'access_denied'
+  /** 码超时未被使用（expired_token）。 */
+  | 'expired_token'
+  /** XSTS 2148916233：账户无 Xbox 档案（需先去 xbox.com 建档）。 */
+  | 'no_xbox_profile'
+  /** XSTS 2148916238：未成年账户受家长控制，无法联机。 */
+  | 'minor_parental'
+  /** MCS profile 缺失：该账户未持有 Minecraft（Java 版）。 */
+  | 'no_minecraft'
+  /** 用户主动取消流（弹窗关闭/取消钮）。 */
+  | 'canceled'
+  /** 网络/端点不可达（白名单五域任一超时或 DNS 失败）。 */
+  | 'network'
+  /** 兜底（响应形状异常等不可分类内部错误）。 */
+  | 'internal';
+
+/** 微软设备码登录流终局事件（MS_LOGIN 载荷）。 */
+export type MsLoginEvent =
+  | { state: 'success'; account: AccountView }
+  | { state: 'error'; code: MsLoginErrorCode };
 
 /** 下载项类别。 */
 export type DownloadItem =
@@ -325,6 +376,7 @@ export interface AtticEventPayloads {
   'attic:game:exit': GameExitEvent;
   'attic:download:progress': DownloadProgressEvent;
   'attic:custom:info-changed': CustomInfoChangedEvent;
+  'attic:account:ms:login': MsLoginEvent;
 }
 
 export interface LaunchRequest {
@@ -376,6 +428,12 @@ export interface RendererBridge {
   addAccount(name: string): Promise<IpcResult<AccountView>>;
   removeAccount(id: string): Promise<IpcResult<void>>;
   renameAccount(id: string, name: string): Promise<IpcResult<AccountView>>;
+  /** 发起微软设备码登录（single-flight；终局走 MS_LOGIN 事件）。 */
+  msStartLogin(): Promise<IpcResult<MsDeviceCode>>;
+  /** 取消进行中的设备码流。 */
+  msCancelLogin(): Promise<IpcResult<void>>;
+  /** 手动刷新微软账户 token（启动编排的自动刷新之外，供账户页「重新验证」）。 */
+  msRefreshAccount(id: string): Promise<IpcResult<AccountView>>;
   getSettings(): Promise<IpcResult<AppSettings>>;
   setSettings(settings: AppSettings): Promise<IpcResult<AppSettings>>;
   listInstances(): Promise<IpcResult<InstanceView[]>>;

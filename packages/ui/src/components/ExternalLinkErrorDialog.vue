@@ -12,7 +12,7 @@ const { error, dismiss } = useExternalLink();
 </script>
 
 <template>
-  <AppDialog :open="error !== null" @close="dismiss">
+  <AppDialog :open="error !== null" :z-index="200" @close="dismiss">
     <h3 class="title">{{ t('external.openError') }}</h3>
     <p class="msg">{{ error }}</p>
     <p class="hint">{{ t('external.openErrorHint') }}</p>

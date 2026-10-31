@@ -174,6 +174,37 @@ export {
   type ModRegistryEntry,
   type ModRegistry,
 } from './mods';
+export {
+  DEFAULT_MS_CLIENT_ID,
+  MS_HOST_WHITELIST,
+  isMsEndpointAllowed,
+  DPAPI_PREFIX,
+  MsAuthError,
+  MsAbortError,
+  javaUrlEncode,
+  requestDeviceCode,
+  pollDeviceToken,
+  refreshMsToken,
+  xblAuthenticate,
+  xstsAuthenticate,
+  mcsLogin,
+  mcProfile,
+  runAuthTail,
+  joinServer,
+  sha1ServerId,
+  encodeTokenSecret,
+  decodeTokenSecret,
+  type DpapiDeps,
+  type JoinServerInput,
+  type LookupFn,
+  type MsAuthDeps,
+  type MsChainResult,
+  type MsDeviceCodeIssue,
+  type MsProfileResult,
+  type MsTokenPair,
+  type MsXblResult,
+  type SleepFn,
+} from './microsoftAuth';
 export { AtticRuntime, maskSecrets, type AtticRuntimeOptions } from './runtime';
 export { compareSemver, checkLatestRelease, type UpdateCheckDeps } from './updateCheck';
 export { shouldPromptUpdate } from './updatePolicy';

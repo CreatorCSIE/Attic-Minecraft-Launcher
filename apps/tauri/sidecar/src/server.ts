@@ -189,6 +189,12 @@ async function dispatch(method: string, params: Params): Promise<unknown> {
       return runtime.removeAccount(s(0));
     case C.ACCOUNTS_RENAME:
       return runtime.renameAccount(s(0), s(1));
+    case C.ACCOUNTS_MS_START:
+      return runtime.msStartLogin();
+    case C.ACCOUNTS_MS_CANCEL:
+      return runtime.msCancelLogin();
+    case C.ACCOUNTS_MS_REFRESH:
+      return runtime.msRefreshAccount(s(0));
     case C.SETTINGS_GET:
       return runtime.getSettings();
     case C.SETTINGS_SET:
