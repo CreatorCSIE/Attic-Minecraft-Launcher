@@ -211,6 +211,14 @@ export class BetacraftClient {
     this.onProgress?.(event);
   }
 
+  /**
+   * 公开事件口：宿主编排层（runtime.ts launch）为 cache-hit 阶段插合成 queued/done 对
+   * （HMCL 阶段行可见性：缓存命中也显示 ✓ 行，弹窗不再空白——五轮根因）。
+   */
+  emitProgress(event: DownloadProgressEvent): void {
+    this.emit(event);
+  }
+
   private async get(url: string): Promise<Response> {
     const res = await this.fetchImpl(url);
     if (!res.ok) throw new Error(`HTTP ${res.status} ${url}`);
@@ -321,8 +329,18 @@ export class BetacraftClient {
     const sha1 = json.jar?.sha1 ?? json.downloads?.client?.sha1;
     const dest = clientJarFile(root, json.id);
     if (!opts.force && fs.existsSync(dest)) {
-      if (!sha1 || opts.verify === false) return;
-      if ((await hashFile(dest, 'sha1')) === sha1.toLowerCase()) return;
+      // cache-hit 合成对（HMCL 阶段行可见性）：queued 先于哈希复核、done 于命中返回处；
+      // 不符走重下时 download() 自带序列（同键覆盖，无残留）。
+      const size = fs.statSync(dest).size;
+      this.emit({ item: 'client-jar', id: json.id, phase: 'queued', bytesDone: 0, bytesTotal: size });
+      if (!sha1 || opts.verify === false) {
+        this.emit({ item: 'client-jar', id: json.id, phase: 'done', bytesDone: size, bytesTotal: size });
+        return;
+      }
+      if ((await hashFile(dest, 'sha1')) === sha1.toLowerCase()) {
+        this.emit({ item: 'client-jar', id: json.id, phase: 'done', bytesDone: size, bytesTotal: size });
+        return;
+      }
       // 复核不符 = 本地损坏；补全关闭时把决定权交回用户（可见失败，不静默覆盖）
       if (opts.repair === false) {
         throw new Error(`版本 ${json.id} 的 jar 校验不符（本地文件损坏），自动补全已禁用——请手动删除该 jar 或开启补全开关`);
@@ -360,8 +378,16 @@ export class BetacraftClient {
     }
     const dest = modJarFile(root, json.id);
     if (!opts.force && fs.existsSync(dest)) {
-      if (!sha1 || opts.verify === false) return dest;
-      if ((await hashFile(dest, 'sha1')) === sha1.toLowerCase()) return dest;
+      const size = fs.statSync(dest).size;
+      this.emit({ item: 'mod-jar', id: json.id, phase: 'queued', bytesDone: 0, bytesTotal: size });
+      if (!sha1 || opts.verify === false) {
+        this.emit({ item: 'mod-jar', id: json.id, phase: 'done', bytesDone: size, bytesTotal: size });
+        return dest;
+      }
+      if ((await hashFile(dest, 'sha1')) === sha1.toLowerCase()) {
+        this.emit({ item: 'mod-jar', id: json.id, phase: 'done', bytesDone: size, bytesTotal: size });
+        return dest;
+      }
     }
     await this.download(url, dest, 'mod-jar', json.id, sha1 ? { algo: 'sha1', value: sha1 } : undefined, opts.signal);
     return dest;
@@ -384,8 +410,16 @@ export class BetacraftClient {
     const sha1 = ai?.sha1 ?? entry?.sha1;
     const dest = assetIndexFile(root, id);
     if (!opts.force && fs.existsSync(dest)) {
-      if (!sha1) return id;
-      if ((await hashFile(dest, 'sha1')) === sha1.toLowerCase()) return id;
+      const size = fs.statSync(dest).size;
+      this.emit({ item: 'asset-index', id, phase: 'queued', bytesDone: 0, bytesTotal: size });
+      if (!sha1) {
+        this.emit({ item: 'asset-index', id, phase: 'done', bytesDone: size, bytesTotal: size });
+        return id;
+      }
+      if ((await hashFile(dest, 'sha1')) === sha1.toLowerCase()) {
+        this.emit({ item: 'asset-index', id, phase: 'done', bytesDone: size, bytesTotal: size });
+        return id;
+      }
     }
     await this.download(url, dest, 'asset-index', id, sha1 ? { algo: 'sha1', value: sha1 } : undefined, opts.signal);
     return id;
@@ -399,12 +433,31 @@ export class BetacraftClient {
   async downloadAssetObjects(root: string, indexId: string, opts: { force?: boolean; signal?: AbortSignal } = {}): Promise<void> {
     const indexFile = assetIndexFile(root, indexId);
     if (!fs.existsSync(indexFile)) return;
+    // HMCL 配方「资产检查」阶段行（用户验收 2026-10-31）：queued/transferring*/done 序列
+    // 括住存在性+尺寸核对循环。bytesDone/bytesTotal = 已核对对象数/对象总数（非字节，
+    // UI 聚合层对 asset-check 除外计入字节和）。全本地时循环是纯同步块，不让出则事件
+    // 积压到检查完才 flush（验收截图「检查期间无显示」根因）→ 每段核对后 setImmediate 让出。
     const plan = planAssetObjects(JSON.parse(fs.readFileSync(indexFile, 'utf8')) as unknown);
+    const total = plan.length;
+    // 节流粒度动态：约 40 段、每段至少 25 对象——经典版资产仅几十~几百对象，
+    // 固定 250 永不触发（三轮验收「现象还是一样」根因）。开头即发一条 0 进度
+    // transferring：行与进度条立即出现，不等第一段核对完。
+    const step = Math.max(25, Math.ceil(total / 40) || 1);
+    this.emit({ item: 'asset-check', id: indexId, phase: 'queued', bytesDone: 0, bytesTotal: total });
+    this.emit({ item: 'asset-check', id: indexId, phase: 'transferring', bytesDone: 0, bytesTotal: total });
+    let checked = 0;
     for (const obj of plan) {
       const dest = path.join(assetsDir(root), 'objects', obj.hash.slice(0, 2), obj.hash);
-      if (!opts.force && fs.existsSync(dest) && fs.statSync(dest).size === obj.size) continue;
-      await this.download(obj.url, dest, 'asset', `${indexId}:${obj.key}`, { algo: 'sha1', value: obj.hash }, opts.signal);
+      if (!opts.force && !(fs.existsSync(dest) && fs.statSync(dest).size === obj.size)) {
+        await this.download(obj.url, dest, 'asset', `${indexId}:${obj.key}`, { algo: 'sha1', value: obj.hash }, opts.signal);
+      }
+      checked += 1;
+      if (checked % step === 0) {
+        this.emit({ item: 'asset-check', id: indexId, phase: 'transferring', bytesDone: checked, bytesTotal: total });
+        await new Promise((r) => setImmediate(r));
+      }
     }
+    this.emit({ item: 'asset-check', id: indexId, phase: 'done', bytesDone: total, bytesTotal: total });
   }
 
   /**
@@ -488,11 +541,16 @@ export class BetacraftClient {
   async ensureLegacyfix(root: string, relPath: string, signal?: AbortSignal): Promise<string> {
     const dest = path.join(root, relPath);
     if (fs.existsSync(dest)) {
+      const file = path.basename(relPath);
+      const size = fs.statSync(dest).size;
+      this.emit({ item: 'legacyfix', id: file, phase: 'queued', bytesDone: 0, bytesTotal: size });
       if (await this.legacyfixIntact(dest)) {
         // DeAwtPatch 窗口位置补丁幂等维持（钉版不匹配/锚点异常自动跳过，不阻断启动）。
         reportLegacyfixDeawtPatch(dest, applyLegacyfixDeawtPatch(dest));
+        this.emit({ item: 'legacyfix', id: file, phase: 'done', bytesDone: size, bytesTotal: size });
         return dest;
       }
+      // 残缺自愈 → 下方重下通道（download() 同键自带序列覆盖 queued）
       // 自愈：残缺/校验不符 → 本体+锚点一并删除，走下方重下通道。
       fs.rmSync(dest, { force: true });
       fs.rmSync(`${dest}.meta`, { force: true });

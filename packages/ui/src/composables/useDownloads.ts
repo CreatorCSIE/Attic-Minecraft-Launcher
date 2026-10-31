@@ -27,9 +27,14 @@ function keyOf(e: DownloadProgressEvent): string {
   return `${e.item}:${e.id}`;
 }
 
+/* asset-check 的 bytesDone/bytesTotal 是对象计数（非字节），字节聚合两端均除外计入。 */
+function isByteEvent(e: DownloadProgressEvent): boolean {
+  return e.item !== 'asset-check';
+}
+
 function totalBytesDone(): number {
   let done = 0;
-  for (const it of Object.values(items.value)) done += it.bytesDone;
+  for (const it of Object.values(items.value)) if (isByteEvent(it)) done += it.bytesDone;
   return done;
 }
 
@@ -42,7 +47,7 @@ function subscribe(): void {
     stage.value = e.item;
 
     let total = 0;
-    for (const it of Object.values(items.value)) total += it.bytesTotal ?? it.bytesDone;
+    for (const it of Object.values(items.value)) if (isByteEvent(it)) total += it.bytesTotal ?? it.bytesDone;
     if (total > 0) {
       const p = Math.min(100, Math.round((totalBytesDone() / total) * 100));
       if (p > percent.value) percent.value = p;
@@ -86,10 +91,12 @@ export interface DownloadsStore {
   stage: typeof stage;
   active: ComputedRef<boolean>;
   failed: ComputedRef<DownloadProgressEvent | null>;
+  /** 逐对象最新事件（`item:id` 键）——启动进度弹窗任务行数据源。 */
+  items: typeof items;
   reset: () => void;
 }
 
 export function useDownloads(): DownloadsStore {
   subscribe();
-  return { percent, rateBps, stage, active, failed, reset };
+  return { percent, rateBps, stage, active, failed, items, reset };
 }

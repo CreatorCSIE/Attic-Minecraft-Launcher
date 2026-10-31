@@ -321,11 +321,19 @@
     },
     "visualizerOff": "选中版本的本地 jar 不含无限地图预览类（或未下载），暂不可用",
     "downloadFailed": "下载失败",
+    "dialog": {
+      "title": "启动游戏",
+      "cancel": "取消",
+      "close": "关闭",
+      "doneCount": "已完成 {n}"
+    },
     "stage": {
       "version-manifest": "正在获取版本列表…",
       "version-json": "正在获取版本信息…",
       "client-jar": "正在下载游戏客户端…",
+      "mod-jar": "正在下载模组文件…",
       "asset-index": "正在获取资产索引…",
+      "asset-check": "正在检查资产文件…",
       "asset": "正在补全资产文件…",
       "library": "正在下载依赖库…",
       "java-runtime": "正在下载 Java 运行时…",

@@ -147,7 +147,7 @@ c0.24 家族死链声音预置（`<gameDir>/resources/`，同样不动命令行�
 | --- | --- | --- |
 | `attic:game:output` | `GameOutputEvent{stream,chunk,pid,seq?}` | stdout/stderr 流，UI 控制台面板消费；`seq` = electron 宿主广播时盖的会话内单调序号（backlog 补拉与实时事件去重用，见 `attic:game:backlog`；宿主不实现 backlog 时缺省） |
 | `attic:game:exit` | `GameExitEvent{code,signal,crash,stoppedByUser?,pid,versionId}` | 退出 + 崩溃分类摘要；`stoppedByUser:true` = 用户主动停止（点停止按钮/关游戏窗触发看门狗），`crash` 恒为 null，控制台以中性条显示最后一行日志；外部 taskkill/自身异常退出仍照常报崩溃条 |
-| `attic:download:progress` | `DownloadProgressEvent{item,id,phase,bytesDone,bytesTotal?,bytesPerSec?,error?}` | jar/资产/Java/legacyfix 统一形状；`phase`: `queued/transferring/verifying/done/failed/cancelled`（cancelled=feat①取消中止，UI 落中性态） |
+| `attic:download:progress` | `DownloadProgressEvent{item,id,phase,bytesDone,bytesTotal?,bytesPerSec?,error?}` | jar/资产/Java/legacyfix 统一形状；`phase`: `queued/transferring/verifying/done/failed/cancelled`（cancelled=feat①取消中止，UI 落中性态）；`item=asset-check` = 资产检查阶段合成事件（queued/transferring/done 括住存在性+尺寸核对循环，id=资产索引 id；`bytesDone/bytesTotal` = 已核对对象数/对象总数（**非字节**，动态节流连发并让出事件循环——UI 字节聚合层对此 item 除外计入；HMCL 启动弹窗移植，UI 阶段行数据源）。**cache-hit 合成对**（五轮根因修正：全本地启动曾零事件、弹窗空白）：version-json/client-jar/mod-jar/library/asset-index/legacyfix 缓存命中同样发 queued/done 一对（字节=本地文件大小或 0），阶段行「缓存=秒过 ✓」；真下载路径 download() 同键自带序列覆盖，无双计 |
 | `attic:custom:info-changed` | `CustomInfoChangedEvent{id}` | 宿主监视 `versions/jsons/` 目录：外部编辑/新建/删除 `.info`，按 id 去抖 250ms 合并后发射；自定义版本配置页实时刷新（未编辑自动重载，有未保存编辑则提示不覆盖；本方保存/删除的回声由 UI selfWrite 窗口吸收） |
 
 ## 4. 契约测试夹具

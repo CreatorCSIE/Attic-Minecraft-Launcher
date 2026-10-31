@@ -483,6 +483,14 @@ export class AtticRuntime {
    * 绝不回落官方默认 versionJson(id) URL——v1 Launcher.java L410-414「离线误路由官方 URL」的结构性修复。
    */
   private async refreshVersionInfo(versionId: string): Promise<VersionJson> {
+    // HMCL 阶段行可见性：version-json 每次启动必刷（本地命中也走），合成 queued/done 对括住刷新
+    this.client.emitProgress({ item: 'version-json', id: versionId, phase: 'queued', bytesDone: 0 });
+    const json = await this.refreshVersionInfoInner(versionId);
+    this.client.emitProgress({ item: 'version-json', id: versionId, phase: 'done', bytesDone: 0 });
+    return json;
+  }
+
+  private async refreshVersionInfoInner(versionId: string): Promise<VersionJson> {
     const modEntry = readModRegistry(this.root)[versionId];
     if (modEntry) return this.refreshRegisteredModInfo(versionId, modEntry);
     const localText = readTextIfPresent(infoFile(this.root, versionId));
@@ -676,10 +684,13 @@ export class AtticRuntime {
       }
       json = this.resolveIndevMainClass(json);
       // BC 基础库集先行（清池重解在 libraries 增量下载之前，避免误删刚下的库；v1 移植见 depends.ts）。
+      // library 阶段合成对括住 depends 池 + 增量库全段（缓存命中全本地时本段近零事件，行也可见）。
       signal.throwIfAborted();
+      this.client.emitProgress({ item: 'library', id: metaJson.id, phase: 'queued', bytesDone: 0 });
       await this.updateDepends(settings, forceUpdate, signal);
       signal.throwIfAborted();
       await this.client.downloadLibrariesToBin(json, this.root, { force: forceUpdate, signal });
+      this.client.emitProgress({ item: 'library', id: metaJson.id, phase: 'done', bytesDone: 0 });
       this.extractNatives();
       // 资产补全（v2 语义）：索引 + objects 全体由启动器预置——legacyfix 只自动补 custom 段，
       // objects 缺失即游戏内 CodecJOrbis/OpenAL 声音 NPE（用户实测 c0.0.22a）。
@@ -688,7 +699,11 @@ export class AtticRuntime {
       if (assetIndexId) await this.client.downloadAssetObjects(this.root, assetIndexId, { force: forceUpdate, signal });
 
       signal.throwIfAborted();
+      // java-runtime 阶段合成对括住 buildContext（Java 解析/探测在其中以 execFile 异步跑，
+      // 全本地无下载时本行也可见；真下载 runtime 时 download() 同 item 不同 id 并存）。
+      this.client.emitProgress({ item: 'java-runtime', id: request.versionId, phase: 'queued', bytesDone: 0 });
       const context = await this.buildContext(request, signal);
+      this.client.emitProgress({ item: 'java-runtime', id: request.versionId, phase: 'done', bytesDone: 0 });
       context.appletClass = this.resolvePreclassicAppletClass(json);
       // 死链声音预置（gameDir 侧写数据，不动 JVM 参数；dryRun 不预置——纯检视不留副作用）。
       this.applyLegacyResources(json, context.gameDir, assetIndexId);

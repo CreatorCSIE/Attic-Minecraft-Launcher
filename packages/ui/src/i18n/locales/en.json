@@ -332,11 +332,19 @@
     },
     "visualizerOff": "The selected version jar does not contain the visualizer class (or is not downloaded yet)",
     "downloadFailed": "Download failed",
+    "dialog": {
+      "title": "Launching Game",
+      "cancel": "Cancel",
+      "close": "Close",
+      "doneCount": "{n} done"
+    },
     "stage": {
       "version-manifest": "Fetching version list…",
       "version-json": "Fetching version info…",
       "client-jar": "Downloading game client…",
+      "mod-jar": "Downloading mod jar…",
       "asset-index": "Fetching asset index…",
+      "asset-check": "Checking assets…",
       "asset": "Downloading assets…",
       "library": "Downloading libraries…",
       "java-runtime": "Downloading Java runtime…",

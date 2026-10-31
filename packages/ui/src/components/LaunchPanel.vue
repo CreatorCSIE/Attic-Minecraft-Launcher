@@ -19,6 +19,7 @@ import { useDownloads } from '../composables/useDownloads';
 import { useInstances } from '../composables/useInstances';
 import AppDialog from './AppDialog.vue';
 import InstanceDock from './InstanceDock.vue';
+import LaunchProgressDialog from './LaunchProgressDialog.vue';
 import VersionSelector from './VersionSelector.vue';
 
 const emit = defineEmits<{ (e: 'open-instances'): void }>();
@@ -29,12 +30,13 @@ const { status, busy, lastError, launch, cancel, kill } = useGame();
 const { settings } = useSettings();
 const { current } = useAccounts();
 const { bridge, hasBridge } = useBridge();
-const { percent, rateBps, stage, active, failed, reset: resetDownloads } = useDownloads();
+const { reset: resetDownloads } = useDownloads();
 const { activeName, instances } = useInstances();
 
 const running = computed(() => status.value.running);
-/* 聚合进度区可见性（BlockHelm 配方）：启动中展示；下载失败则常驻红态直到下次启动。 */
-const showProgress = computed(() => active.value && (busy.value || failed.value !== null));
+/* 启动进度弹窗（HMCL 移植，plan.md §4）：doLaunch 无条件唤起，spawn 成功即关
+ * （控制台窗承接后续）；失败/取消后留窗显示 ✗ 行与错误，用户点「关闭」退场。 */
+const progressOpen = ref(false);
 const canPlay = computed(() => hasBridge.value && !!selected.value && !!current.value && !running.value && !busy.value);
 /* 启动/停止/取消三态一体（用户指定）：同一按钮按状态切换动作——
  * 空闲=启动，运行=停止，busy 未运行=取消（0.0.2 feat①：补全资产/下载期间不再纯禁用）。
@@ -103,6 +105,7 @@ async function doLaunch(test: boolean, visualizer = false, server?: string): Pro
   if (!v) return;
   menuOpen.value = false;
   resetDownloads();
+  progressOpen.value = true;
   const ok = await launch({
     versionId: v.id,
     // 激活实例（Play 左侧实例 dock 选择；未初始化时留空 = 宿主按契约回落 default instance）
@@ -114,7 +117,15 @@ async function doLaunch(test: boolean, visualizer = false, server?: string): Pro
     ...(visualizer ? { visualizer: true } : {}),
     ...(server ? { server } : {}),
   });
+  if (ok) progressOpen.value = false;
   if (ok && (test || settings.value.consoleOnLaunch !== false)) void bridge.openConsoleWindow();
+}
+
+/** 弹窗取消（钮 + Esc/遮罩 busy 态同语义，HMCL onEscPressed）：取消启动并关窗
+ * （HMCL 同款 onCancel = cancel+close；失败详情仍落面板 lastError 横幅）。 */
+function onProgressCancel(): void {
+  void cancel();
+  progressOpen.value = false;
 }
 
 // —— 直连询问弹窗（Play 前置，MVP）：激活实例档案 server 非空必拦；server 缺省时，选中版本
@@ -200,31 +211,13 @@ function onInstanceSettings(): void {
   emit('open-instances');
 }
 
-/** 速率文本（MB/s，一位小数）。 */
-function mb(bytes: number): string {
-  return (bytes / 1048576).toFixed(1);
-}
+
 </script>
 
 <template>
   <section class="panel">
     <p v-if="lastError" class="error">{{ t('launch.failed') }}：{{ lastError }}</p>
     <p v-else-if="status.lastError" class="error">{{ status.lastError }}</p>
-
-    <!-- 聚合下载进度（BlockHelm 配方）：阶段文案 + 细进度条 + 速率；失败显式红态常驻 -->
-    <div v-if="showProgress" class="progress" :class="{ 'progress--failed': failed !== null }">
-      <div class="progress-top">
-        <span class="progress-stage">
-          {{ failed ? t('launch.downloadFailed') : stage ? t(`launch.stage.${stage}`) : '' }}
-        </span>
-        <span v-if="!failed && rateBps" class="progress-rate">{{ mb(rateBps) }} MB/s</span>
-        <span v-else-if="!failed" class="progress-pct">{{ percent }}%</span>
-      </div>
-      <div class="progress-bar">
-        <div class="progress-fill" :style="{ width: percent + '%' }"></div>
-      </div>
-      <p v-if="failed" class="progress-err">{{ failed.id }}：{{ failed.error }}</p>
-    </div>
 
     <!-- 动作行：Play+菜单沉底靠右；实例 dock（用户指定）置于 Play 左侧，
          与版本 dock 同款交互，展开向上浮出、不吃布局空间。
@@ -347,6 +340,15 @@ function mb(bytes: number): string {
         </button>
       </footer>
     </AppDialog>
+
+    <!-- 启动进度弹窗（HMCL 移植）：doLaunch 无条件唤起；取代原右上聚合进度条 -->
+    <LaunchProgressDialog
+      :open="progressOpen"
+      :busy="busy"
+      :error="lastError"
+      @cancel="onProgressCancel"
+      @close="progressOpen = false"
+    />
   </section>
 </template>
 
@@ -446,55 +448,6 @@ function mb(bytes: number): string {
 .error {
   font-size: var(--fs-sm);
   color: var(--danger);
-}
-/* —— 聚合下载进度（BlockHelm 配方：阶段文案 + 220×5 细进度条 + 速率；与动作行同侧右对齐） —— */
-.progress {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: var(--space-2);
-}
-.progress-top {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-3);
-}
-.progress-stage {
-  font-size: var(--fs-sm);
-  color: var(--text-secondary);
-}
-.progress-rate,
-.progress-pct {
-  font-size: var(--fs-xs);
-  color: var(--accent);
-  font-variant-numeric: tabular-nums;
-}
-.progress-bar {
-  width: 220px;
-  height: 5px;
-  background: var(--surface-1);
-  border-radius: var(--radius-pill);
-  overflow: hidden;
-}
-.progress-fill {
-  height: 100%;
-  background: var(--accent);
-  border-radius: var(--radius-pill);
-  transition: width var(--dur-base) var(--ease-out);
-}
-.progress-err {
-  max-width: 220px;
-  margin: 0;
-  font-size: var(--fs-xs);
-  color: var(--danger);
-  text-align: right;
-  overflow-wrap: anywhere;
-}
-.progress--failed .progress-stage {
-  color: var(--danger);
-}
-.progress--failed .progress-fill {
-  background: var(--danger);
 }
 /* —— 「| ≡」：竖分隔线 + 幽灵菜单钮；弹层向上右对齐（Play 在右下角，菜单在其右侧） —— */
 .menu-wrap {

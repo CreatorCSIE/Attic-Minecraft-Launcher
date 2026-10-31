@@ -278,10 +278,29 @@ export type DownloadItem =
   | 'client-jar'
   | 'mod-jar'
   | 'asset-index'
+  | 'asset-check'
   | 'asset'
   | 'library'
   | 'java-runtime'
   | 'legacyfix';
+
+/**
+ * 启动补全阶段序（**= runtime.ts launch 编排实际执行序**，HMCL 启动弹窗移植的阶段行数据驱动源，
+ * plan.md §4；「越过即 ✓」推断依赖本序与执行序一致——五轮修正：library 实际先于资产、
+ * legacyfix 在 java 之后，原按语义归类排序会误判完成态）。
+ * `version-manifest` 属版本列表刷新通道、不在启动补全链路，故不含。
+ */
+export const LAUNCH_DOWNLOAD_STAGES: readonly DownloadItem[] = [
+  'version-json',
+  'client-jar',
+  'mod-jar',
+  'library',
+  'asset-index',
+  'asset-check',
+  'asset',
+  'java-runtime',
+  'legacyfix',
+];
 
 export interface DownloadProgressEvent {
   item: DownloadItem;
