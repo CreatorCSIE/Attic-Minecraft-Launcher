@@ -113,6 +113,12 @@ AppVerName={#ATTIC_NAME} {#ATTIC_VERSION}
 AppPublisher=CreatorCSIE
 AppPublisherURL=https://github.com/CreatorCSIE/Attic-Minecraft-Launcher
 VersionInfoCopyright=Copyright (c) 2026 CreatorCSIE
+; 许可协议页（2026-11-01 用户拍板）：GPLv3 全文（仓库根 LICENSE，与 README License 节同源）
+LicenseFile=..\LICENSE
+; 默认语言钉 English（2026-11-01 修正：原 [Code] ActiveLanguage('en') 是编不过的臆写——
+; ActiveLanguage 为无参 getter；官方开关本指令 = 不做系统 locale 侦测，恒落 [Languages] 首项 en；
+; 多语言下语言选择页照常出现（ShowLanguageDialog=auto），简中/繁中仍可选）
+LanguageDetectionMethod=None
 ; {autopf} 在 lowest 特权安装 = %LOCALAPPDATA%\Programs（VS Code/Blockbench 同轨；
 ; 勿用 {localappdata} = %LOCALAPPDATA% 根，实测已踩）
 DefaultDirName={autopf}\{#ATTIC_NAME}
@@ -131,8 +137,8 @@ CloseApplications=yes
 
 [Languages]
 ; 排序与默认（2026-10-31 用户拍板）：English 第一、简体中文第二、新增繁體中文；
-; 默认语言 = English，由 [Code] InitializeSetup 的 ActiveLanguage('en') 覆盖 Inno 的
-; 系统语言自动侦测（否则 zh-CN 系统默认落简中）；两中文皆非官方翻译，
+; 默认语言 = English，由 [Setup] LanguageDetectionMethod=None 保证（恒落本表首项，
+; 详见 Setup 段注释）；两中文皆非官方翻译，
 ; 不随 Inno 安装包分发 —— 已 vendor 进 installer\lang\（简中 6.7.3 版 / 繁中 6.5.0+ 版）
 Name: "en"; MessagesFile: "compiler:Default.isl"
 Name: "zh"; MessagesFile: "{#SourcePath}lang\ChineseSimplified.isl"
@@ -212,9 +218,8 @@ var
   VS: String;
 begin
   Result := True;
-  // 默认语言钉 English（2026-10-31 用户拍板）：覆盖 Inno 按系统 locale 的自动侦测，
-  // 语言下拉仍可选简中/繁中（[Languages] 序 = en、zh、zhtw）
-  ActiveLanguage('en');
+  // 默认语言 = English 经 [Setup] LanguageDetectionMethod=None 实现（本函数不设语言——
+  // ActiveLanguage 是无参 getter，Pascal Script 无法赋值）
   if not GetWinMajorSP(Major, SP) then Exit;
 
 #if LEGACY
