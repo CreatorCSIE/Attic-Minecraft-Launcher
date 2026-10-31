@@ -27,7 +27,46 @@ function resolveMode(mode: ThemeMode | undefined): 'dark' | 'light' {
 
 function applyTheme(): void {
   if (typeof document === 'undefined') return;
-  document.documentElement.setAttribute('data-theme', resolveMode(settings.value.theme));
+  const el = document.documentElement;
+  el.setAttribute('data-theme', resolveMode(settings.value.theme));
+  // 强调色板（tokens.css [data-theme][data-accent] 静态层，缺省 amber = 无覆写块回落原值）
+  el.setAttribute('data-accent', settings.value.accentColor || 'amber');
+  void applyBackground();
+}
+
+/** 背景图应用序号：连续 patch（防抖保存链）时丢弃过期读取结果，后发胜出。 */
+let bgSeq = 0;
+
+/**
+ * 外置背景图 → `--app-bg-image` + `--app-bg-overlay` + `data-bg-image`（宿主 data URL，双壳统一）。
+ * 仅配置时启用（用户定稿 2026-10-31：无内置默认图，缺省 = 纯色主题底）；
+ * 缺省/读取失败 = 全部移除回落纯色（可见失败已由选择动作当场承担，应用侧静默兜底）。
+ * data-bg-image 同时驱动舞台浮空元素的亮字重映射（无图浅底时那些覆写必须撤除）。
+ */
+async function applyBackground(): Promise<void> {
+  if (typeof document === 'undefined') return;
+  const el = document.documentElement;
+  const filePath = settings.value.backgroundImage;
+  const seq = ++bgSeq;
+  const clear = () => {
+    el.style.removeProperty('--app-bg-image');
+    el.style.removeProperty('--app-bg-overlay');
+    el.removeAttribute('data-bg-image');
+  };
+  if (!filePath) {
+    clear();
+    return;
+  }
+  const res = await bridge.readImageAsDataUrl(filePath);
+  if (seq !== bgSeq) return;
+  if (res.ok && res.value) {
+    el.style.setProperty('--app-bg-image', `url("${res.value}")`);
+    // 固定暗遮罩（Modrinth splash 暗色配方）：文字亮字重映射以此为前提
+    el.style.setProperty('--app-bg-overlay', 'linear-gradient(rgba(22, 24, 28, 0.64), rgba(22, 24, 28, 0.64))');
+    el.setAttribute('data-bg-image', 'on');
+  } else {
+    clear();
+  }
 }
 
 if (typeof window !== 'undefined') {
@@ -41,6 +80,9 @@ if (typeof window !== 'undefined') {
 }
 
 const themeMode = computed<ThemeMode>(() => settings.value.theme ?? 'system');
+
+/** 解析后的实际主题（swatch 预览等需要按 dark/light 取 accent 档的消费点用）。 */
+const resolvedTheme = computed<'dark' | 'light'>(() => resolveMode(settings.value.theme));
 
 async function load(): Promise<void> {
   const res = await bridge.getSettings();
@@ -90,6 +132,7 @@ export interface SettingsStore {
   loaded: typeof loaded;
   saving: typeof saving;
   themeMode: ComputedRef<ThemeMode>;
+  resolvedTheme: ComputedRef<'dark' | 'light'>;
   load: () => Promise<void>;
   patch: (p: Partial<AppSettings>) => Promise<boolean>;
   patchDetailed: (p: Partial<AppSettings>) => Promise<{ ok: boolean; error?: string }>;
@@ -99,5 +142,5 @@ export interface SettingsStore {
 
 export function useSettings(): SettingsStore {
   ensureLoaded();
-  return { settings, loaded, saving, themeMode, load, patch, patchDetailed, setTheme, ensureLoaded };
+  return { settings, loaded, saving, themeMode, resolvedTheme, load, patch, patchDetailed, setTheme, ensureLoaded };
 }

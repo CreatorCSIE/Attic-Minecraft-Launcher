@@ -107,6 +107,8 @@ const mockBridge: RendererBridge = {
   clearLogs: async () => err<number>(NO_BRIDGE),
   pickJavaExecutable: async () => err<string | null>(NO_BRIDGE),
   pickDirectory: async () => err<string | null>(NO_BRIDGE),
+  pickImageFile: async () => err<string | null>(NO_BRIDGE),
+  readImageAsDataUrl: async () => err<string>(NO_BRIDGE),
   // 外链是唯一浏览器可忠实实现的"宿主动作"：window.open 即系统默认浏览器行为，照常放行。
   openExternalUrl: async (url: string) => {
     try {
@@ -172,6 +174,10 @@ function demoBridge(): RendererBridge {
     },
     pickDirectory: async () => ok<string | null>(DEMO_PICK_PATHS[pickCount++ % DEMO_PICK_PATHS.length] ?? null),
     pickJavaExecutable: async () => ok<string | null>(demoJavaInstall.executable),
+    // 背景图演练面：选择器回假路径，读取回 1px 透明 PNG（链路可通；遮罩+暗上下文覆写真实生效）。
+    pickImageFile: async () => ok<string | null>('D:\\Pictures\\background.png'),
+    readImageAsDataUrl: async () =>
+      ok<string>('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='),
     // Mods 页演示：假仓库「现拉现发」= 每次深拷贝返回（与真宿主语义一致——直接回原数组引用时，
     // installMod 的原地改写落在 raw 对象上、绕过 Vue reactive 代理，installed 徽标不刷新）。
     listMods: async () => ok<ModCategoryView[]>(structuredClone(demoModCategories)),

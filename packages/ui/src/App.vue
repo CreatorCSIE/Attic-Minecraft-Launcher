@@ -543,8 +543,21 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   padding: var(--space-5);
-  /* 同 .content：淡入期间背景不穿透 */
-  background: var(--surface-1);
+  /* 启动舞台背景（用户定稿 2026-10-31：仅配置背景图时启用，无内置默认图）：
+     遮罩/图两变量由 useSettings 在图可用时成对写入（缺省 = none 回落纯色底）；
+     末层 surface-1 色垫 = 淡入期间背景不穿透（原注释语义保留）。
+     LaunchPanel .panel 透明即为此画布设计。 */
+  background:
+    var(--app-bg-overlay, none),
+    var(--app-bg-image, none) center / cover no-repeat,
+    var(--surface-1);
+}
+/* 背景图启用态 = 固定暗上下文（图 + 暗遮罩）：舞台浮空元素文字 token 局部重映射为
+   暗主题亮值，否则浅色主题深字压暗图不可读（2026-10-31 用户实机报障）；
+   无图时选择器不命中，全部回落主题值（浅底深字）。底部不透明卡片不在本子树，不受影响 */
+html[data-bg-image] .stage-hero {
+  --text-primary: #e8e4dc;
+  --text-secondary: #a8a296;
 }
 .stage-hero {
   position: absolute;

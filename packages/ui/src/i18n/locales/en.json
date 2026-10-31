@@ -424,9 +424,21 @@
       "light": "Light",
       "system": "System",
       "accent": "Accent color",
-      "accentDesc": "Custom UI accent color (planned).",
+      "accentDesc": "Primary UI color (buttons, focus rings, highlights). Palette based on the Modrinth theme scheme.",
+      "accentNames": {
+        "amber": "Torch Amber",
+        "green": "Emerald",
+        "blue": "Sky Blue",
+        "orange": "Lava Orange",
+        "purple": "Phantom Purple",
+        "red": "Redstone",
+        "gray": "Stone Gray"
+      },
       "background": "Home background",
-      "backgroundDesc": "Custom home page background (planned)."
+      "backgroundDesc": "Custom home page background image (png/jpg/webp/gif/bmp, ≤12MB) with an automatic dark overlay for readability; the solid theme background is used when unset.",
+      "backgroundPick": "Choose image…",
+      "backgroundClear": "Remove background",
+      "backgroundDefault": "Not set (solid background)"
     },
     "launch": {
       "integrity": "Integrity check before launch",

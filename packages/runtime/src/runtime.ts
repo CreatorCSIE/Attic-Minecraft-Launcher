@@ -119,6 +119,18 @@ import { canonicalLaunchMethod, detectLaunchMethod, probeIndevEntry, probePrecla
 import { extractZipTo, listZipEntryNames } from './zip';
 import { findJavaExecutable, installZuluPackage, provisionArch, queryZuluPackages } from './zulu';
 
+/** 背景图扩展白名单 → MIME（IMAGE_DATA_URL 宿主把关面）。 */
+const IMAGE_MIME_BY_EXT: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.gif': 'image/gif',
+  '.bmp': 'image/bmp',
+};
+/** 背景图大小上限（base64 进 webview 的内存代价封顶 ~12MB 原图）。 */
+const IMAGE_MAX_BYTES = 12 * 1024 * 1024;
+
 export interface AtticRuntimeOptions {
   /** rootDir 覆盖（共存/迁移逃生舱）。 */
   rootDir?: string;
@@ -1192,6 +1204,29 @@ export class AtticRuntime {
       }
     }
     return removed;
+  }
+
+  /**
+   * 读图片字节转 base64 data URL（IMAGE_DATA_URL，背景图进 webview：双壳统一走宿主读，
+   * 弃 Tauri convertFileSrc 单壳方案）。扩展白名单 + 大小上限在宿主侧把关，
+   * 违规/不可读 = 显式抛错（IPC 层转 IpcResult error，UI 可见失败）。
+   */
+  readImageAsDataUrl(filePath: string): string {
+    const ext = path.extname(filePath).toLowerCase();
+    const mime = IMAGE_MIME_BY_EXT[ext];
+    if (!mime) throw new Error(`不支持的图片格式：${ext || '(无扩展名)'}`);
+    let stat: fs.Stats;
+    try {
+      stat = fs.statSync(filePath);
+    } catch {
+      throw new Error('背景图文件不存在或不可读');
+    }
+    if (!stat.isFile()) throw new Error('背景图路径不是文件');
+    if (stat.size > IMAGE_MAX_BYTES) {
+      throw new Error(`背景图超过 ${Math.floor(IMAGE_MAX_BYTES / (1024 * 1024))}MB 上限`);
+    }
+    const buf = fs.readFileSync(filePath);
+    return `data:${mime};base64,${buf.toString('base64')}`;
   }
 
   // ---------- 启动器层崩溃取证（P0~P2 数据面；纯逻辑在 crash.ts，本区只接 fs/环境） ----------

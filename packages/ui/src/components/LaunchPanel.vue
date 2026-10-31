@@ -481,6 +481,16 @@ function onInstanceSettings(): void {
   background: var(--surface-4);
   color: var(--text-primary);
 }
+/* 背景图启用态（html[data-bg-image]，App.vue 同源条件）：≡ 按钮直接浮在暗图上，
+   浅主题深图标不可读 → token 局部取暗主题亮值；悬停底不能用 surface-4
+   （浅主题=羊皮纸，配亮字又糊），用半透暗 chip */
+html[data-bg-image] .menu-btn {
+  --text-primary: #e8e4dc;
+  --text-secondary: #a8a296;
+}
+html[data-bg-image] .menu-btn:hover {
+  background: rgba(22, 24, 28, 0.55);
+}
 .menu-pop {
   position: absolute;
   right: 0;

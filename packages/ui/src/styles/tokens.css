@@ -267,3 +267,169 @@
   --era-beta-soft: rgba(148, 120, 46, 0.14);
   --era-release-soft: rgba(138, 63, 46, 0.14);
 }
+
+/* ============================================================================
+   强调色板（settings.accentColor → <html data-accent>，色值事实源 = Modrinth
+   主题方案 variables.scss 六族；用户拍板 2026-10-31：仅色板取 Modrinth，
+   surface/文字 token 不动，缺省 amber = 上方 :root/[data-theme=light] 原值，
+   无 amber 覆写块）。selector 双绑 data-theme（0,2,0）压过单属性主题块（0,1,0），
+   声明顺序不敏感；ink/soft/ring 配方沿用 Modrinth 规则：
+   dark ink=#000 / light ink=#fff；soft=rgba(base,.14 dark/.12 light)、
+   ring=.3、ring-strong=.45、glow=.7。
+   ============================================================================ */
+
+/* —— amber（缺省火把琥珀：值与 :root/[data-theme=light] 原值一致。显式块为色板
+   swatch 预览服务——swatch 元素自带 data-accent，无此块则 amber 格会继承全局
+   所选色的 --accent，预览失真）—— */
+[data-theme="dark"][data-accent="amber"] {
+  --accent: #e8a33d;
+  --accent-hover: #f0b455;
+  --accent-press: #d18f2e;
+  --accent-ink: #1a1408;
+  --accent-soft: rgba(232, 163, 61, 0.14);
+  --accent-ring: rgba(232, 163, 61, 0.3);
+  --accent-ring-strong: rgba(232, 163, 61, 0.45);
+  --accent-glow: rgba(232, 163, 61, 0.7);
+}
+[data-theme="light"][data-accent="amber"] {
+  --accent: #a86a18;
+  --accent-hover: #b87a22;
+  --accent-press: #8f5a12;
+  --accent-ink: #fdf9f0;
+  --accent-soft: rgba(168, 106, 24, 0.12);
+  --accent-ring: rgba(168, 106, 24, 0.3);
+  --accent-ring-strong: rgba(168, 106, 24, 0.45);
+  --accent-glow: rgba(168, 106, 24, 0.7);
+}
+
+/* —— green —— */
+[data-theme="dark"][data-accent="green"] {
+  --accent: #1bd96a;
+  --accent-hover: #42e686;
+  --accent-press: #0faa4f;
+  --accent-ink: #000000;
+  --accent-soft: rgba(27, 217, 106, 0.14);
+  --accent-ring: rgba(27, 217, 106, 0.3);
+  --accent-ring-strong: rgba(27, 217, 106, 0.45);
+  --accent-glow: rgba(27, 217, 106, 0.7);
+}
+[data-theme="light"][data-accent="green"] {
+  --accent: #00af5c;
+  --accent-hover: #04914f;
+  --accent-press: #0a7141;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(0, 175, 92, 0.12);
+  --accent-ring: rgba(0, 175, 92, 0.3);
+  --accent-ring-strong: rgba(0, 175, 92, 0.45);
+  --accent-glow: rgba(0, 175, 92, 0.7);
+}
+
+/* —— blue —— */
+[data-theme="dark"][data-accent="blue"] {
+  --accent: #4f9cff;
+  --accent-hover: #90c4ff;
+  --accent-press: #357ffc;
+  --accent-ink: #000000;
+  --accent-soft: rgba(79, 156, 255, 0.14);
+  --accent-ring: rgba(79, 156, 255, 0.3);
+  --accent-ring-strong: rgba(79, 156, 255, 0.45);
+  --accent-glow: rgba(79, 156, 255, 0.7);
+}
+[data-theme="light"][data-accent="blue"] {
+  --accent: #1f68c0;
+  --accent-hover: #184b8c;
+  --accent-press: #184174;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(31, 104, 192, 0.12);
+  --accent-ring: rgba(31, 104, 192, 0.3);
+  --accent-ring-strong: rgba(31, 104, 192, 0.45);
+  --accent-glow: rgba(31, 104, 192, 0.7);
+}
+
+/* —— orange —— */
+[data-theme="dark"][data-accent="orange"] {
+  --accent: #ffa347;
+  --accent-hover: #ffc171;
+  --accent-press: #fe7e11;
+  --accent-ink: #000000;
+  --accent-soft: rgba(255, 163, 71, 0.14);
+  --accent-ring: rgba(255, 163, 71, 0.3);
+  --accent-ring-strong: rgba(255, 163, 71, 0.45);
+  --accent-glow: rgba(255, 163, 71, 0.7);
+}
+[data-theme="light"][data-accent="orange"] {
+  --accent: #e08325;
+  --accent-hover: #c66019;
+  --accent-press: #a44419;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(224, 131, 37, 0.12);
+  --accent-ring: rgba(224, 131, 37, 0.3);
+  --accent-ring-strong: rgba(224, 131, 37, 0.45);
+  --accent-glow: rgba(224, 131, 37, 0.7);
+}
+
+/* —— purple —— */
+[data-theme="dark"][data-accent="purple"] {
+  --accent: #c78aff;
+  --accent-hover: #dab2ff;
+  --accent-press: #ac51fb;
+  --accent-ink: #000000;
+  --accent-soft: rgba(199, 138, 255, 0.14);
+  --accent-ring: rgba(199, 138, 255, 0.3);
+  --accent-ring-strong: rgba(199, 138, 255, 0.45);
+  --accent-glow: rgba(199, 138, 255, 0.7);
+}
+[data-theme="light"][data-accent="purple"] {
+  --accent: #8e32f3;
+  --accent-hover: #761ad6;
+  --accent-press: #651bae;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(142, 50, 243, 0.12);
+  --accent-ring: rgba(142, 50, 243, 0.3);
+  --accent-ring-strong: rgba(142, 50, 243, 0.45);
+  --accent-glow: rgba(142, 50, 243, 0.7);
+}
+
+/* —— red —— */
+[data-theme="dark"][data-accent="red"] {
+  --accent: #ff496e;
+  --accent-hover: #ff6984;
+  --accent-press: #ed1148;
+  --accent-ink: #000000;
+  --accent-soft: rgba(255, 73, 110, 0.14);
+  --accent-ring: rgba(255, 73, 110, 0.3);
+  --accent-ring-strong: rgba(255, 73, 110, 0.45);
+  --accent-glow: rgba(255, 73, 110, 0.7);
+}
+[data-theme="light"][data-accent="red"] {
+  --accent: #cb2245;
+  --accent-hover: #b7193d;
+  --accent-press: #9a1739;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(203, 34, 69, 0.12);
+  --accent-ring: rgba(203, 34, 69, 0.3);
+  --accent-ring-strong: rgba(203, 34, 69, 0.45);
+  --accent-glow: rgba(203, 34, 69, 0.7);
+}
+
+/* —— gray —— */
+[data-theme="dark"][data-accent="gray"] {
+  --accent: #9fa4b3;
+  --accent-hover: #b4bac5;
+  --accent-press: #8a8da1;
+  --accent-ink: #000000;
+  --accent-soft: rgba(159, 164, 179, 0.14);
+  --accent-ring: rgba(159, 164, 179, 0.3);
+  --accent-ring-strong: rgba(159, 164, 179, 0.45);
+  --accent-glow: rgba(159, 164, 179, 0.7);
+}
+[data-theme="light"][data-accent="gray"] {
+  --accent: #595b61;
+  --accent-hover: #4c4e52;
+  --accent-press: #434447;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(89, 91, 97, 0.12);
+  --accent-ring: rgba(89, 91, 97, 0.3);
+  --accent-ring-strong: rgba(89, 91, 97, 0.45);
+  --accent-glow: rgba(89, 91, 97, 0.7);
+}

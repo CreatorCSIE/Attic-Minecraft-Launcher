@@ -38,6 +38,11 @@ const { current } = useAccounts();
 .hero:hover {
   background: var(--surface-2);
 }
+/* 背景图启用态（html[data-bg-image]，App.vue 同源条件）：暗上下文下 hover 底不能用
+   surface-2（浅主题=羊皮纸，亮字压浅底反而糊），用半透暗 chip 与舞台同调 */
+html[data-bg-image] .hero:hover {
+  background: rgba(22, 24, 28, 0.45);
+}
 .face {
   border: 1px solid var(--card-border);
 }

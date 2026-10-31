@@ -143,8 +143,10 @@
 - [x] 「导入」走 `dialog:pick` 原生文件对话框新通道选 java.exe（demo 无桥禁用）
 - [x] Attic 独有资产保住：auto 模式探测失败 → Zulu 8 自动下载兜底保留；探测报告面板（失败候选/诊断）降级为栏内可折叠详情
 
-**主题栏**（后期实现，目前占位）
-- [x] 分区先建：深/浅/跟随系统 segmented 即时生效（tokens.css 体系已完备）；强调色/背景效果 = 「即将推出」灰条目（soon-row）；强调色正交分层方案（`[data-accent]` 只覆写三变量）见旧候选注记，日后落实
+**主题栏**（2026-10-31 全量落地）
+- [x] 分区先建：深/浅/跟随系统 segmented 即时生效（tokens.css 体系已完备）
+- [x] 强调色板（用户拍板：色板取 Modrinth 主题方案六族 green/blue/orange/purple/red/gray，Attic 暖木炭/羊皮纸底色与文字 token 不动；缺省 = 火把琥珀 amber 色板第一格）：`settings.accentColor` 只持久化 id（core-spec `ACCENT_COLORS` 数据表），色值 = tokens.css `[data-theme="dark|light"][data-accent="x"]` 静态层（8 变量：accent/hover/press/ink/soft/ring/ring-strong/glow，hover/press 取 Modrinth 色阶相邻档，零运行时计算）；SettingsPanel 色板 swatch 预览 = 按钮自带 data-theme+data-accent 令 `var(--accent)` 在元素自身派生（amber 需显式块防继承全局所选色）
+- [x] 启动页背景（用户定稿 2026-10-31：**仅配置时启用**，无内置默认图，缺省 = 主题纯色底；启用时固定暗遮罩）：`settings.backgroundImage` 存绝对路径，进 webview 走新契约通道 `attic:image:data-url`（宿主读字节→base64 data URL，双壳统一，弃 Tauri convertFileSrc 单壳方案；扩展白名单 png/jpg/webp/gif/bmp + ≤12MB 在 runtime 把关）；useSettings 成对写 `--app-bg-image`/`--app-bg-overlay` + `html[data-bg-image]`，App.vue `.launch-stage` 三层背景 = 遮罩（Modrinth splash 暗配方 rgba(22,24,28,.64)）+ 图 + surface-1 色垫（变量缺省 = none 回落纯色）；`data-bg-image` 同时条件驱动舞台浮空元素（AccountHero/≡ 菜单钮）文字 token 亮值重映射与暗 chip hover 底——无图浅底时自动撤除（浅色主题深字压暗图不可读的实机报障收口）；清除 = managed 键删除回落纯色
 
 **关于栏**（必须参考 BlockHelm 格式搭建）
 - [x] 头区：山形 logo 占位 + 启动器名 + `v{info.launcherVersion}`（无桥隐藏，demo 显 v0.0.0-demo）+ 「查看 GitHub 仓库」+「检查更新」按钮（disabled+soon 徽标，下载自更新留 Phase 5 GitHub Releases 轮询）

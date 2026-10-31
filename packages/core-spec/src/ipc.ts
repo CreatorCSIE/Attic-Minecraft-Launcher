@@ -92,6 +92,8 @@ export const IPC_CHANNELS = {
   LOGS_CLEAR: 'attic:logs:clear',
   /** 原生文件/目录对话框选择（kind 见 PickTarget；取消 = null）。 */
   DIALOG_PICK: 'attic:dialog:pick',
+  /** 宿主读取图片字节转 base64 data URL（背景图进 webview；双壳统一，扩展白名单+大小上限在宿主）。 */
+  IMAGE_DATA_URL: 'attic:image:data-url',
   /** 系统浏览器打开外链（宿主校验 http/https 协议，拒绝其余 scheme）。 */
   SHELL_OPEN_URL: 'attic:shell:open-url',
   /** 渲染层错误静默上报（P2）：宿主落 launcher.log，不弹任何框（window error/unhandledrejection/Vue errorHandler）。 */
@@ -117,8 +119,8 @@ export interface LaunchCancelResult {
  */
 export const LAUNCH_CANCELLED_MESSAGE = '启动已取消';
 
-/** 对话框选择目标（DIALOG_PICK）：java 可执行文件 / 任意目录。 */
-export type PickTarget = 'java-executable' | 'directory';
+/** 对话框选择目标（DIALOG_PICK）：java 可执行文件 / 任意目录 / 图片文件（背景图）。 */
+export type PickTarget = 'java-executable' | 'directory' | 'image-file';
 
 /** 宿主环境快照（设置页展示 + 内存滑杆上限推导的数据源）。 */
 export interface SystemInfo {
@@ -414,6 +416,10 @@ export interface RendererBridge {
   pickJavaExecutable(): Promise<IpcResult<string | null>>;
   /** 原生对话框选目录（取消 = null）。 */
   pickDirectory(): Promise<IpcResult<string | null>>;
+  /** 原生对话框选图片文件（png/jpg/jpeg/webp/gif/bmp；取消 = null）。 */
+  pickImageFile(): Promise<IpcResult<string | null>>;
+  /** 宿主读图片字节转 base64 data URL（IMAGE_DATA_URL）：扩展不在白名单/超限/不可读 = error。 */
+  readImageAsDataUrl(path: string): Promise<IpcResult<string>>;
   /** 系统浏览器打开外链（宿主限 http/https；渲染内导航被禁止后的唯一出门口）。 */
   openExternalUrl(url: string): Promise<IpcResult<void>>;
   /** 渲染层错误静默上报（CRASH_REPORT）：宿主落 launcher.log；本调用永不弹框、失败可忽略。 */

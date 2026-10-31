@@ -60,6 +60,7 @@ pub mod channels {
         "attic:shell:open-dir",
         "attic:logs:clear",
         "attic:dialog:pick",
+        "attic:image:data-url",
         "attic:shell:open-url",
         "attic:crash:report",
         "attic:crash:bundle",
@@ -107,6 +108,7 @@ pub mod channels {
         "attic:sys:info",
         "attic:update:check",
         "attic:logs:clear",
+        "attic:image:data-url",
         "attic:crash:report",
         "attic:crash:bundle",
     ];
@@ -474,6 +476,11 @@ async fn pick_path(app: AppHandle, kind: String) -> Value {
             picker
                 .set_title("选择 Java 可执行文件")
                 .add_filter("java 可执行文件", &["exe"])
+                .blocking_pick_file()
+        } else if kind == "image-file" {
+            picker
+                .set_title("选择背景图片")
+                .add_filter("图片", &["png", "jpg", "jpeg", "webp", "gif", "bmp"])
                 .blocking_pick_file()
         } else {
             picker.set_title("选择文件夹").blocking_pick_folder()

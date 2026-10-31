@@ -61,6 +61,7 @@ export type {
   LaunchConfig,
 } from './launch';
 export type {
+  AccentColorDef,
   AddonDef,
   AppSettings,
   EndpointOverrides,
@@ -71,3 +72,4 @@ export type {
 } from './settings';
 export { MULTIPLAYER_JOIN_LAUNCH_METHODS } from './version';
 export { INSTANCE_ADDONS, DEFAULT_ADDONS, parseServerAddress } from './settings';
+export { ACCENT_COLORS } from './settings';

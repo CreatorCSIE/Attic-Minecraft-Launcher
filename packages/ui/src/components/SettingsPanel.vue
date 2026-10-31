@@ -7,7 +7,7 @@
  * 宿主动作（打开目录/对话框/清理）无桥时禁用——demo 排版靠假 SystemInfo，动作不伪装可用。
  */
 import { computed, ref, watch, type Ref } from 'vue';
-import type { EndpointOverrides } from '@attic/core-spec';
+import { ACCENT_COLORS, type EndpointOverrides } from '@attic/core-spec';
 import type { Locale } from '../i18n';
 import { AVAILABLE_LOCALES, useI18n } from '../i18n';
 import { useBridge } from '../composables/useBridge';
@@ -27,7 +27,7 @@ import ConfirmDialog from './ConfirmDialog.vue';
 const { t, locale, setLocale } = useI18n();
 const { hasBridge, bridge } = useBridge();
 const { openExternal } = useExternalLink();
-const { settings, patch, patchDetailed } = useSettings();
+const { settings, patch, patchDetailed, resolvedTheme } = useSettings();
 const { info } = useSysInfo();
 const { activeSection } = useSettingsNav();
 
@@ -131,8 +131,28 @@ async function chooseLanguage(code: string): Promise<void> {
   await patch({ language: code });
 }
 
-// —— 主题栏 ——
+// —— 外观栏：主题模式 + 强调色板（Modrinth 六族+琥珀缺省，tokens [data-accent] 静态层）+ 背景图 ——
 const themes = ['dark', 'light', 'system'] as const;
+const accentId = computed(() => settings.value.accentColor || 'amber');
+
+/** 背景图选择：宿主弹原生对话框 → 路径入 settings（useSettings 保存后重应用 data URL）。 */
+const bgErr = ref('');
+async function chooseBackground(): Promise<void> {
+  const res = await bridge.pickImageFile();
+  if (!res.ok || !res.value) {
+    if (!res.ok) bgErr.value = res.error;
+    return;
+  }
+  bgErr.value = '';
+  const r = await patchDetailed({ backgroundImage: res.value });
+  if (!r.ok) bgErr.value = r.error ?? 'save failed';
+}
+/** 清除外置背景 = 回落内置默认品牌背景（undefined → managed 键删除）。 */
+async function clearBackground(): Promise<void> {
+  bgErr.value = '';
+  const r = await patchDetailed({ backgroundImage: undefined });
+  if (!r.ok) bgErr.value = r.error ?? 'save failed';
+}
 
 // —— 反馈弹屏（功能建议 → Discussions 的 ideas 分区；Bug → Issues 空白新建页。
 // 两侧均不钉模板：仓库无 ISSUE_TEMPLATE/，勿再往 URL 里加 ?template=） ——
@@ -340,18 +360,44 @@ function feedback(url: string): void {
             </div>
           </div>
           <div class="card">
-            <div class="soon-row">
-              <span class="row-name">
-                {{ t('settings.theme.accent') }}
-                <span class="soon">{{ t('settings.soon') }}</span>
-              </span>
+            <div class="field">
+              <span class="label">{{ t('settings.theme.accent') }}</span>
+              <!-- swatch 预览技巧：按钮自带 data-theme + data-accent，
+                   tokens 的 [data-theme][data-accent] 块在按钮自身派生 --accent，色点即所见即所得 -->
+              <div class="accent-row" role="radiogroup" :aria-label="t('settings.theme.accent')">
+                <button
+                  v-for="c in ACCENT_COLORS"
+                  :key="c.id"
+                  class="accent-swatch"
+                  :class="{ 'accent-swatch--active': accentId === c.id }"
+                  :data-theme="resolvedTheme"
+                  :data-accent="c.id"
+                  role="radio"
+                  :aria-checked="accentId === c.id"
+                  :title="t(c.nameKey)"
+                  @click="patch({ accentColor: c.id === 'amber' ? undefined : c.id })"
+                >
+                  <span class="accent-dot" />
+                </button>
+              </div>
               <p class="row-desc">{{ t('settings.theme.accentDesc') }}</p>
             </div>
-            <div class="soon-row">
-              <span class="row-name">
-                {{ t('settings.theme.background') }}
-                <span class="soon">{{ t('settings.soon') }}</span>
-              </span>
+          </div>
+          <div class="card">
+            <div class="field">
+              <span class="label">{{ t('settings.theme.background') }}</span>
+              <div class="btn-row">
+                <button class="mini" :disabled="!hasBridge" @click="chooseBackground">
+                  {{ t('settings.theme.backgroundPick') }}
+                </button>
+                <button v-if="settings.backgroundImage" class="mini" @click="clearBackground">
+                  {{ t('settings.theme.backgroundClear') }}
+                </button>
+              </div>
+              <p class="path mono" :title="settings.backgroundImage || ''">
+                {{ settings.backgroundImage || t('settings.theme.backgroundDefault') }}
+              </p>
+              <p v-if="bgErr" class="warn root-err" role="alert">{{ bgErr }}</p>
               <p class="row-desc">{{ t('settings.theme.backgroundDesc') }}</p>
             </div>
           </div>
@@ -636,29 +682,37 @@ function feedback(url: string): void {
   font-size: var(--fs-xs);
   color: var(--warn);
 }
-.soon {
-  padding: 1px 6px;
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--text-muted);
-  background: var(--surface-1);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-}
-.soon-row {
+/* —— 强调色板行：swatch 按钮 = 描边环 + 内圆点；圆点色经 data-accent 自派生（见模板注） —— */
+.accent-row {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: var(--space-3) 0;
-  border-bottom: 1px solid var(--border);
-  opacity: 0.65;
+  gap: var(--space-3);
+  flex-wrap: wrap;
 }
-.soon-row:first-child {
-  padding-top: 0;
+.accent-swatch {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  background: transparent;
+  border: 2px solid transparent;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-out);
 }
-.soon-row:last-child {
-  padding-bottom: 0;
-  border-bottom: none;
+.accent-swatch:hover {
+  border-color: var(--border-strong);
+}
+.accent-swatch--active {
+  border-color: var(--text-secondary);
+}
+.accent-dot {
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  box-shadow: var(--inset-bottom);
 }
 .input {
   padding: var(--space-3) var(--space-4);

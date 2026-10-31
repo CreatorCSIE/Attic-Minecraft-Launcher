@@ -413,9 +413,21 @@
       "light": "浅色",
       "system": "跟随系统",
       "accent": "强调色",
-      "accentDesc": "自定义界面主色调（后期实现）。",
+      "accentDesc": "界面主色调（按钮、焦点环与高亮）。色板取自 Modrinth 主题方案。",
+      "accentNames": {
+        "amber": "火把琥珀",
+        "green": "翡翠绿",
+        "blue": "晴空蓝",
+        "orange": "熔岩橙",
+        "purple": "幻翼紫",
+        "red": "红石红",
+        "gray": "石灰灰"
+      },
       "background": "启动页背景",
-      "backgroundDesc": "自定义主页背景图（后期实现）。"
+      "backgroundDesc": "自定义主页背景图（png/jpg/webp/gif/bmp，≤12MB），自动叠加暗色遮罩保证文字可读；不配置时使用主题纯色背景。",
+      "backgroundPick": "选择图片…",
+      "backgroundClear": "移除背景图",
+      "backgroundDefault": "未配置（纯色背景）"
     },
     "launch": {
       "integrity": "启动前完整性校验",

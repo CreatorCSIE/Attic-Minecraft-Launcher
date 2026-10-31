@@ -439,14 +439,19 @@ app.whenReady().then(() => {
     if (err) throw new Error(err);
   });
   handle(IPC_CHANNELS.LOGS_CLEAR, () => runtime.clearLogs());
-  // 原生对话框选择（java 可执行 / 目录）：取消 = ok(null)，与 CUSTOM_IMPORT_JAR 同语义。
+  // 背景图读取：runtime 单点把关（扩展白名单 + 大小上限），违规以 error 数据返回。
+  handle(IPC_CHANNELS.IMAGE_DATA_URL, (filePath: string) => runtime.readImageAsDataUrl(filePath));
+  // 原生对话框选择（java 可执行 / 目录 / 图片）：取消 = ok(null)，与 CUSTOM_IMPORT_JAR 同语义。
   ipcMain.handle(IPC_CHANNELS.DIALOG_PICK, async (_event, kind: PickTarget): Promise<IpcResult<string | null>> => {
     try {
       const res = await dialog.showOpenDialog({
-        title: kind === 'java-executable' ? '选择 Java 可执行文件' : '选择文件夹',
-        properties: kind === 'java-executable' ? ['openFile'] : ['openDirectory', 'createDirectory'],
+        title: kind === 'java-executable' ? '选择 Java 可执行文件' : kind === 'image-file' ? '选择背景图片' : '选择文件夹',
+        properties: kind === 'directory' ? ['openDirectory', 'createDirectory'] : ['openFile'],
         ...(kind === 'java-executable' && process.platform === 'win32'
           ? { filters: [{ name: 'java 可执行文件', extensions: ['exe'] }] }
+          : {}),
+        ...(kind === 'image-file'
+          ? { filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'] }] }
           : {}),
       });
       const picked = res.filePaths[0];

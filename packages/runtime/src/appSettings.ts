@@ -72,6 +72,8 @@ export function settingsFromProps(props: Record<string, string>): AppSettings {
     out.updatePolicy = props['updatePolicy'] as 'startup' | 'off';
   }
   if (props['updateIgnoreVersion']) out.updateIgnoreVersion = props['updateIgnoreVersion'];
+  if (props['accentColor']) out.accentColor = props['accentColor'];
+  if (props['backgroundImage']) out.backgroundImage = props['backgroundImage'];
 
   const endpoints: EndpointOverrides = {};
   let hasEndpoint = false;
@@ -122,6 +124,8 @@ export function applySettingsToProps(
   put('levelServer', settings.levelServer);
   put('updatePolicy', settings.updatePolicy);
   put('updateIgnoreVersion', settings.updateIgnoreVersion);
+  put('accentColor', settings.accentColor);
+  put('backgroundImage', settings.backgroundImage);
 
   for (const key of ENDPOINT_KEYS) {
     put(`${ENDPOINT_PREFIX}${key}`, settings.endpoints?.[key]);

@@ -223,6 +223,8 @@ async function dispatch(method: string, params: Params): Promise<unknown> {
       return runtime.checkUpdate();
     case C.LOGS_CLEAR:
       return runtime.clearLogs();
+    case C.IMAGE_DATA_URL:
+      return runtime.readImageAsDataUrl(s(0));
     case C.CRASH_REPORT:
       return runtime.logRendererError(s(0));
     case C.CRASH_BUNDLE:

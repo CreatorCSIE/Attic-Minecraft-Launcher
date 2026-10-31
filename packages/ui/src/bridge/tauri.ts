@@ -89,6 +89,8 @@ export function buildTauriBridge(t: TauriGlobal): RendererBridge {
     clearLogs: () => forward<number>(C.LOGS_CLEAR),
     pickJavaExecutable: () => host<string | null>('pick_path', { kind: 'java-executable' }),
     pickDirectory: () => host<string | null>('pick_path', { kind: 'directory' }),
+    pickImageFile: () => host<string | null>('pick_path', { kind: 'image-file' }),
+    readImageAsDataUrl: (path) => forward<string>(C.IMAGE_DATA_URL, [path]),
     openExternalUrl: (url) => host<void>('open_external_url', { url }),
     reportRendererError: (report) => forward<void>(C.CRASH_REPORT, [report]),
     getCrashBundle: (category, stack) => forward(C.CRASH_BUNDLE, [category, stack]),

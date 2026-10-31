@@ -118,7 +118,40 @@ export interface AppSettings {
   updateIgnoreVersion?: string;
   /** 端点覆盖；改动在下次启动应用后生效（端点属构造级配置）。 */
   endpoints?: EndpointOverrides;
+  /**
+   * 强调色板 id（见 `ACCENT_COLORS`；缺省 = `amber` 火把琥珀）。
+   * 契约只持久化 id，色值属渲染侧 tokens.css 的 `[data-accent]` 静态层（零运行时计算）。
+   */
+  accentColor?: string;
+  /**
+   * 主界面背景图绝对路径（仅配置时启用；缺省/空 = 主题纯色背景，无内置默认图）。
+   * 渲染侧经 `IMAGE_DATA_URL` 通道让宿主读字节转 data URL（双壳统一，弃 convertFileSrc 单壳方案）；
+   * 文件不可读时 UI 回落纯色（可见失败由选择动作当场承担，应用侧静默兜底）。
+   */
+  backgroundImage?: string;
 }
+
+/**
+ * 强调色板目录（数据驱动，戒律 #1；色值事实源 = Modrinth 主题方案 variables.scss 六族，
+ * 用户拍板 2026-10-31：仅色板取 Modrinth，Attic 暖木炭/羊皮纸底色与文字 token 不动，
+ * 缺省维持火把琥珀 amber = 第一格）。id 落 settings.accentColor；nameKey 供 i18n 标签。
+ * swatch = 色板预览圆点色（dark 主题基准色，UI 端按当前主题自行选档亦可，此值仅预览用）。
+ */
+export interface AccentColorDef {
+  id: string;
+  nameKey: string;
+  swatch: string;
+}
+
+export const ACCENT_COLORS: AccentColorDef[] = [
+  { id: 'amber', nameKey: 'settings.theme.accentNames.amber', swatch: '#e8a33d' },
+  { id: 'green', nameKey: 'settings.theme.accentNames.green', swatch: '#1bd96a' },
+  { id: 'blue', nameKey: 'settings.theme.accentNames.blue', swatch: '#4f9cff' },
+  { id: 'orange', nameKey: 'settings.theme.accentNames.orange', swatch: '#ffa347' },
+  { id: 'purple', nameKey: 'settings.theme.accentNames.purple', swatch: '#c78aff' },
+  { id: 'red', nameKey: 'settings.theme.accentNames.red', swatch: '#ff496e' },
+  { id: 'gray', nameKey: 'settings.theme.accentNames.gray', swatch: '#9fa4b3' },
+];
 
 /**
  * 实例的渲染侧视图——对齐 v1 Instance Settings 可编辑集（名字/版本/目录/JVM 参数/窗口尺寸/Java 路径）。
