@@ -6,7 +6,7 @@
 
 import { computed, ref, type ComputedRef } from 'vue';
 import type { AppSettings, ThemeMode } from '@attic/core-spec';
-import { setLocale } from '../i18n';
+import { locale, setLocale } from '../i18n';
 import { useBridge } from './useBridge';
 
 const settings = ref<AppSettings>({});
@@ -92,11 +92,16 @@ async function load(): Promise<void> {
   applyLanguage();
 }
 
-/** 语言单一真相 = settings.language（localStorage 仅 bootstrap 缓存；键缺席 = 保持
- *  i18n 层的系统语言侦测态）；load 后即时无感应用。 */
+/** 语言单一真相 = settings.language（localStorage 仅 bootstrap 缓存）；load 后即时无感应用。
+ *  键缺席 = 系统语言侦测**只发生这一次**：结果立即写回 settings.language 落盘（用户核对
+ *  2026-10-31——否则 OS 语言变更后界面会跟着漂），此后该值等同用户选择，不再自动改。 */
 function applyLanguage(): void {
   const lang = settings.value.language;
-  if (lang === 'en' || lang === 'zh-CN' || lang === 'zh-TW') setLocale(lang);
+  if (lang === 'en' || lang === 'zh-CN' || lang === 'zh-TW') {
+    setLocale(lang);
+    return;
+  }
+  void patch({ language: locale.value });
 }
 
 /** 合并补丁并落盘；返回是否成功。 */

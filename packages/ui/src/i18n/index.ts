@@ -1,8 +1,9 @@
 /**
  * i18n —— 手写深合并（零依赖）。
- * 策略：en 为 base/fallback，zh-CN/zh-TW 覆盖同名键；默认 locale = 系统语言侦测
- * （2026-10-31 用户拍板：zh-TW/HK/MO → 繁體中文，其余 zh* → 简体中文，其他 → English），
- * 用户选择持久化到 localStorage（settings.language 单一真相在 useSettings 侧覆盖）。
+ * 策略：en 为 base/fallback，zh-CN/zh-TW 覆盖同名键；settings.language 缺席时做
+ * **一次性**系统语言侦测（zh-TW/HK/MO → 繁體中文，其余 zh* → 简体中文，其他 → English），
+ * 结果由 useSettings 写回 settings.language 落盘、本层同步落 localStorage 缓存——
+ * 此后不再自动改（2026-10-31 用户核对：侦测只在缺省时发生一次）。
  * t(key) 走点路径；缺键回落 en，仍缺则原样返回路径。
  * 词典形态 = JSON（2026-10-29「从 TS 解放」）：翻译贡献者零工具链直接 PR locales/*.json，
  * 外挂语言包通道（launcher/lang/<locale>.json 运行期覆盖层）与仓内词典同形同校验。
@@ -65,13 +66,18 @@ function readStoredLocale(): Locale {
   try {
     const v = localStorage.getItem(LOCALE_KEY);
     if (v === 'en' || v === 'zh-CN' || v === 'zh-TW') return v;
+    // 侦测同样落缓存 = 只发生一次（settings.language 缺席时 useSettings 会再把结果写回落盘）
+    const detected = detectSystemLocale();
+    localStorage.setItem(LOCALE_KEY, detected);
+    return detected;
   } catch {
-    /* 浏览器隐私模式可能禁 storage，回落侦测 */
+    /* 浏览器隐私模式可能禁 storage，每次回落侦测 */
+    return detectSystemLocale();
   }
-  return detectSystemLocale();
 }
 
-const locale: Ref<Locale> = ref(readStoredLocale());
+/** 当前 locale（响应式；useSettings 缺省侦测回写用）。 */
+export const locale: Ref<Locale> = ref(readStoredLocale());
 
 const activeDict = computed<Dict>(() => dicts[locale.value]);
 

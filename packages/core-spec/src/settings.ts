@@ -50,7 +50,8 @@ export interface AppSettings {
   // 按「未知键原样保留」纪律不再读写、不清除。）
   /** 主题；缺省 = system。 */
   theme?: ThemeMode;
-  /** 启动器界面语言（i18n locale 键，如 `zh-CN`/`en`）；缺省 = 渲染侧默认。渲染侧热切换生效，无重启语义。 */
+  /** 启动器界面语言（i18n locale 键，如 `zh-CN`/`en`/`zh-TW`）；缺省 = 渲染侧一次性
+   *  系统语言侦测并写回本键落盘（此后等同用户选择，不再自动改）。热切换生效，无重启语义。 */
   language?: string;
   /**
    * 全局 JVM 参数（BlockHelm 语义：固定 `-Xmx/-Xms` 之后、实例 launchArgs 之前注入，
