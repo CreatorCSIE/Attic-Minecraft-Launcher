@@ -1,6 +1,8 @@
 /**
  * i18n —— 手写深合并（零依赖）。
- * 策略：en 为 base/fallback，zh-CN 覆盖同名键；默认 locale = zh-CN，持久化到 localStorage。
+ * 策略：en 为 base/fallback，zh-CN/zh-TW 覆盖同名键；默认 locale = 系统语言侦测
+ * （2026-10-31 用户拍板：zh-TW/HK/MO → 繁體中文，其余 zh* → 简体中文，其他 → English），
+ * 用户选择持久化到 localStorage（settings.language 单一真相在 useSettings 侧覆盖）。
  * t(key) 走点路径；缺键回落 en，仍缺则原样返回路径。
  * 词典形态 = JSON（2026-10-29「从 TS 解放」）：翻译贡献者零工具链直接 PR locales/*.json，
  * 外挂语言包通道（launcher/lang/<locale>.json 运行期覆盖层）与仓内词典同形同校验。
@@ -9,13 +11,16 @@
 import { ref, computed, type Ref } from 'vue';
 import en from './locales/en.json';
 import zhCN from './locales/zh-CN.json';
+import zhTW from './locales/zh-TW.json';
 
-export type Locale = 'en' | 'zh-CN';
+export type Locale = 'en' | 'zh-CN' | 'zh-TW';
 
-/** 可选界面语言（自名形态，不随 locale 翻译）；语言栏下拉的唯一数据源。 */
+/** 可选界面语言（自名形态，不随 locale 翻译）；语言栏下拉的唯一数据源。
+ *  排序 = 用户拍板 2026-10-31：English 第一、简体中文次之、繁體中文第三。 */
 export const AVAILABLE_LOCALES: { code: Locale; name: string }[] = [
-  { code: 'zh-CN', name: '简体中文' },
   { code: 'en', name: 'English' },
+  { code: 'zh-CN', name: '简体中文' },
+  { code: 'zh-TW', name: '繁體中文' },
 ];
 
 const LOCALE_KEY = 'attic.locale';
@@ -44,16 +49,26 @@ function isDict(v: unknown): v is Dict {
 const dicts: Record<Locale, Dict> = {
   en,
   'zh-CN': deepMerge(en, zhCN),
+  'zh-TW': deepMerge(en, zhTW),
 };
+
+/** 系统语言侦测（webview 的 navigator.language 跟随 OS locale）：
+ *  zh-TW/zh-HK/zh-MO（含 -Hant 变体）→ 繁體中文；其余 zh* → 简体中文；其他 → English。 */
+function detectSystemLocale(): Locale {
+  const nav = typeof navigator !== 'undefined' ? navigator.language ?? 'en' : 'en';
+  if (/^zh-(TW|HK|MO)/i.test(nav) || /zh.*Hant/i.test(nav)) return 'zh-TW';
+  if (/^zh/i.test(nav)) return 'zh-CN';
+  return 'en';
+}
 
 function readStoredLocale(): Locale {
   try {
     const v = localStorage.getItem(LOCALE_KEY);
-    if (v === 'en' || v === 'zh-CN') return v;
+    if (v === 'en' || v === 'zh-CN' || v === 'zh-TW') return v;
   } catch {
-    /* 浏览器隐私模式可能禁 storage，回落默认 */
+    /* 浏览器隐私模式可能禁 storage，回落侦测 */
   }
-  return 'zh-CN';
+  return detectSystemLocale();
 }
 
 const locale: Ref<Locale> = ref(readStoredLocale());

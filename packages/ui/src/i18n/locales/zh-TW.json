@@ -1,0 +1,571 @@
+{
+  "app": {
+    "title": "Attic Minecraft Launcher",
+    "tagline": "落灰，但都還活著。"
+  },
+  "nav": {
+    "menu": "選單",
+    "launch": "啟動",
+    "instances": "實例",
+    "accounts": "帳戶",
+    "custom": "自訂版本",
+    "mods": "模組",
+    "settings": "設定",
+    "collapse": "摺疊側欄",
+    "expand": "展開側欄"
+  },
+  "wizard": {
+    "title": "歡迎使用 Attic",
+    "subtitle": "三步小設定——之後都能在設定裡改。",
+    "stepOf": "第 {n} / 3 步",
+    "stepDir": "資料目錄",
+    "stepAccounts": "帳戶",
+    "stepJava": "Java",
+    "dirDefaultTitle": "標準位置（推薦）",
+    "dirDefaultHint": "遊戲資料放在使用者目錄——更新、解除安裝都不受影響。",
+    "dirCustomTitle": "自訂目錄",
+    "dirCustomHint": "任選安裝目錄之外的位置——解除安裝程式會把安裝目錄整體刪除。",
+    "dirPick": "選擇目錄…",
+    "dirPending": "新資料目錄會在下次啟動應用程式後生效：{path}",
+    "dirLocalTitle": "exe 旁本地目錄（隨碟攜帶）",
+    "dirLocalHint": "遊戲資料放在程式目錄旁的 .attic——整個資料夾複製到哪裡，資料就跟到哪裡。",
+    "dirLocalFallback": "程式目錄目前不可寫入，資料暫存於標準位置（頂欄有「資料未隨碟」徽章）。",
+    "dirDefaultHintPortable": "遊戲資料放在使用者目錄——可攜包保持輕量，但資料不隨碟走。",
+    "dirCustomHintPortable": "任選位置——指標寫進可攜包的 portable.ini 隨碟攜帶；換機後相對路徑依程式目錄重新解析。",
+    "accountsHave": "已有帳戶：",
+    "accountsEmpty": "還沒有帳戶——建立一個離線帳戶即可開始。",
+    "accountsName": "Minecraft 使用者名稱（3–16 位）",
+    "accountsSkipHint": "留空跳過也行，帳戶隨時可以新增。",
+    "javaDetecting": "正在偵測 Java…",
+    "javaFound": "自動選擇：{reason}",
+    "javaNone": "找不到合適的 Java 8。啟動時應用程式可自動取得，也可手動指定。",
+    "javaManual": "手動選擇 Java…",
+    "javaAuto": "繼續使用自動偵測",
+    "javaManualSet": "已手動指定 Java：{path}",
+    "javaCandidates": "偵測詳細資訊（{count}）",
+    "skip": "跳過（使用預設）",
+    "back": "上一步",
+    "next": "下一步",
+    "finish": "開始遊戲"
+  },
+  "portable": {
+    "warnNonAscii": "資料根路徑含非 ASCII 字元——舊版 Java 8/LWJGL2 可能因此亂碼或啟動失敗（僅警示，不攔截）。",
+    "warnSpace": "資料根路徑含空格——部分舊啟動流程對空格敏感（僅警示，不攔截）。",
+    "warnLong": "資料根路徑過長（≥240 字元）——可能觸及 260 上限導致檔案操作失敗（僅警示，不攔截）。",
+    "fallbackBadge": "資料未隨碟",
+    "fallbackTooltip": "程式目錄不可寫入，資料暫存於：{path}",
+    "recoverHint": "可攜包記錄指向另一個資料根：{path}——若資料在舊位置，請更換資料目錄後重啟應用程式找回。",
+    "recoverDismiss": "知道了"
+  },
+  "account": {
+    "title": "帳戶",
+    "welcome": "歡迎使用 Attic Minecraft Launcher",
+    "none": "未選擇帳戶",
+    "hint": "選擇帳戶以瀏覽或修改設定。",
+    "add": "新增帳戶",
+    "remove": "移除",
+    "typeOffline": "離線帳戶",
+    "typeMicrosoft": "Microsoft 帳戶",
+    "namePlaceholder": "Minecraft 使用者名稱（3-16 位）",
+    "uuid": "UUID",
+    "copy": "複製",
+    "copied": "已複製",
+    "rename": "重新命名",
+    "dialog": {
+      "subtitle": "選擇要新增的帳戶類型。",
+      "offlineTitle": "離線帳戶",
+      "offlineDesc": "使用本機使用者名稱進入遊戲。",
+      "msTitle": "正版帳戶",
+      "msDesc": "透過 Microsoft 帳戶登入並取得皮膚頭像。",
+      "cancel": "取消",
+      "confirm": "確定",
+      "back": "返回",
+      "usernameLabel": "使用者名稱",
+      "usernameValidation": "使用者名稱需為 3–16 位字母、數字或底線。"
+    },
+    "ms": {
+      "dialogTitle": "登入 Microsoft 帳戶",
+      "starting": "正在向微軟申請裝置碼…",
+      "codeLabel": "在瀏覽器中輸入此代碼",
+      "copyCode": "複製代碼",
+      "openBrowser": "開啟瀏覽器",
+      "orOpen": "打不開就手動造訪（可複製）：",
+      "remaining": "剩餘有效時間 {time}",
+      "waiting": "等待你在瀏覽器完成授權…",
+      "startFailed": "無法發起登入：{message}",
+      "retry": "重試",
+      "cancel": "取消",
+      "close": "關閉",
+      "revalidate": "重新驗證",
+      "revalidating": "正在重新驗證…",
+      "revalidateBadge": "需重新驗證",
+      "revalidateFailed": "重新驗證失敗：{message}",
+      "error": {
+        "access_denied": "授權被拒絕或未及時確認。點「重試」重新發起，並在瀏覽器中確認授權。",
+        "expired_token": "裝置碼已過期。點「重試」取得新的代碼，再回瀏覽器完成授權。",
+        "no_xbox_profile": "該微軟帳戶還沒有 Xbox 檔案，請先在 xbox.com 完成註冊後重試。",
+        "minor_parental": "未成年帳戶需家長同意，無法用於連線驗證。請改用成人帳戶，或先在微軟家庭安全中同意。",
+        "no_minecraft": "該帳戶未持有 Minecraft（Java 版）。購買後重新登入即可。",
+        "canceled": "登入已取消。可隨時重新發起。",
+        "network": "網路連線失敗（微軟認證端點連不上）。檢查網路或代理後重試。",
+        "internal": "登入流程發生未知錯誤。請稍後重試；持續失敗請提交意見回饋。"
+      }
+    },
+    "renameDialog": {
+      "title": "重新命名帳戶",
+      "subtitle": "輸入新的使用者名稱；離線帳戶的 UUID 將隨之重新產生。",
+      "newUsernameLabel": "新使用者名稱"
+    },
+    "removeDialog": {
+      "title": "移除帳戶",
+      "message": "確定要移除帳戶「{name}」嗎？此操作無法復原。"
+    }
+  },
+  "window": {
+    "minimize": "最小化",
+    "maximize": "最大化 / 還原",
+    "close": "關閉"
+  },
+  "custom": {
+    "title": "自訂版本",
+    "search": "搜尋版本",
+    "import": "匯入 jar",
+    "configured": "已配置",
+    "unconfigured": "未配置",
+    "hint": "選擇自訂版本以編輯其設定。",
+    "none": "暫無自訂版本",
+    "empty": "沒有符合的自訂版本",
+    "emptyHint": "點「匯入 jar」新增自訂版本。",
+    "launchMethod": "啟動方式（launch-method）",
+    "launchMethodNone": "（未指定）",
+    "launchMethodRequired": "launch-method 為必填欄位，其餘欄位選填（留空儲存為 `key=`）。",
+    "detectedHint": "偵測到啟動方式：{method}（儲存後寫入 .info）。",
+    "notDetected": "無法自動偵測啟動方式，請手動填寫 launch-method 或 main-class。",
+    "modHint": "模組版本的 .info 由 Mods 倉庫託管：此處僅可查看詳細資訊與刪除（刪除會同步清除安裝登記），編輯已停用。",
+    "save": "儲存",
+    "saving": "儲存中…",
+    "saved": "已儲存",
+    "remove": "刪除",
+    "removeDialog": {
+      "title": "刪除自訂版本",
+      "message": "確定要刪除「{id}」嗎？其 jar 與設定檔（.info）都會被移除，此操作無法復原。",
+      "affected": "{n} 個實例正在使用它，刪除後這些實例會回到「未選擇版本」，需重新選擇才能啟動。"
+    },
+    "externalChanged": "偵測到該 .info 已被外部編輯器修改；你尚未儲存的編輯不會被覆蓋。",
+    "reload": "重新載入"
+  },
+  "mods": {
+    "title": "模組",
+    "search": "搜尋模組",
+    "refresh": "重新整理清單",
+    "sourceHint": "第一期僅接入 Betacraft 官方模組倉庫（getmods.jsp），暫不支援新增其他來源。",
+    "repository": "Betacraft 模組倉庫",
+    "hint": "「下載」僅取得 .info 中繼資料；模組 jar 與基座合成會在點「啟動」時自動補全。",
+    "loadError": "模組倉庫載入失敗",
+    "retry": "重試",
+    "noMatch": "沒有符合的模組",
+    "empty": "倉庫列表為空",
+    "count": "{n} 個模組",
+    "install": "下載",
+    "installing": "下載中…",
+    "installed": "已安裝",
+    "website": "專案首頁"
+  },
+  "external": {
+    "openError": "無法開啟外部連結",
+    "openErrorHint": "請檢查系統是否設定了預設瀏覽器（未註冊 http/https 關聯時宿主程式會拒絕開啟）。",
+    "close": "關閉"
+  },
+  "confirmDialog": {
+    "cancel": "取消",
+    "confirm": "刪除",
+    "busy": "刪除中…"
+  },
+  "bridge": {
+    "missing": "未偵測到 IPC 橋——目前為瀏覽器直開模式，資料為模擬值，無法啟動遊戲。"
+  },
+  "common": {
+    "loading": "載入中…",
+    "error": "錯誤",
+    "retry": "重試",
+    "search": "搜尋",
+    "ok": "好",
+    "confirm": "確認",
+    "cancel": "取消"
+  },
+  "version": {
+    "list": "版本清單",
+    "installed": "已安裝",
+    "empty": "沒有符合的版本",
+    "emptyHint": "換個關鍵字試試。",
+    "count": "{n} 個版本",
+    "pick": "選擇版本",
+    "pickHint": "點擊展開版本清單。",
+    "pin": "固定展開面板",
+    "unpin": "取消固定（選完自動收起）",
+    "collapse": "收起面板"
+  },
+  "instance": {
+    "empty": "還沒有實例",
+    "emptyHint": "新增實例可為每個版本保留獨立的實例目錄。",
+    "noMatch": "沒有符合的實例",
+    "noMatchHint": "換個關鍵字試試。",
+    "list": "實例清單",
+    "count": "{n} 個實例",
+    "pick": "選擇實例",
+    "pickHint": "點擊展開實例清單。",
+    "versionNone": "未選擇版本",
+    "pin": "固定展開面板",
+    "unpin": "取消固定（選完自動收起）",
+    "collapse": "收起面板",
+    "new": "新增實例",
+    "name": "名稱",
+    "namePlaceholder": "例如：Beta 1.7.3 模組版",
+    "create": "建立實例",
+    "created": "實例已儲存",
+    "gameDir": "實例目錄",
+    "gameDirPlaceholder": "留空 = 資料根/<實例名稱>",
+    "launchArgs": "JVM 參數",
+    "launchArgsPlaceholder": "例如：-Xmx1G",
+    "width": "視窗寬度",
+    "height": "視窗高度",
+    "editing": "正在編輯：{name}",
+    "saveChanges": "儲存修改",
+    "cancelEdit": "取消編輯",
+    "hint": "從左側選擇實例，或新增一個。",
+    "active": "使用中",
+    "activate": "設為啟動實例",
+    "activateHint": "啟動頁的播放按鈕將使用此實例。",
+    "openDir": "開啟實例目錄",
+    "rename": "改名",
+    "delete": "刪除實例",
+    "deleteDialog": {
+      "title": "刪除實例",
+      "message": "將刪除實例「{name}」的檔案。",
+      "withFiles": "同時刪除實例目錄（含存檔，無法復原）"
+    },
+    "basic": "基本設定",
+    "addons": "Addons",
+    "addonSoon": "即將推出",
+    "server": {
+      "title": "多人直連",
+      "label": "伺服器位址",
+      "portLabel": "連接埠",
+      "placeholder": "ip 或網域，例如 mc.example.com",
+      "desc": "連接埠留空 = 伺服器預設 25565。設定後每次啟動前會詢問是否直連該伺服器（一次性注入 --server/--port，不改本檔案）。",
+      "save": "儲存直連設定",
+      "invalid": "位址格式不合法（ip/網域，可含 :連接埠）或連接埠超出 1-65535"
+    },
+    "addonList": {
+      "vsync": {
+        "name": "垂直同步",
+        "desc": "讓畫面渲染與螢幕更新率同步，減少撕裂（-Dlf.vsync）。"
+      },
+      "visualizer": {
+        "name": "無限地圖視覺化器",
+        "desc": "以俯瞰世界的無限地圖視覺化器啟動本次遊戲，僅 inf-20100616 至 b1.3 前後有效（-Dlf.visualizer，不寫實例檔案）。"
+      },
+      "modloader": {
+        "name": "ModLoader 相容",
+        "desc": "讓 Risugami 的 ModLoader 在 Java 9+ 下正常運作（-Dlf.modloader）。"
+      },
+      "beta-forge": {
+        "name": "Beta Forge 相容",
+        "desc": "讓 b1.7.3–b1.8.1 的 Forge 在 Java 9+ 下正常運作（-Dlf.beta-forge）。"
+      },
+      "bouncycastle": {
+        "name": "Bouncy Castle",
+        "desc": "強制啟用 Bouncy Castle 加密函式庫，需 classpath 已含 bcprov/bcutil/bctls（-Dlf.bouncycastle）。"
+      },
+      "show-notice": {
+        "name": "1.6 發佈公告",
+        "desc": "保留 1.5.2 中「Minecraft 1.6 is out」的彈出視窗公告（-Dlf.showNotice）。"
+      },
+      "demo": {
+        "name": "試玩模式",
+        "desc": "以歷史試玩（Demo）模式啟動，重現 12w16a–1.5.2 的試玩限制（-Dlf.demo）；其餘版本該項無效果。"
+      },
+      "skins": {
+        "name": "皮膚處理",
+        "desc": "LegacyFix 接管皮膚與個人資料；與皮膚模組衝突時關閉（預設開啟）。"
+      },
+      "proxy": {
+        "name": "網路代理",
+        "desc": "接管全部 HTTP/HTTPS 請求以支援部分修復；關閉後相關修復失效（預設開啟）。"
+      },
+      "server-auth": {
+        "name": "伺服器加入認證",
+        "desc": "c0.0.15a–c0.30、a1.0.5–a1.0.15 加入伺服器時進行 Mojang 線上驗證（預設開啟）。"
+      },
+      "fullscreen": {
+        "name": "全螢幕啟動",
+        "desc": "以全螢幕模式啟動遊戲（v1 功能，待接入）。"
+      },
+      "game-mode-switch": {
+        "name": "遊戲模式切換",
+        "desc": "在 Classic 中按鍵切換創造/生存模式（v1 功能，待接入）。"
+      },
+      "quit-game": {
+        "name": "快速退出",
+        "desc": "遊戲內一鍵退出台階（v1 功能，待接入）。"
+      }
+    },
+    "javaPath": "Java 路徑",
+    "javaPathPlaceholder": "留空 = 全域自動偵測",
+    "intelFix": {
+      "name": "Intel 顯示卡修復",
+      "desc": "Windows 下注入 -XX:HeapDumpPath 堆疊快照路徑（v1 intelFix，預設開啟）。"
+    },
+    "forceUpdate": {
+      "name": "強制更新",
+      "desc": "啟動時重新下載版本檔案（jar/函式庫/資產），即使本機已存在（v1 Force Update）。"
+    },
+    "exists": "該名稱的實例已存在，請直接編輯或換一個名稱。",
+    "saved": "已儲存"
+  },
+  "launch": {
+    "play": "啟動",
+    "kill": "停止",
+    "cancel": "取消",
+    "version": "版本",
+    "memory": "記憶體",
+    "java": "Java",
+    "failed": "啟動失敗",
+    "noVersion": "請先選擇要啟動的版本。",
+    "hintNeedAccount": "需要先新增有效帳戶",
+    "hintNeedVersion": "需要先選擇版本",
+    "hintNeedBoth": "需要先新增有效帳戶並選擇版本",
+    "menu": "更多操作",
+    "instanceSettings": "實例設定",
+    "testLaunch": "測試啟動",
+    "visualizerLaunch": "啟動無限地圖視覺化器",
+    "serverDialog": {
+      "title": "直連伺服器",
+      "message": "目前實例已設定直連位址 {server}。本次啟動是否直連該伺服器？",
+      "manualHint": "該版本支援經典多人連線。輸入伺服器位址可於本次啟動直連（一次性，不寫入實例檔案）。",
+      "direct": "直連啟動",
+      "single": "單人啟動"
+    },
+    "visualizerOff": "所選版本的本機 jar 不含無限地圖預覽類別（或未下載），暫不可用",
+    "downloadFailed": "下載失敗",
+    "dialog": {
+      "title": "啟動遊戲",
+      "cancel": "取消",
+      "close": "關閉",
+      "doneCount": "已完成 {n}"
+    },
+    "stage": {
+      "version-manifest": "正在取得版本清單…",
+      "version-json": "正在取得版本資訊…",
+      "client-jar": "正在下載遊戲用戶端…",
+      "mod-jar": "正在下載模組檔案…",
+      "asset-index": "正在取得資產索引…",
+      "asset-check": "正在檢查資產檔案…",
+      "asset": "正在補全資產檔案…",
+      "library": "正在下載相依函式庫…",
+      "java-runtime": "正在下載 Java 執行時…",
+      "legacyfix": "正在下載 LegacyFix…"
+    }
+  },
+  "console": {
+    "title": "主控台",
+    "empty": "遊戲輸出會顯示在這裡。",
+    "crash": "崩潰摘要",
+    "stopped": "已停止",
+    "autoscroll": "自動捲動",
+    "clear": "清空"
+  },
+  "crash": {
+    "none": "正常退出",
+    "java-missing": "缺少 Java",
+    "out-of-memory": "記憶體溢位",
+    "gl-init": "GL 初始化失敗",
+    "lwjgl-native": "LWJGL 原生函式庫",
+    "unsatisfied-link": "本機方法未連結",
+    "unknown": "未知錯誤"
+  },
+  "launcherCrash": {
+    "liveTitle": "渲染層錯誤（已記入啟動器日誌）",
+    "lastTitle": "上次啟動異常退出",
+    "copy": "複製診斷資訊",
+    "copied": "已複製",
+    "openLogs": "開啟日誌資料夾",
+    "report": "到 GitHub 回報",
+    "reportNoRepo": "未設定倉庫，診斷資訊已複製到剪貼簿",
+    "dismiss": "忽略"
+  },
+  "settings": {
+    "title": "設定",
+    "soon": "即將推出",
+    "nav": {
+      "general": "一般",
+      "language": "語言",
+      "launch": "啟動與記憶體",
+      "java": "Java",
+      "theme": "外觀",
+      "about": "關於",
+      "developer": "開發者設定",
+      "feedback": "建議與意見回饋"
+    },
+    "sectionGeneral": "一般",
+    "sectionLanguage": "介面語言",
+    "sectionLaunch": "啟動與記憶體",
+    "sectionJava": "Java",
+    "sectionTheme": "外觀",
+    "sectionAbout": "關於",
+    "sectionDeveloper": "開發者設定",
+    "saved": "已儲存",
+    "general": {
+      "dataRoot": "資料根目錄",
+      "dataRootDesc": "所有遊戲版本、實例與下載檔案的存放位置。",
+      "open": "開啟",
+      "change": "更換…",
+      "rootPending": "已設定新的資料根，下次啟動應用程式後生效：{path}",
+      "logs": "啟動器日誌",
+      "logsClear": "清理日誌",
+      "clearConfirmTitle": "清理日誌",
+      "clearConfirmMessage": "將刪除日誌目錄內的全部 .log 檔案（正在被佔用的檔案自動跳過），此操作無法復原。",
+      "cleared": "已清理 {n} 個日誌檔案。",
+      "clearNothing": "沒有可清理的日誌檔案。",
+      "diagLog": "啟動診斷日誌",
+      "diagLogDesc": "每次啟動遊戲都將啟動命令與輸出記錄到日誌目錄，便於排查問題。"
+    },
+    "language": {
+      "label": "介面語言",
+      "hint": "切換即時生效、無需重啟，並儲存到設定檔。"
+    },
+    "theme": {
+      "presets": "預設主題",
+      "presetsDesc": "一鍵寫入配色方案＋強調色組合，即時生效並儲存；下方任一控件更改即進入自訂。背景圖不參與預設，不受切換影響。",
+      "custom": "自訂",
+      "presetNames": {
+        "attic": "預設",
+        "modrinth": "Modrinth"
+      },
+      "mode": "配色方案",
+      "dark": "深色",
+      "light": "淺色",
+      "system": "跟隨系統",
+      "accent": "強調色",
+      "accentDesc": "介面主色調（按鈕、焦點環與突顯）。色票取自 Modrinth 主題方案。",
+      "accentNames": {
+        "amber": "火把琥珀",
+        "green": "翡翠綠",
+        "blue": "晴空藍",
+        "orange": "熔岩橙",
+        "purple": "幻翼紫",
+        "red": "紅石紅",
+        "gray": "石灰灰"
+      },
+      "background": "啟動頁背景",
+      "backgroundDesc": "自訂首頁背景圖（png/jpg/webp/gif/bmp，≤12MB），自動疊加暗色遮罩確保文字可讀；未設定時使用主題純色背景。",
+      "backgroundPick": "選擇圖片…",
+      "backgroundClear": "移除背景圖",
+      "backgroundDefault": "未設定（純色背景）"
+    },
+    "launch": {
+      "integrity": "啟動前完整性驗證",
+      "integrityDesc": "核對本機遊戲 jar 的 sha1，發現缺失或損壞時依補全策略處理。",
+      "fixMissing": "自動補全缺失檔案",
+      "fixMissingDesc": "發現問題時自動重新下載；關閉後僅報錯，不更動本機檔案。",
+      "minimize": "啟動成功後最小化",
+      "minimizeDesc": "遊戲啟動後將啟動器主視窗最小化至背景。",
+      "consoleOnLaunch": "啟動時自動開啟主控台視窗",
+      "consoleOnLaunchDesc": "遊戲啟動成功後喚起獨立主控台視窗，即時檢視 LegacyFix 與遊戲日誌。測試啟動不受此開關影響，始終開啟。",
+      "server": "關卡存檔伺服器",
+      "serverPlaceholder": "留空 = LegacyFix 首次詢問",
+      "serverDesc": "LegacyFix 的 lf.proxy.levelServer：URL = 線上關卡存檔；local = 強制本機單人存檔。",
+      "memory": "記憶體分配",
+      "memoryManual": "手動（固定上限）",
+      "memoryAuto": "自動（依本機記憶體估算）",
+      "memoryMax": "最大堆積記憶體",
+      "sysMem": "本機記憶體共 {total} MB，目前可用 {free} MB。",
+      "memoryAutoEst": "自動模式依本機總記憶體估算，目前約 {mb} MB。",
+      "jvmGlobal": "全域 JVM 參數",
+      "jvmGlobalPlaceholder": "例如：-XX:+UseSerialGC -Dfile.encoding=UTF-8",
+      "jvmGlobalDesc": "注入在固定堆疊參數之後、實例參數之前；實例級同名參數以較後者為準，覆蓋全域設定。"
+    },
+    "java": {
+      "auto": "自動偵測",
+      "manual": "手動指定",
+      "refresh": "重新偵測",
+      "import": "匯入 Java…",
+      "noneDetected": "未偵測到可用的 Java",
+      "usedFallback": "正在使用 32 位元備援執行時",
+      "manualCurrent": "目前手動指定：",
+      "noCandidates": "暫無偵測到的 Java 安裝",
+      "autoLockHint": "自動模式下候選清單唯讀；切換為手動後可點選具體安裝。",
+      "probeDetails": "偵測細節（失敗候選與診斷）",
+      "source": {
+        "manual": "手動",
+        "env": "環境變數",
+        "registry": "登錄檔",
+        "directory": "目錄掃描",
+        "path": "PATH"
+      }
+    },
+    "about": {
+      "ghRepo": "檢視 GitHub 倉庫",
+      "checkUpdate": "檢查更新",
+      "checking": "檢查中…",
+      "newBadge": "新版",
+      "updateDialog": {
+        "title": "檢查更新",
+        "upToDate": "目前已是最新版本（v{version}）。",
+        "found": "發現新版本 v{version}！",
+        "published": "發布於 {date}",
+        "unconfigured": "尚未設定發布倉庫（owner/repo），無法檢查更新。",
+        "failed": "檢查更新失敗：{message}",
+        "openReleases": "開啟發布頁",
+        "close": "關閉",
+        "ignore": "忽略此版本",
+        "update": "更新",
+        "cancel": "取消",
+        "ignoreHint": "忽略會將該版本記入本機單槽記錄：自動檢查此後不再打擾（手動檢查不受影響）。"
+      },
+      "updateSection": "啟動器更新",
+      "updatePolicy": {
+        "label": "檢查更新策略",
+        "desc": "僅控制啟動時的自動檢查；「檢查更新」按鈕在兩種策略下始終可用。",
+        "startup": "啟動時檢查",
+        "off": "從不檢查"
+      },
+      "updateChannel": "更新通道",
+      "updateSoon": "啟動器自動更新系統尚未上線，通道暫不可選。",
+      "channelRelease": "正式版",
+      "channelBeta": "測試版",
+      "legalSection": "版權及法律聲明",
+      "copyright": "版權聲明",
+      "copyrightDesc": "Copyright © 2026 Attic Minecraft Launcher 開發者",
+      "license": "開源授權",
+      "licenseDesc": "本軟體依 GNU GPL v3（GPL-3.0-only）發布。",
+      "agreement": "使用者協議",
+      "agreementDesc": "使用本軟體時適用的條款與重要聲明（v1.0，2026-10-30 生效）。",
+      "view": "檢視",
+      "refsSection": "引用的專案",
+      "ref": {
+        "betacraft": "上游 Betacraft v1 啟動器——版本清單、.info 形狀與啟動語義的事實來源。",
+        "legacyfix": "遠古版本相容性修復模組——所有 -Dlf.* 行為開關的來源。",
+        "mcanextgen": "已歸檔的前身倉庫——Java 偵測與遠古版本 JVM 參數知識的繼承來源。",
+        "blockhelm": "設定頁與關於頁版式的 UI 藍本。",
+        "hmcl": "JavaFX 桌面啟動器——斷網頭像備援的原版 UUID 預設皮膚選型演算法取自其 TexturesLoader 實作。",
+        "vue": "前端框架——介面渲染與響應式狀態。",
+        "electron": "桌面殼——主程序、原生對話方塊與檔案系統存取。",
+        "tauri": "桌面殼——Rust 視窗層 + Node sidecar，系統 WebView 渲染。",
+        "lucide": "介面圖示的開源圖示集（內嵌 SVG 路徑）。"
+      }
+    },
+    "developer": {
+      "endpoints": "下載端點覆寫",
+      "endpointsNote": "端點更改在下次啟動應用程式後生效。"
+    },
+    "feedback": {
+      "title": "建議與意見回饋",
+      "subtitle": "透過 GitHub 提交，請先選擇類型。",
+      "feature": "新功能建議",
+      "featureDesc": "功能想法與改進建議，在 GitHub Discussions 發起討論。",
+      "bug": "Bug 回報",
+      "bugDesc": "回報啟動、下載或相容性問題。"
+    }
+  }
+}

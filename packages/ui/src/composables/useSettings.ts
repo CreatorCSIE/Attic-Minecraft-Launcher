@@ -92,10 +92,11 @@ async function load(): Promise<void> {
   applyLanguage();
 }
 
-/** 语言单一真相 = settings.language（localStorage 仅 bootstrap 缓存）；load 后即时无感应用。 */
+/** 语言单一真相 = settings.language（localStorage 仅 bootstrap 缓存；键缺席 = 保持
+ *  i18n 层的系统语言侦测态）；load 后即时无感应用。 */
 function applyLanguage(): void {
   const lang = settings.value.language;
-  if (lang === 'en' || lang === 'zh-CN') setLocale(lang);
+  if (lang === 'en' || lang === 'zh-CN' || lang === 'zh-TW') setLocale(lang);
 }
 
 /** 合并补丁并落盘；返回是否成功。 */

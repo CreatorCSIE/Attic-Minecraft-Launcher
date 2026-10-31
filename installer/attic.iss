@@ -127,9 +127,13 @@ UsePreviousAppDir=yes
 CloseApplications=yes
 
 [Languages]
-; 简体中文为非官方翻译，不随 Inno 安装包分发 —— 已 vendor 进 installer\lang\（6.7.3 版）
-Name: "zh"; MessagesFile: "{#SourcePath}lang\ChineseSimplified.isl"
+; 排序与默认（2026-10-31 用户拍板）：English 第一、简体中文第二、新增繁體中文；
+; 默认语言 = English，由 [Code] InitializeSetup 的 ActiveLanguage('en') 覆盖 Inno 的
+; 系统语言自动侦测（否则 zh-CN 系统默认落简中）；两中文皆非官方翻译，
+; 不随 Inno 安装包分发 —— 已 vendor 进 installer\lang\（简中 6.7.3 版 / 繁中 6.5.0+ 版）
 Name: "en"; MessagesFile: "compiler:Default.isl"
+Name: "zh"; MessagesFile: "{#SourcePath}lang\ChineseSimplified.isl"
+Name: "zhtw"; MessagesFile: "{#SourcePath}lang\ChineseTraditional.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
@@ -205,6 +209,9 @@ var
   VS: String;
 begin
   Result := True;
+  // 默认语言钉 English（2026-10-31 用户拍板）：覆盖 Inno 按系统 locale 的自动侦测，
+  // 语言下拉仍可选简中/繁中（[Languages] 序 = en、zh、zhtw）
+  ActiveLanguage('en');
   if not GetWinMajorSP(Major, SP) then Exit;
 
 #if LEGACY
