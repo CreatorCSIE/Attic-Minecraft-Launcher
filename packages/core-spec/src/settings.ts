@@ -160,6 +160,24 @@ export const ACCENT_COLORS: AccentColorDef[] = [
 ];
 
 /**
+ * 预设主题目录（数据驱动，戒律 #1；用户拍板 2026-10-31 路线 A = 推导式）：
+ * 预设只是 `theme + accentColor` 组合的快捷写入，**不新增落盘键**——当前预设由
+ * 两控件现值反查本目录推导（全等命中 = 该预设；任何不匹配 = 「自定义」态，
+ * 自定义态天然由既有独立控件承载并已落盘）。背景图不进预设面，不受影响。
+ */
+export interface ThemePresetDef {
+  id: string;
+  nameKey: string;
+  theme: ThemeMode;
+  accentColor: string;
+}
+
+export const THEME_PRESETS: ThemePresetDef[] = [
+  { id: 'attic', nameKey: 'settings.theme.presetNames.attic', theme: 'system', accentColor: 'amber' },
+  { id: 'modrinth', nameKey: 'settings.theme.presetNames.modrinth', theme: 'dark', accentColor: 'green' },
+];
+
+/**
  * 实例的渲染侧视图——对齐 v1 Instance Settings 可编辑集（名字/版本/目录/JVM 参数/窗口尺寸/Java 路径）。
  * 版本是实例属性（v1 `InstanceSettings` 语义：同实例切版本存档共享）。gameDir 缺省 = 宿主派生
  * `root/<实例名>`（v1 `Instance.newInstance`）；内存另有全局设置，实例 `launchArgs` 在其后注入（后者生效）。

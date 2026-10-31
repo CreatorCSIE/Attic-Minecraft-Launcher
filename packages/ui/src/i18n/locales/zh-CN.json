@@ -435,7 +435,14 @@
       "hint": "切换即时生效、无需重启，并保存到设置文件。"
     },
     "theme": {
-      "mode": "主题模式",
+      "presets": "预设主题",
+      "presetsDesc": "一键写入配色方案+强调色组合，即时生效并保存；下方任一控件改动即进入自定义。背景图不参与预设，不受切换影响。",
+      "custom": "自定义",
+      "presetNames": {
+        "attic": "默认",
+        "modrinth": "Modrinth"
+      },
+      "mode": "配色方案",
       "dark": "深色",
       "light": "浅色",
       "system": "跟随系统",

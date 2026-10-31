@@ -7,7 +7,7 @@
  * 宿主动作（打开目录/对话框/清理）无桥时禁用——demo 排版靠假 SystemInfo，动作不伪装可用。
  */
 import { computed, ref, watch, type Ref } from 'vue';
-import { ACCENT_COLORS, type EndpointOverrides } from '@attic/core-spec';
+import { ACCENT_COLORS, THEME_PRESETS, type EndpointOverrides, type ThemePresetDef } from '@attic/core-spec';
 import type { Locale } from '../i18n';
 import { AVAILABLE_LOCALES, useI18n } from '../i18n';
 import { useBridge } from '../composables/useBridge';
@@ -131,9 +131,21 @@ async function chooseLanguage(code: string): Promise<void> {
   await patch({ language: code });
 }
 
-// —— 外观栏：主题模式 + 强调色板（Modrinth 六族+琥珀缺省，tokens [data-accent] 静态层）+ 背景图 ——
+// —— 外观栏：预设 + 主题模式 + 强调色板（Modrinth 六族+琥珀缺省，tokens [data-accent] 静态层）+ 背景图 ——
 const themes = ['dark', 'light', 'system'] as const;
 const accentId = computed(() => settings.value.accentColor || 'amber');
+
+// 预设 = theme+accentColor 组合的快捷写入（路线 A 推导式，零落盘键）：
+// 当前预设由两控件现值反查目录全等命中；任何不匹配 = 自定义态（天然已落盘）。
+const activePresetId = computed(
+  () =>
+    THEME_PRESETS.find(
+      (p) => (settings.value.theme ?? 'system') === p.theme && accentId.value === p.accentColor,
+    )?.id ?? null,
+);
+function choosePreset(p: ThemePresetDef): void {
+  patch({ theme: p.theme, accentColor: p.accentColor === 'amber' ? undefined : p.accentColor });
+}
 
 /** 背景图选择：宿主弹原生对话框 → 路径入 settings（useSettings 保存后重应用 data URL）。 */
 const bgErr = ref('');
@@ -343,6 +355,35 @@ function feedback(url: string): void {
         <!-- 外观 -->
         <section v-else-if="activeSection === 'theme'" class="pane">
           <h3 class="pane-title">{{ t('settings.sectionTheme') }}</h3>
+          <div class="card">
+            <div class="field">
+              <span class="label">{{ t('settings.theme.presets') }}</span>
+              <div class="preset-row" role="radiogroup" :aria-label="t('settings.theme.presets')">
+                <button
+                  v-for="p in THEME_PRESETS"
+                  :key="p.id"
+                  class="preset-btn"
+                  :class="{ 'preset-btn--active': activePresetId === p.id }"
+                  role="radio"
+                  :aria-checked="activePresetId === p.id"
+                  @click="choosePreset(p)"
+                >
+                  <!-- 预览胶囊：自带 data-theme/data-accent，tokens 静态层在按钮内派生
+                       --surface-3（底色档）与 --accent（强调点），system 档现值走 resolvedTheme -->
+                  <span
+                    class="preset-chip"
+                    :data-theme="p.theme === 'system' ? resolvedTheme : p.theme"
+                    :data-accent="p.accentColor"
+                  >
+                    <span class="preset-chip-dot" />
+                  </span>
+                  {{ t(p.nameKey) }}
+                </button>
+                <span v-if="!activePresetId" class="preset-custom">{{ t('settings.theme.custom') }}</span>
+              </div>
+              <p class="row-desc">{{ t('settings.theme.presetsDesc') }}</p>
+            </div>
+          </div>
           <div class="card">
             <div class="field">
               <span class="label">{{ t('settings.theme.mode') }}</span>
@@ -687,6 +728,54 @@ function feedback(url: string): void {
   display: flex;
   gap: var(--space-3);
   flex-wrap: wrap;
+}
+/* —— 预设主题按钮（胶囊预览 = 底色档 + 强调点；选中态描边沿用 accent-swatch 语言） —— */
+.preset-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.preset-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  background: var(--surface-1);
+  border: 2px solid transparent;
+  border-radius: var(--radius-pill);
+  color: var(--text-secondary);
+  box-shadow: var(--input-inset);
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.preset-btn:hover {
+  border-color: var(--border-strong);
+}
+.preset-btn--active {
+  border-color: var(--text-secondary);
+  color: var(--text-primary);
+}
+.preset-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 18px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+  box-shadow: var(--inset-bottom);
+}
+.preset-chip-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+.preset-custom {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  font-style: italic;
 }
 .accent-swatch {
   display: flex;

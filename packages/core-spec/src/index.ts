@@ -71,8 +71,9 @@ export type {
   InstanceView,
   MemoryMode,
   ThemeMode,
+  ThemePresetDef,
   UpdatePolicy,
 } from './settings';
 export { MULTIPLAYER_JOIN_LAUNCH_METHODS } from './version';
 export { INSTANCE_ADDONS, DEFAULT_ADDONS, parseServerAddress } from './settings';
-export { ACCENT_COLORS } from './settings';
+export { ACCENT_COLORS, THEME_PRESETS } from './settings';

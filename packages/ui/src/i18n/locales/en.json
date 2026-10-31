@@ -446,7 +446,14 @@
       "hint": "Applies instantly without restart, and is saved to settings."
     },
     "theme": {
-      "mode": "Theme mode",
+      "presets": "Theme presets",
+      "presetsDesc": "Applies and saves a color-scheme + accent-color combo instantly; changing either control below switches to Custom. Background images are not part of presets and stay untouched.",
+      "custom": "Custom",
+      "presetNames": {
+        "attic": "Default",
+        "modrinth": "Modrinth"
+      },
+      "mode": "Color scheme",
       "dark": "Dark",
       "light": "Light",
       "system": "System",
